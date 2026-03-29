@@ -1,3 +1,4 @@
+<!-- agent-updated: 2026-03-29T23:20:00Z -->
 # rterm Tasks
 
 ## Phase 1: VT Emulation Core
@@ -29,9 +30,11 @@ Priority: logical correctness. No GUI.
 ## Phase 2: Protocol + Transport
 
 ### FlatBuffers Schema (rterm-proto)
-- [x] Define FlatBuffers schema: ClientMessage (DataIn, Resize), ServerMessage (DataOut, Exit, Error)
+- [x] Define FlatBuffers schema: ClientMessage (KeyInput, PasteInput, Resize, MouseEvent), ServerMessage (ScreenUpdate, ScreenSnapshot, ScrollbackData, Exit, Error, Bell)
 - [x] Compile schema with flatbuffers-rs, generate Rust code
-- [ ] Define TerminalTransport trait (send, recv, close) -- not implemented; transport handled by pure-grpc-rs and WebTransport directly
+- [x] Typed screen protocol: Cell (ch, fg, bg, attrs), CellRange, ScreenUpdateData, ScreenSnapshotData, CursorData
+- [x] Color packing utilities (RGB, indexed, default) and attribute bitflags
+- [x] Transport uses channel-based session module instead of TerminalTransport trait
 - [x] gRPC service definition: TerminalService.Session (bidi streaming)
 - [x] Round-trip serialization tests for all message types
 - [x] Fix any flatbuffers-rs bugs found during schema compilation
@@ -52,10 +55,12 @@ Priority: logical correctness. No GUI.
 
 ### rterm-relay Server
 - [x] Standalone server (quinn + h3-webtransport for WebTransport, pure-grpc-rs for gRPC)
-- [x] PTY spawning via portable-pty (configurable shell)
-- [x] Bidirectional byte streaming: bidi stream <-> PTY
+- [x] PTY spawning via PtySpawner trait (RealPtySpawner + FakePtySpawner for tests)
+- [x] Server-side VT emulation: Terminal.feed() on PTY output, screen diffing via PrevScreen
+- [x] Shared session module: session::run_session() used by both wt_handler and service
+- [x] Typed screen updates: ScreenSnapshot on connect, ScreenUpdate diffs during session
 - [x] Terminal resize: Resize message -> PTY TIOCSWINSZ
-- [x] Connection lifecycle: connect, spawn PTY, stream, disconnect, kill PTY
+- [x] Connection lifecycle: connect, spawn PTY, VT emulate, diff, disconnect, kill PTY
 - [x] TLS certificate configuration (auto-generated self-signed ECDSA P256, 14-day validity)
 - [x] HTTPS page server for serving WASM bundle (hyper over TCP/TLS)
 - [x] Cert hash injection into HTML for WebTransport serverCertificateHashes

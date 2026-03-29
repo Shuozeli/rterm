@@ -1,13 +1,15 @@
+<!-- agent-updated: 2026-03-29T23:20:00Z -->
 # rterm Architecture
 
 ## Overview
 
-rterm is a minimal, correct terminal emulator built in Rust. egui compiled to WASM is the universal renderer. The WASM browser client connects to a relay server over WebTransport using length-prefixed FlatBuffers. Native clients connect via gRPC over HTTP/3 (QUIC). On desktop, a native WebView shell (planned) loads the WASM bundle and provides a local PTY. In the browser, the same WASM connects to a remote relay. The WASM code has zero platform-specific branches.
+rterm is a minimal, correct terminal emulator built in Rust. The relay server runs VT emulation server-side and sends typed screen updates to clients over FlatBuffers. egui compiled to WASM is the universal renderer -- it receives pre-parsed cell data (characters, colors, attributes) and paints them directly. The WASM browser client connects to a relay server over WebTransport using length-prefixed FlatBuffers. Native clients connect via gRPC over HTTP/3 (QUIC). On desktop, a native WebView shell (planned) loads the WASM bundle and provides a local PTY. The WASM code has zero platform-specific branches.
 
 ## Design Principles
 
 - **Alacritty philosophy**: No tabs, no panes, no splits. One terminal per window.
 - **WASM-first**: egui WASM is the single rendering path for all platforms.
+- **Server-side VT emulation**: The relay runs the VT emulator and sends typed screen diffs. Clients are thin renderers.
 - **Logical correctness first**: VT emulation correctness before GUI polish.
 - **HTTP/3 transport**: QUIC everywhere. No HTTP/2, no WebSocket, no fallbacks.
 - **Dogfooding**: Uses flatbuffers-rs and pure-grpc-rs. Bugs found are fixed upstream.
@@ -17,12 +19,12 @@ rterm is a minimal, correct terminal emulator built in Rust. egui compiled to WA
 ```
 rterm/
   crates/
-    rterm-proto/    -- FlatBuffers schema, generated code, message types
-    rterm-core/     -- VT emulation, screen buffer, cell types
-    rterm-gui/      -- egui terminal widget, color palette, input encoding
+    rterm-proto/    -- FlatBuffers protocol: typed screen updates (Cell, CellRange, ScreenUpdate, ScreenSnapshot)
+    rterm-core/     -- VT100/VT220 emulation: vte parser, screen buffer, cell types
+    rterm-gui/      -- egui terminal widget: color palette, input encoding, selection, scrollback
     rterm-shell/    -- Native WebView wrapper + local PTY (stub, not yet implemented)
-    rterm-relay/    -- WebTransport relay server + HTTPS page server
-    rterm-wasm/     -- WASM browser client (excluded from workspace, built with trunk)
+    rterm-relay/    -- HTTP/3 + WebTransport relay server (PTY spawning, VT emulation, screen diffing)
+    rterm-wasm/     -- WASM browser thin renderer (excluded from workspace, built with trunk)
 ```
 
 rterm-wasm is excluded from the default Cargo workspace because it targets wasm32 only. Build it with: `cd crates/rterm-wasm && RUSTFLAGS="--cfg web_sys_unstable_apis" trunk build`
@@ -54,20 +56,54 @@ rterm-wasm is excluded from the default Cargo workspace because it targets wasm3
 |  |  - Ctrl+key combinations                 |  |
 |  |  - Application cursor keys mode          |  |
 |  +------------------------------------------+  |
-|  |  rterm-core (compiled to WASM)           |  |
-|  |  - vte parser (persistent state)         |  |
-|  |  - Screen buffer (cells + attributes)    |  |
-|  |  - Scrollback ring buffer                |  |
-|  |  - Synchronized output mode              |  |
+|  |  Screen State (rterm-wasm)               |  |
+|  |  - Applies ScreenUpdate cell changes     |  |
+|  |  - Applies ScreenSnapshot full state     |  |
+|  |  - Scrollback data management            |  |
+|  |  - No VT parsing on client               |  |
 |  +------------------------------------------+  |
 |  |  Transport Client (rterm-wasm)           |  |
 |  |  - WebTransport API (web-sys)            |  |
 |  |  - Length-prefixed FlatBuffers protocol  |  |
-|  |  - Sends ClientMessage (DataIn, Resize)  |  |
-|  |  - Receives ServerMessage (DataOut, Exit)|  |
+|  |  - Sends KeyInput, PasteInput, Resize,   |  |
+|  |    MouseEvent                            |  |
+|  |  - Receives ScreenUpdate, ScreenSnapshot,|  |
+|  |    ScrollbackData, Exit, Error, Bell     |  |
 |  +------------------------------------------+  |
 +-----------------------------------------------+
 ```
+
+## Server-Side VT Emulation
+
+The relay server runs the VT emulator, not the client. This is the key architectural decision:
+
+```
++-----------------------------------------------+
+|  rterm-relay (server)                          |
+|                                                |
+|  +------------------------------------------+  |
+|  |  session::run_session (shared logic)     |  |
+|  |  - Read initial Resize from client       |  |
+|  |  - Spawn PTY via PtySpawner trait        |  |
+|  |  - Send initial ScreenSnapshot           |  |
+|  |  - Forward client input to PTY           |  |
+|  |  - Feed PTY stdout through Terminal      |  |
+|  |  - Diff screen state via PrevScreen      |  |
+|  |  - Send ScreenUpdate with changed cells  |  |
+|  |  - Send Exit when PTY closes             |  |
+|  +------------------------------------------+  |
+|  |  wt_handler (WebTransport adapter)       |  |
+|  |  - Bridges bidi stream <-> channels      |  |
+|  |  - Delegates to session::run_session     |  |
+|  +------------------------------------------+  |
+|  |  service (gRPC adapter)                  |  |
+|  |  - Bridges Streaming <-> channels        |  |
+|  |  - Delegates to session::run_session     |  |
+|  +------------------------------------------+  |
++-----------------------------------------------+
+```
+
+Both transport adapters are thin: they only translate between their protocol (WebTransport bidi stream or gRPC Streaming) and mpsc channels, then call `session::run_session()` for all business logic.
 
 ## Protocol
 
@@ -78,17 +114,53 @@ All messages are FlatBuffers-encoded. Defined once in rterm-proto, used by all c
 ```
 Client -> Server:
   ClientMessage {
-    DataIn { payload: [ubyte] }    -- keyboard/mouse input bytes
-    Resize { cols: u16, rows: u16 } -- terminal resize
+    KeyInput { data: [ubyte] }          -- keyboard input bytes (VT sequences)
+    PasteInput { text: string }         -- pasted text
+    Resize { cols: u16, rows: u16 }     -- terminal resize
+    MouseEvent { row, col, button,      -- mouse event (currently ignored)
+                 modifiers, kind }
   }
 
 Server -> Client:
   ServerMessage {
-    DataOut { payload: [ubyte] }   -- PTY output bytes
-    Exit { code: i32 }            -- shell exited
-    Error { message: string }     -- error
+    ScreenUpdate {                      -- incremental screen diff
+      changes: [CellRange]              -- changed cell ranges
+      cursor: CursorState               -- cursor position + visibility
+      cols: u16, rows: u16              -- screen dimensions
+      title: string (optional)          -- window title
+    }
+    ScreenSnapshot {                    -- full screen state
+      rows: [CellRange]                -- all cells
+      cursor: CursorState
+      cols: u16, num_rows: u16
+      title: string (optional)
+      scrollback_len: u32
+    }
+    ScrollbackData {                    -- scrollback query response
+      lines: [CellRange]
+      offset: u32, total: u32
+    }
+    Exit { code: i32 }                 -- shell exited
+    Error { message: string }          -- error
+    Bell {}                            -- terminal bell
   }
+
+CellRange {
+  row: u16, col_start: u16
+  cells: [Cell]                        -- contiguous changed cells
+}
+
+Cell {
+  ch: u32                              -- Unicode codepoint
+  fg: u32                              -- packed color (RGB, indexed, or default)
+  bg: u32                              -- packed color
+  attrs: u8                            -- bitflags (bold, italic, underline, etc.)
+}
 ```
+
+Color packing: `0x00RRGGBB` for RGB, `0xFF0000II` for indexed, `0xFFFFFFFF` for default.
+
+Attribute bitflags: bold(1), italic(2), underline(4), strikethrough(8), reverse(16), dim(32), hidden(64).
 
 ### Transport: Dual Path
 
@@ -138,7 +210,7 @@ service TerminalService {
 }
 ```
 
-One bidi streaming RPC per terminal session. Used by native gRPC clients.
+One bidi streaming RPC per terminal session. Used by native gRPC clients. The server runs VT emulation and sends typed screen updates -- clients never see raw escape sequences.
 
 ### Connection Flow
 
@@ -151,13 +223,16 @@ One bidi streaming RPC per terminal session. Used by native gRPC clients.
    using serverCertificateHashes for self-signed cert trust
 4. Client opens a bidi stream
 5. Client sends length-prefixed Resize(cols, rows) as first message
-6. Server spawns PTY with that size
-7. Bidirectional streaming:
-   - Client sends DataIn(bytes) for keyboard input
-   - Server sends DataOut(bytes) for PTY output
+6. Server spawns PTY with that size, creates VT emulator
+7. Server sends ScreenSnapshot (full initial screen state)
+8. Bidirectional streaming:
+   - Client sends KeyInput/PasteInput for keyboard/paste input
    - Client sends Resize on window resize
-8. Server sends Exit(code) when shell dies
-9. Stream closes, connection closes
+   - Server feeds PTY output through VT emulator
+   - Server diffs screen state and sends ScreenUpdate (changed cells only)
+   - Synchronized output (CSI ?2026) suppresses updates during batches
+9. Server sends Exit(code) when shell dies
+10. Stream closes, connection closes
 ```
 
 #### Native gRPC Client
@@ -166,11 +241,28 @@ One bidi streaming RPC per terminal session. Used by native gRPC clients.
 1. Client connects via HTTP/3 (QUIC handshake)
 2. Client opens gRPC bidi stream (TerminalService.Session)
 3. Client sends Resize(cols, rows) as first message
-4. Server spawns PTY with that size
-5. Bidirectional streaming via gRPC
-6. Server sends Exit(code) when shell dies
-7. gRPC stream closes, QUIC connection closes
+4. Server spawns PTY, creates VT emulator
+5. Server sends ScreenSnapshot (full initial screen state)
+6. Bidirectional streaming via gRPC:
+   - Client sends KeyInput/PasteInput/Resize/MouseEvent
+   - Server sends ScreenUpdate/ScreenSnapshot/ScrollbackData/Bell
+7. Server sends Exit(code) when shell dies
+8. gRPC stream closes, QUIC connection closes
 ```
+
+## Composable Server Architecture
+
+### Trait Boundaries
+
+- **PtySpawner trait**: Abstracts PTY creation. `RealPtySpawner` uses portable-pty; `FakePtySpawner` uses in-memory channels for testing.
+- **PtyHandle**: Data bag with three channels (`stdin_tx`, `stdout_rx`, `resize_tx`). No methods.
+- **Channel-based transport**: `session::run_session` accepts `mpsc::Receiver<ClientMsg>` and `mpsc::Sender<ServerMsg>` -- no trait objects for transport.
+
+### Screen Diffing
+
+- **PrevScreen**: Tracks previous screen state (packed cells). `diff()` compares current ScreenBuffer against previous state and returns `ScreenUpdateData` with only changed cell ranges.
+- **snapshot()**: Creates a full `ScreenSnapshotData` from the current buffer state. Used for initial connection and resize.
+- Cell data is packed into CellRange runs for efficient transmission.
 
 ## Platform Architecture
 
@@ -201,6 +293,8 @@ rterm-relay serves the WASM bundle over HTTPS (TCP:4433, hyper)
   |     Uses length-prefixed FlatBuffers on bidi stream
   |
   +-- Cert hash auto-injected into HTML by relay server
+  |
+  +-- Server runs VT emulator, sends typed screen updates
 ```
 
 ### Mobile (Android/iOS)
@@ -220,17 +314,20 @@ rterm-shell (native app with system WebView) [NOT YET IMPLEMENTED]
 ```
 Keyboard/Mouse (egui event)
   -> Input Handler (encode to VT sequences)
-  -> Transport send (FlatBuffers ClientMessage::DataIn)
+  -> Transport send (FlatBuffers ClientMessage::KeyInput/PasteInput)
   -> WebTransport bidi stream (QUIC/UDP)
   -> PTY stdin
   -> Shell process
   -> PTY stdout
-  -> WebTransport bidi stream (QUIC/UDP)
-  -> Transport recv (FlatBuffers ServerMessage::DataOut)
-  -> vte parser (tokenize escape sequences)
+  -> Terminal.feed() (server-side VT emulation)
   -> Screen buffer mutations (cursor, colors, text, scroll)
-  -> Synchronized output check (skip repaint during CSI ?2026 h batch)
-  -> egui render loop reads cells
+  -> Synchronized output check (skip diff during CSI ?2026 h batch)
+  -> PrevScreen.diff() (compare against previous state)
+  -> ScreenUpdate with changed CellRanges
+  -> FlatBuffers ServerMessage::ScreenUpdate
+  -> WebTransport bidi stream (QUIC/UDP)
+  -> Client applies cell changes to local screen state
+  -> egui render loop paints cells
   -> Monospace cell grid rendered to WebGL canvas
 ```
 

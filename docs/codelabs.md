@@ -1,3 +1,4 @@
+<!-- agent-updated: 2026-03-29T23:20:00Z -->
 # rterm Codelabs
 
 ## Codelab 1: Screen Buffer Basics
@@ -22,7 +23,7 @@ Add HTTP/3 support to pure-grpc-rs using quinn. Build TerminalService with bidi 
 
 ## Codelab 6: WebTransport Client
 
-Build WebTransport-based gRPC client for WASM. Connect from browser to rterm-relay over HTTP/3. Verify bidi streaming works from browser.
+Build WebTransport client for WASM using raw bidi streams with length-prefixed FlatBuffers (not gRPC). Connect from browser to rterm-relay over HTTP/3. Verify bidi streaming works from browser.
 
 ## Codelab 7: egui Grid in Browser
 
@@ -39,3 +40,7 @@ Build rterm-shell with wry. Embed the WASM bundle. Local PTY with gRPC/HTTP/3 se
 ## Codelab 10: Custom Glyph Atlas
 
 Replace egui built-in text with rustybuzz + fontdue glyph atlas. Verify ligatures render correctly.
+
+## Codelab 11: Server-Side VT Emulation + Screen Diffing
+
+Understand how the relay server runs the VT emulator and sends typed screen updates. Walk through session::run_session: PTY spawn, Terminal.feed(), PrevScreen.diff(), ScreenUpdate encoding. Compare against the naive approach of sending raw PTY bytes.

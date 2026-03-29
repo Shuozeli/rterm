@@ -1,3 +1,4 @@
+<!-- agent-updated: 2026-03-29T23:20:00Z -->
 # rterm Design
 
 ## Goals
@@ -50,13 +51,13 @@ Build rterm-core with correct VT emulation. No GUI. Validate with automated test
 
 ### Phase 2: Protocol + Transport
 Build rterm-proto and the server side. Add HTTP/3 support to pure-grpc-rs.
-- FlatBuffers schema (ClientMessage, ServerMessage)
-- Transport trait (abstract over native QUIC and browser WebTransport)
+- Typed FlatBuffers schema: ClientMessage (KeyInput, PasteInput, Resize, MouseEvent), ServerMessage (ScreenUpdate, ScreenSnapshot, ScrollbackData, Exit, Error, Bell)
+- Channel-based session architecture (mpsc channels instead of transport trait)
 - HTTP/3 transport in pure-grpc-rs (quinn-based server + client)
-- WebTransport client for WASM (web-sys bindings)
-- rterm-relay: standalone gRPC/HTTP/3 server
-- PTY spawning via portable-pty
-- Bidirectional byte streaming over gRPC bidi stream
+- WebTransport client for WASM (web-sys bindings, raw bidi stream with length-prefixed FlatBuffers)
+- rterm-relay: standalone gRPC/HTTP/3 server with server-side VT emulation
+- PtySpawner trait for testable PTY abstraction
+- Server-side VT emulation + screen diffing (typed ScreenUpdate with changed cells only)
 - Test: connect via gRPC client, interactive shell session
 
 ### Phase 3: egui Terminal Widget (WASM)

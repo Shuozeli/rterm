@@ -22,8 +22,8 @@ Current: 77.5% (245 tests)
 
 ## Medium effort — trait extraction + refactor
 
-- [ ] Refactor wt_handler to call session::run_session
-- [ ] Refactor service.rs to call session::run_session
+- [x] Refactor wt_handler to call session::run_session (2026-03-29)
+- [x] Refactor service.rs to call session::run_session (2026-03-29)
 - [ ] Extract h3 stream trait for serve_file testability
 
 ## Coverage summary
