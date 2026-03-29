@@ -207,6 +207,7 @@ async fn try_connect(
                 ctx.request_repaint();
                 break;
             }
+            Ok(_) => {} // ScreenSnapshot, ScrollbackData, Bell — ignore in demo.
             Err(status) => {
                 let mut t = terminal.lock().unwrap();
                 t.feed(format!("\r\n\x1b[31mgRPC error: {}\x1b[0m\r\n", status).as_bytes());
