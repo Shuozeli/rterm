@@ -10,6 +10,7 @@ name = "rterm-relay"
 path = "src/main.rs"
 
 [dependencies]
+rterm-core = { path = "../rterm-core" }
 rterm-proto = { path = "../rterm-proto" }
 grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
 grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }

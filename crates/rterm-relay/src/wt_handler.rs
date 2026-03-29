@@ -1,21 +1,23 @@
-/// WebTransport terminal handler.
+/// WebTransport terminal handler (v2: server-side VT emulation).
 ///
-/// Accepts WebTransport sessions, reads length-prefixed FlatBuffers ClientMessages
-/// from a bidi stream, bridges to a PTY, and sends ServerMessages back.
+/// The server runs the VT emulator, diffs screen state, and sends
+/// typed ScreenUpdate/ScreenSnapshot messages to the client.
 use crate::pty::PtySession;
+use crate::screen_diff::{self, PrevScreen};
 use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
 use h3::quic::BidiStream as _;
 use h3_webtransport::server::WebTransportSession;
-use rterm_proto::{ClientMsg, DataOut, ServerMsg};
+use rterm_core::Terminal;
+use rterm_proto::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, info};
 
-/// Handle a WebTransport session: bridge bidi stream to PTY.
+/// Handle a WebTransport session: run VT emulation server-side,
+/// send typed screen updates to the client.
 pub async fn handle_wt_session(
     session: WebTransportSession<h3_quinn::Connection, bytes::Bytes>,
     shell: &str,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Accept a bidi stream from the client.
     let accepted = session
         .accept_bi()
         .await?
@@ -50,13 +52,29 @@ pub async fn handle_wt_session(
     let resize_tx = pty.resize_tx;
     let mut stdout_rx = pty.stdout_rx;
 
+    // Create the terminal emulator (server-side).
+    let mut terminal = Terminal::new(cols as usize, rows as usize);
+    let mut prev_screen = PrevScreen::new(cols as usize, rows as usize);
+
+    // Send initial snapshot (blank screen).
+    let ss = screen_diff::snapshot(terminal.screen());
+    prev_screen.update_from_snapshot(&ss);
+    let msg = ServerMsg::ScreenSnapshot(ss);
+    write_message(&mut send, &msg.encode_flatbuffer()).await?;
+
     // Task: read client messages and forward to PTY.
     tokio::spawn(async move {
         loop {
             match read_message(&mut recv).await {
                 Ok(Some(data)) => match ClientMsg::decode_flatbuffer(&data) {
-                    Ok(ClientMsg::DataIn(d)) => {
-                        if stdin_tx.send(d.payload).await.is_err() {
+                    Ok(ClientMsg::KeyInput(k)) => {
+                        if stdin_tx.send(k.data).await.is_err() {
+                            break;
+                        }
+                    }
+                    Ok(ClientMsg::PasteInput(p)) => {
+                        // TODO: bracket paste wrapping if mode is active.
+                        if stdin_tx.send(p.text.into_bytes()).await.is_err() {
                             break;
                         }
                     }
@@ -64,6 +82,9 @@ pub async fn handle_wt_session(
                         if resize_tx.send((r.cols, r.rows)).await.is_err() {
                             break;
                         }
+                    }
+                    Ok(ClientMsg::MouseEvent(_m)) => {
+                        // TODO: encode mouse event as VT sequence.
                     }
                     Err(e) => {
                         debug!("decode error: {}", e);
@@ -81,27 +102,39 @@ pub async fn handle_wt_session(
         }
     });
 
-    // Main loop: forward PTY stdout to client as ServerMessages.
+    // Main loop: read PTY output, run VT emulator, send screen diffs.
     while let Some(data) = stdout_rx.recv().await {
-        let msg = ServerMsg::DataOut(DataOut { payload: data });
-        let encoded = msg.encode_flatbuffer();
-        if let Err(e) = write_message(&mut send, &encoded).await {
-            debug!("send error: {}", e);
-            break;
+        // Feed PTY output through the VT emulator.
+        terminal.feed(&data);
+
+        // Skip sending updates while in synchronized output mode.
+        if terminal.is_sync_mode() {
+            continue;
+        }
+
+        // Diff the screen and send changes.
+        if let Some(update) = prev_screen.diff(terminal.screen()) {
+            let msg = ServerMsg::ScreenUpdate(update);
+            if let Err(e) = write_message(&mut send, &msg.encode_flatbuffer()).await {
+                debug!("send error: {}", e);
+                break;
+            }
         }
     }
+
+    // Send Exit message.
+    let exit_msg = ServerMsg::Exit(Exit { code: 0 });
+    let _ = write_message(&mut send, &exit_msg.encode_flatbuffer()).await;
 
     info!("WebTransport session ended");
     Ok(())
 }
 
 /// Read a length-prefixed message from a WebTransport recv stream.
-/// Format: [4-byte big-endian length] [payload]
 async fn read_message<S>(recv: &mut S) -> Result<Option<Vec<u8>>, String>
 where
     S: tokio::io::AsyncRead + Unpin,
 {
-    // Read 4-byte length prefix.
     let mut len_buf = [0u8; 4];
     match recv.read_exact(&mut len_buf).await {
         Ok(_) => {}
@@ -109,13 +142,10 @@ where
         Err(e) => return Err(format!("read length: {}", e)),
     }
     let len = u32::from_be_bytes(len_buf) as usize;
-
-    // Read payload.
     let mut payload = vec![0u8; len];
     recv.read_exact(&mut payload)
         .await
         .map_err(|e| format!("read payload: {}", e))?;
-
     Ok(Some(payload))
 }
 

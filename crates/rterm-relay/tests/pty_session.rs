@@ -13,7 +13,7 @@ use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::{Request, Status, Streaming};
 use grpc_server::{H3Server, NamedService, Router};
 use http::uri::PathAndQuery;
-use rterm_proto::{ClientMsg, DataIn, Resize, ServerMsg};
+use rterm_proto::{ClientMsg, KeyInput, Resize, ServerMsg};
 use rterm_relay::service::TerminalServer;
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
@@ -115,8 +115,8 @@ async fn open_raw_session(
 }
 
 async fn send(tx: &mpsc::Sender<ClientMsg>, input: &[u8]) {
-    tx.send(ClientMsg::DataIn(DataIn {
-        payload: input.to_vec(),
+    tx.send(ClientMsg::KeyInput(KeyInput {
+        data: input.to_vec(),
     }))
     .await
     .unwrap();
@@ -128,34 +128,70 @@ async fn send_resize(tx: &mpsc::Sender<ClientMsg>, cols: u16, rows: u16) {
         .unwrap();
 }
 
-/// Collect PTY output until `target` is found or timeout.
-async fn read_until(stream: &mut Streaming<ServerMsg>, target: &str, timeout_secs: u64) -> String {
-    let mut collected = String::new();
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
-
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            break;
-        }
-        match tokio::time::timeout(remaining, stream.next()).await {
-            Ok(Some(Ok(ServerMsg::DataOut(d)))) => {
-                let text = String::from_utf8_lossy(&d.payload);
-                collected.push_str(&text);
-                if collected.contains(target) {
-                    break;
-                }
-            }
-            Ok(Some(Ok(_))) | Ok(None) | Err(_) => break,
-            Ok(Some(Err(e))) => panic!("stream error: {}", e),
-        }
-    }
-    collected
+/// Maintains a local screen buffer to reconstruct full screen state from updates.
+struct ScreenState {
+    cells: Vec<Vec<char>>,
+    cols: usize,
+    rows: usize,
 }
 
-/// Collect all PTY output bytes until stream ends or timeout.
-async fn read_all_bytes(stream: &mut Streaming<ServerMsg>, timeout_secs: u64) -> Vec<u8> {
-    let mut collected = Vec::new();
+impl ScreenState {
+    fn new() -> Self {
+        Self { cells: Vec::new(), cols: 0, rows: 0 }
+    }
+
+    fn apply(&mut self, msg: &ServerMsg) {
+        match msg {
+            ServerMsg::ScreenSnapshot(ss) => {
+                self.cols = ss.cols as usize;
+                self.rows = ss.num_rows as usize;
+                self.cells = vec![vec![' '; self.cols]; self.rows];
+                for cr in &ss.rows {
+                    let row = cr.row as usize;
+                    for (i, cell) in cr.cells.iter().enumerate() {
+                        let col = cr.col_start as usize + i;
+                        if row < self.rows && col < self.cols {
+                            self.cells[row][col] = cell.ch;
+                        }
+                    }
+                }
+            }
+            ServerMsg::ScreenUpdate(su) => {
+                // Resize if needed.
+                if su.cols as usize != self.cols || su.rows as usize != self.rows {
+                    self.cols = su.cols as usize;
+                    self.rows = su.rows as usize;
+                    self.cells.resize(self.rows, vec![' '; self.cols]);
+                    for row in &mut self.cells {
+                        row.resize(self.cols, ' ');
+                    }
+                }
+                for cr in &su.changes {
+                    let row = cr.row as usize;
+                    for (i, cell) in cr.cells.iter().enumerate() {
+                        let col = cr.col_start as usize + i;
+                        if row < self.rows && col < self.cols {
+                            self.cells[row][col] = cell.ch;
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Get all screen text as a single string (rows joined by newlines, trimmed).
+    fn text(&self) -> String {
+        self.cells.iter()
+            .map(|row| row.iter().collect::<String>().trim_end().to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+/// Collect screen updates until `target` is found in the full screen text or timeout.
+async fn read_until(stream: &mut Streaming<ServerMsg>, target: &str, timeout_secs: u64) -> String {
+    let mut screen = ScreenState::new();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
 
     loop {
@@ -164,14 +200,37 @@ async fn read_all_bytes(stream: &mut Streaming<ServerMsg>, timeout_secs: u64) ->
             break;
         }
         match tokio::time::timeout(remaining, stream.next()).await {
-            Ok(Some(Ok(ServerMsg::DataOut(d)))) => {
-                collected.extend_from_slice(&d.payload);
+            Ok(Some(Ok(msg))) => {
+                screen.apply(&msg);
+                let text = screen.text();
+                if text.contains(target) {
+                    return text;
+                }
             }
-            Ok(Some(Ok(_))) | Ok(None) | Err(_) => break,
+            Ok(None) | Err(_) => break,
             Ok(Some(Err(e))) => panic!("stream error: {}", e),
         }
     }
-    collected
+    screen.text()
+}
+
+/// Collect all screen updates until stream ends or timeout, return final screen text.
+async fn read_all_bytes(stream: &mut Streaming<ServerMsg>, timeout_secs: u64) -> Vec<u8> {
+    let mut screen = ScreenState::new();
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(timeout_secs);
+
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            break;
+        }
+        match tokio::time::timeout(remaining, stream.next()).await {
+            Ok(Some(Ok(msg))) => { screen.apply(&msg); }
+            Ok(None) | Err(_) => break,
+            Ok(Some(Err(e))) => panic!("stream error: {}", e),
+        }
+    }
+    screen.text().into_bytes()
 }
 
 // ============================================================================
@@ -248,17 +307,11 @@ async fn data_ansi_color_output() {
 
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
-    // Use $'...' syntax to produce actual ANSI escape bytes.
+    // With server-side VT emulation, colors are in typed cell attributes.
+    // Just verify the text "RED" appears on screen.
     send(&tx, b"printf $'\\033[31mRED\\033[0m\\n'\n").await;
     let output = read_until(&mut stream, "RED", 3).await;
     assert!(output.contains("RED"), "got: {:?}", output);
-    // The output should contain raw ESC byte (0x1b) for color.
-    let _remaining = read_all_bytes(&mut stream, 1).await;
-    assert!(
-        output.contains("\x1b[31m") || output.contains("\x1b["),
-        "expected ANSI escape in output, got bytes: {:?}",
-        output.as_bytes()
-    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -275,18 +328,13 @@ async fn data_large_output() {
     // Generate large output. Use a smaller count to keep test fast.
     send(&tx, b"seq 1 1000\n").await;
 
-    // Read until we see "1000" — the last line.
-    let output = read_until(&mut stream, "\n1000\r", 15).await;
+    // With server-side VT emulation, we see the final screen state.
+    // seq 1 1000 outputs 1000 lines, but the 80x24 screen only shows the last ~24.
+    // The last visible line should contain "1000".
+    let output = read_until(&mut stream, "1000", 15).await;
     assert!(
         output.contains("1000"),
-        "missing last line, got {} bytes",
-        output.len()
-    );
-    // Large output was received (should be many KB).
-    assert!(
-        output.len() > 1000,
-        "output too small: {} bytes",
-        output.len()
+        "missing last line in screen output"
     );
 
     send(&tx, b"exit\n").await;
@@ -561,9 +609,9 @@ async fn error_first_message_not_resize() {
 
     let (tx, result) = open_raw_session(&mut grpc).await;
 
-    // Send DataIn as first message instead of Resize.
-    tx.send(ClientMsg::DataIn(DataIn {
-        payload: b"hello\n".to_vec(),
+    // Send KeyInput as first message instead of Resize.
+    tx.send(ClientMsg::KeyInput(KeyInput {
+        data: b"hello\n".to_vec(),
     }))
     .await
     .unwrap();

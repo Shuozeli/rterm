@@ -1,40 +1,30 @@
 use crate::pty::PtySession;
+use crate::screen_diff::{self, PrevScreen};
 use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::body::Body;
 use grpc_core::{BoxFuture, Request, Response, Status, Streaming};
 use grpc_server::{Grpc, NamedService, StreamingService};
-use rterm_proto::{ClientMsg, DataOut, ServerMsg};
+use rterm_core::Terminal;
+use rterm_proto::*;
 use std::convert::Infallible;
 use std::task::{Context, Poll};
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::Stream;
 use tracing::{debug, info};
 
-/// The shell command to spawn for each PTY session.
 const DEFAULT_SHELL: &str = "/bin/bash";
 
-/// gRPC service that handles the TerminalService.Session bidi stream.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct TerminalServer {
     shell: String,
 }
 
-impl Default for TerminalServer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl TerminalServer {
     pub fn new() -> Self {
-        Self {
-            shell: DEFAULT_SHELL.to_string(),
-        }
+        Self { shell: DEFAULT_SHELL.to_string() }
     }
 
     pub fn with_shell(shell: impl Into<String>) -> Self {
-        Self {
-            shell: shell.into(),
-        }
+        Self { shell: shell.into() }
     }
 }
 
@@ -42,9 +32,7 @@ impl NamedService for TerminalServer {
     const NAME: &'static str = "rterm.protocol.TerminalService";
 }
 
-/// The response stream type: sends ServerMsg to the client.
-type SessionResponseStream =
-    std::pin::Pin<Box<dyn Stream<Item = Result<ServerMsg, Status>> + Send>>;
+type SessionResponseStream = std::pin::Pin<Box<dyn Stream<Item = Result<ServerMsg, Status>> + Send>>;
 
 impl StreamingService<ClientMsg> for TerminalSvc {
     type Response = ServerMsg;
@@ -56,65 +44,58 @@ impl StreamingService<ClientMsg> for TerminalSvc {
         Box::pin(async move {
             let mut input = request.into_inner();
 
-            // Wait for the first message, which must be a Resize to set initial terminal size.
-            let (initial_cols, initial_rows) = match input.message().await? {
+            let (cols, rows) = match input.message().await? {
                 Some(ClientMsg::Resize(r)) => (r.cols, r.rows),
-                Some(_) => {
-                    return Err(Status::invalid_argument(
-                        "first message must be Resize with initial terminal size",
-                    ));
-                }
-                None => {
-                    return Err(Status::invalid_argument("empty stream"));
-                }
+                Some(_) => return Err(Status::invalid_argument("first message must be Resize")),
+                None => return Err(Status::invalid_argument("empty stream")),
             };
 
-            info!(
-                "spawning PTY: shell={}, size={}x{}",
-                shell, initial_cols, initial_rows
-            );
+            info!("spawning PTY: shell={}, size={}x{}", shell, cols, rows);
 
-            // Spawn PTY.
-            let pty = PtySession::spawn(&shell, initial_cols, initial_rows)
+            let pty = PtySession::spawn(&shell, cols, rows)
                 .map_err(|e| Status::internal(format!("failed to spawn PTY: {e}")))?;
 
             let stdin_tx = pty.stdin_tx;
             let resize_tx = pty.resize_tx;
 
-            // Spawn task to forward client messages to PTY.
             tokio::spawn(async move {
                 while let Ok(Some(msg)) = input.message().await {
                     match msg {
-                        ClientMsg::DataIn(d) => {
-                            if stdin_tx.send(d.payload).await.is_err() {
-                                debug!("PTY stdin channel closed");
-                                break;
-                            }
-                        }
-                        ClientMsg::Resize(r) => {
-                            if resize_tx.send((r.cols, r.rows)).await.is_err() {
-                                debug!("PTY resize channel closed");
-                                break;
-                            }
-                        }
+                        ClientMsg::KeyInput(k) => { if stdin_tx.send(k.data).await.is_err() { break; } }
+                        ClientMsg::PasteInput(p) => { if stdin_tx.send(p.text.into_bytes()).await.is_err() { break; } }
+                        ClientMsg::Resize(r) => { if resize_tx.send((r.cols, r.rows)).await.is_err() { break; } }
+                        ClientMsg::MouseEvent(_) => {}
                     }
                 }
                 debug!("client input stream ended");
             });
 
-            // Create response stream from PTY stdout.
-            let stdout_rx = pty.stdout_rx;
-            let response_stream = tokio_stream::wrappers::ReceiverStream::new(stdout_rx)
-                .map(|data| Ok(ServerMsg::DataOut(DataOut { payload: data })));
+            let mut terminal = Terminal::new(cols as usize, rows as usize);
+            let mut prev = PrevScreen::new(cols as usize, rows as usize);
+            let mut stdout_rx = pty.stdout_rx;
 
-            Ok(Response::new(
-                Box::pin(response_stream) as SessionResponseStream
-            ))
+            let ss = screen_diff::snapshot(terminal.screen());
+            prev.update_from_snapshot(&ss);
+            let (tx, rx) = tokio::sync::mpsc::channel(64);
+            let _ = tx.send(Ok(ServerMsg::ScreenSnapshot(ss))).await;
+
+            tokio::spawn(async move {
+                while let Some(data) = stdout_rx.recv().await {
+                    terminal.feed(&data);
+                    if terminal.is_sync_mode() { continue; }
+                    if let Some(update) = prev.diff(terminal.screen()) {
+                        if tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err() { break; }
+                    }
+                }
+                let _ = tx.send(Ok(ServerMsg::Exit(Exit { code: 0 }))).await;
+            });
+
+            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            Ok(Response::new(Box::pin(stream) as SessionResponseStream))
         })
     }
 }
 
-/// Internal service dispatch wrapper.
 struct TerminalSvc(String);
 
 impl tower_service::Service<http::Request<Body>> for TerminalServer {
