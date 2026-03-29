@@ -9,8 +9,6 @@ license = "MIT"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-rterm-core = { path = "../rterm-core" }
-rterm-gui = { path = "../rterm-gui" }
 flatbuffers = "25.12.19"
 egui = "0.31"
 eframe = { version = "0.31", default-features = false, features = ["glow", "web_screen_reader"] }
