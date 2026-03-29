@@ -160,12 +160,15 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>) {
         }
     }
 
-    let mut params = CertificateParams::new(sans).unwrap();
+    let mut params = CertificateParams::new(sans).expect("failed to create certificate params");
     let now = time::OffsetDateTime::now_utc();
     params.not_before = now;
     params.not_after = now + time::Duration::days(14);
-    let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
-    let cert = params.self_signed(&key_pair).unwrap();
+    let key_pair =
+        KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).expect("failed to generate key pair");
+    let cert = params
+        .self_signed(&key_pair)
+        .expect("failed to self-sign certificate");
     (
         cert.pem().into_bytes(),
         key_pair.serialize_pem().into_bytes(),
@@ -175,7 +178,7 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>) {
 fn extract_cert_der(cert_pem: &[u8]) -> Vec<u8> {
     let certs: Vec<_> = rustls_pemfile::certs(&mut std::io::BufReader::new(cert_pem))
         .collect::<Result<Vec<_>, _>>()
-        .unwrap();
+        .expect("failed to parse PEM certificate");
     certs[0].to_vec()
 }
 

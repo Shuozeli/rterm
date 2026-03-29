@@ -13,16 +13,22 @@ use tracing::debug;
 
 const DEFAULT_SHELL: &str = "/bin/bash";
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct TerminalServer {
     shell: String,
 }
 
-impl TerminalServer {
-    pub fn new() -> Self {
+impl Default for TerminalServer {
+    fn default() -> Self {
         Self {
             shell: DEFAULT_SHELL.to_string(),
         }
+    }
+}
+
+impl TerminalServer {
+    pub fn new() -> Self {
+        Self::default()
     }
 
     pub fn with_shell(shell: impl Into<String>) -> Self {
@@ -121,7 +127,7 @@ mod tests {
     #[test]
     fn terminal_server_default() {
         let s = TerminalServer::default();
-        assert!(s.shell.is_empty() || s.shell == DEFAULT_SHELL);
+        assert_eq!(s.shell, DEFAULT_SHELL);
     }
 
     #[test]

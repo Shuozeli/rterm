@@ -100,18 +100,6 @@ impl PtySpawner for RealPtySpawner {
     }
 }
 
-// Backward compat.
-pub struct PtySession;
-impl PtySession {
-    pub fn spawn(
-        shell: &str,
-        cols: u16,
-        rows: u16,
-    ) -> Result<PtyHandle, Box<dyn std::error::Error + Send + Sync>> {
-        RealPtySpawner.spawn(shell, cols, rows)
-    }
-}
-
 /// Fake PTY spawner for tests. Uses in-memory channels.
 /// After `spawn()`, call `take_control()` to get handles for reading
 /// what was sent to stdin and resize.

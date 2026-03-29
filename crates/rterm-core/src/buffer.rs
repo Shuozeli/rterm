@@ -780,164 +780,164 @@ mod tests {
         assert_eq!(buf.cell(2, 0).ch, 'B'); // was row 1
         assert_eq!(buf.cell(3, 0).ch, 'C'); // was row 2, D fell off
     }
-}
 
-#[test]
-fn scrollback_cell_valid() {
-    let mut buf = ScreenBuffer::new(5, 2);
-    buf.set_max_scrollback(10);
-    for ch in "Hello".chars() {
-        buf.write_char(ch);
-    }
-    buf.carriage_return();
-    buf.line_feed();
-    for ch in "World".chars() {
-        buf.write_char(ch);
-    }
-    buf.carriage_return();
-    buf.line_feed(); // scrolls "Hello" into scrollback
-    assert_eq!(buf.scrollback_len(), 1);
-    assert_eq!(buf.scrollback_cell(0, 0).ch, 'H');
-    assert_eq!(buf.scrollback_cell(0, 4).ch, 'o');
-}
-
-#[test]
-fn scrollback_cell_out_of_bounds() {
-    let buf = ScreenBuffer::new(5, 2);
-    let cell = buf.scrollback_cell(99, 99);
-    assert_eq!(cell.ch, ' '); // default
-}
-
-#[test]
-fn scrollback_cols_valid() {
-    let mut buf = ScreenBuffer::new(10, 2);
-    buf.write_char('A');
-    buf.line_feed();
-    buf.line_feed(); // scroll
-    assert_eq!(buf.scrollback_cols(0), 10);
-}
-
-#[test]
-fn scrollback_cols_out_of_bounds() {
-    let buf = ScreenBuffer::new(10, 2);
-    assert_eq!(buf.scrollback_cols(99), 0);
-}
-
-#[test]
-fn scrollback_text_valid() {
-    let mut buf = ScreenBuffer::new(10, 2);
-    for ch in "Hello".chars() {
-        buf.write_char(ch);
-    }
-    buf.line_feed();
-    buf.line_feed(); // scroll
-    assert_eq!(buf.scrollback_text(0), "Hello");
-}
-
-#[test]
-fn scrollback_text_out_of_bounds() {
-    let buf = ScreenBuffer::new(10, 2);
-    assert_eq!(buf.scrollback_text(99), "");
-}
-
-#[test]
-fn cell_mut_modify() {
-    let mut buf = ScreenBuffer::new(5, 2);
-    buf.cell_mut(0, 0).ch = 'Z';
-    assert_eq!(buf.cell(0, 0).ch, 'Z');
-}
-
-#[test]
-fn erase_in_display_mode_0() {
-    let mut buf = ScreenBuffer::new(10, 3);
-    for ch in "AAAAAAAAAA".chars() {
-        buf.write_char(ch);
-    }
-    buf.set_cursor_pos(1, 1); // row 0, col 0
-    buf.cursor_forward(5); // col 5
-    buf.erase_in_display(0); // from cursor to end
-    assert_eq!(buf.cell(0, 4).ch, 'A'); // before cursor
-    assert_eq!(buf.cell(0, 5).ch, ' '); // erased
-    assert_eq!(buf.row_text(1), ""); // below erased
-}
-
-#[test]
-fn erase_in_display_mode_1() {
-    let mut buf = ScreenBuffer::new(10, 3);
-    for row in 0..3 {
-        buf.set_cursor_pos(row + 1, 1);
-        for ch in "ABCDE".chars() {
+    #[test]
+    fn scrollback_cell_valid() {
+        let mut buf = ScreenBuffer::new(5, 2);
+        buf.set_max_scrollback(10);
+        for ch in "Hello".chars() {
             buf.write_char(ch);
         }
+        buf.carriage_return();
+        buf.line_feed();
+        for ch in "World".chars() {
+            buf.write_char(ch);
+        }
+        buf.carriage_return();
+        buf.line_feed(); // scrolls "Hello" into scrollback
+        assert_eq!(buf.scrollback_len(), 1);
+        assert_eq!(buf.scrollback_cell(0, 0).ch, 'H');
+        assert_eq!(buf.scrollback_cell(0, 4).ch, 'o');
     }
-    buf.set_cursor_pos(2, 3); // row 1, col 2
-    buf.erase_in_display(1); // from start to cursor
-    assert_eq!(buf.row_text(0), ""); // above erased
-    assert_eq!(buf.cell(1, 0).ch, ' '); // erased
-    assert_eq!(buf.cell(1, 2).ch, ' '); // erased (cursor pos)
-    assert_eq!(buf.cell(1, 3).ch, 'D'); // after cursor preserved
-}
 
-#[test]
-fn erase_in_line_mode_2() {
-    let mut buf = ScreenBuffer::new(10, 1);
-    for ch in "Hello".chars() {
-        buf.write_char(ch);
+    #[test]
+    fn scrollback_cell_out_of_bounds() {
+        let buf = ScreenBuffer::new(5, 2);
+        let cell = buf.scrollback_cell(99, 99);
+        assert_eq!(cell.ch, ' '); // default
     }
-    buf.erase_in_line(2);
-    assert_eq!(buf.row_text(0), "");
-}
 
-#[test]
-fn resize_clamps_cursor() {
-    let mut buf = ScreenBuffer::new(80, 24);
-    buf.set_cursor_pos(20, 70); // row 19, col 69
-    buf.resize(40, 10);
-    assert!(buf.cursor.row < 10);
-    assert!(buf.cursor.col < 40);
-}
-
-#[test]
-fn scroll_up_with_scrollback() {
-    let mut buf = ScreenBuffer::new(5, 3);
-    buf.set_max_scrollback(5);
-    for ch in "Line0".chars() {
-        buf.write_char(ch);
+    #[test]
+    fn scrollback_cols_valid() {
+        let mut buf = ScreenBuffer::new(10, 2);
+        buf.write_char('A');
+        buf.line_feed();
+        buf.line_feed(); // scroll
+        assert_eq!(buf.scrollback_cols(0), 10);
     }
-    buf.set_cursor_pos(2, 1);
-    for ch in "Line1".chars() {
-        buf.write_char(ch);
+
+    #[test]
+    fn scrollback_cols_out_of_bounds() {
+        let buf = ScreenBuffer::new(10, 2);
+        assert_eq!(buf.scrollback_cols(99), 0);
     }
-    buf.set_cursor_pos(3, 1);
-    for ch in "Line2".chars() {
-        buf.write_char(ch);
+
+    #[test]
+    fn scrollback_text_valid() {
+        let mut buf = ScreenBuffer::new(10, 2);
+        for ch in "Hello".chars() {
+            buf.write_char(ch);
+        }
+        buf.line_feed();
+        buf.line_feed(); // scroll
+        assert_eq!(buf.scrollback_text(0), "Hello");
     }
-    buf.scroll_up(1);
-    assert_eq!(buf.scrollback_len(), 1);
-    assert_eq!(buf.scrollback_text(0), "Line0");
-}
 
-#[test]
-fn insert_lines_outside_region() {
-    let mut buf = ScreenBuffer::new(5, 5);
-    buf.set_scroll_region(2, 4); // rows 1-3
-    buf.set_cursor_pos(1, 1); // row 0 — outside region
-    buf.insert_lines(1);
-    // Should have no effect since cursor is outside scroll region
-}
+    #[test]
+    fn scrollback_text_out_of_bounds() {
+        let buf = ScreenBuffer::new(10, 2);
+        assert_eq!(buf.scrollback_text(99), "");
+    }
 
-#[test]
-fn delete_lines_outside_region() {
-    let mut buf = ScreenBuffer::new(5, 5);
-    buf.set_scroll_region(2, 4);
-    buf.set_cursor_pos(1, 1); // row 0 — outside region
-    buf.delete_lines(1);
-    // Should have no effect
-}
+    #[test]
+    fn cell_mut_modify() {
+        let mut buf = ScreenBuffer::new(5, 2);
+        buf.cell_mut(0, 0).ch = 'Z';
+        assert_eq!(buf.cell(0, 0).ch, 'Z');
+    }
 
-#[test]
-fn set_scroll_region_invalid() {
-    let mut buf = ScreenBuffer::new(80, 24);
-    buf.set_scroll_region(10, 5); // top > bottom — should be ignored
-    // Scroll region should remain at defaults (0, 23)
+    #[test]
+    fn erase_in_display_mode_0() {
+        let mut buf = ScreenBuffer::new(10, 3);
+        for ch in "AAAAAAAAAA".chars() {
+            buf.write_char(ch);
+        }
+        buf.set_cursor_pos(1, 1); // row 0, col 0
+        buf.cursor_forward(5); // col 5
+        buf.erase_in_display(0); // from cursor to end
+        assert_eq!(buf.cell(0, 4).ch, 'A'); // before cursor
+        assert_eq!(buf.cell(0, 5).ch, ' '); // erased
+        assert_eq!(buf.row_text(1), ""); // below erased
+    }
+
+    #[test]
+    fn erase_in_display_mode_1() {
+        let mut buf = ScreenBuffer::new(10, 3);
+        for row in 0..3 {
+            buf.set_cursor_pos(row + 1, 1);
+            for ch in "ABCDE".chars() {
+                buf.write_char(ch);
+            }
+        }
+        buf.set_cursor_pos(2, 3); // row 1, col 2
+        buf.erase_in_display(1); // from start to cursor
+        assert_eq!(buf.row_text(0), ""); // above erased
+        assert_eq!(buf.cell(1, 0).ch, ' '); // erased
+        assert_eq!(buf.cell(1, 2).ch, ' '); // erased (cursor pos)
+        assert_eq!(buf.cell(1, 3).ch, 'D'); // after cursor preserved
+    }
+
+    #[test]
+    fn erase_in_line_mode_2() {
+        let mut buf = ScreenBuffer::new(10, 1);
+        for ch in "Hello".chars() {
+            buf.write_char(ch);
+        }
+        buf.erase_in_line(2);
+        assert_eq!(buf.row_text(0), "");
+    }
+
+    #[test]
+    fn resize_clamps_cursor() {
+        let mut buf = ScreenBuffer::new(80, 24);
+        buf.set_cursor_pos(20, 70); // row 19, col 69
+        buf.resize(40, 10);
+        assert!(buf.cursor.row < 10);
+        assert!(buf.cursor.col < 40);
+    }
+
+    #[test]
+    fn scroll_up_with_scrollback() {
+        let mut buf = ScreenBuffer::new(5, 3);
+        buf.set_max_scrollback(5);
+        for ch in "Line0".chars() {
+            buf.write_char(ch);
+        }
+        buf.set_cursor_pos(2, 1);
+        for ch in "Line1".chars() {
+            buf.write_char(ch);
+        }
+        buf.set_cursor_pos(3, 1);
+        for ch in "Line2".chars() {
+            buf.write_char(ch);
+        }
+        buf.scroll_up(1);
+        assert_eq!(buf.scrollback_len(), 1);
+        assert_eq!(buf.scrollback_text(0), "Line0");
+    }
+
+    #[test]
+    fn insert_lines_outside_region() {
+        let mut buf = ScreenBuffer::new(5, 5);
+        buf.set_scroll_region(2, 4); // rows 1-3
+        buf.set_cursor_pos(1, 1); // row 0 -- outside region
+        buf.insert_lines(1);
+        // Should have no effect since cursor is outside scroll region
+    }
+
+    #[test]
+    fn delete_lines_outside_region() {
+        let mut buf = ScreenBuffer::new(5, 5);
+        buf.set_scroll_region(2, 4);
+        buf.set_cursor_pos(1, 1); // row 0 -- outside region
+        buf.delete_lines(1);
+        // Should have no effect
+    }
+
+    #[test]
+    fn set_scroll_region_invalid() {
+        let mut buf = ScreenBuffer::new(80, 24);
+        buf.set_scroll_region(10, 5); // top > bottom -- should be ignored
+        // Scroll region should remain at defaults (0, 23)
+    }
 }
