@@ -11,7 +11,7 @@ use grpc_client::{Grpc, H3Channel};
 use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::Request;
 use rterm_core::Terminal;
-use rterm_gui::{encode_char, encode_key, terminal_grid, TerminalGridConfig};
+use rterm_gui::{TerminalGridConfig, encode_char, encode_key, terminal_grid};
 use rterm_proto::{ClientMsg, DataIn, Resize, ServerMsg};
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
@@ -38,7 +38,6 @@ struct TerminalApp {
     input_tx: Option<mpsc::Sender<ClientMsg>>,
     config: TerminalGridConfig,
     _runtime: Runtime,
-    _connected: bool,
 }
 
 impl TerminalApp {
@@ -74,7 +73,6 @@ impl TerminalApp {
             input_tx: Some(input_tx),
             config,
             _runtime: rt,
-            _connected: false,
         }
     }
 }
@@ -87,7 +85,7 @@ impl eframe::App for TerminalApp {
                 let terminal = self.terminal.lock().unwrap();
                 let sel = rterm_gui::Selection::default();
                 let mut scroll = rterm_gui::grid::ScrollState::default();
-                let grid = terminal_grid(ui, terminal.screen(), &self.config, &sel, &mut scroll);
+                let _grid = terminal_grid(ui, terminal.screen(), &self.config, &sel, &mut scroll);
 
                 // Handle keyboard input.
                 {
@@ -98,9 +96,8 @@ impl eframe::App for TerminalApp {
                                 if let Some(tx) = &self.input_tx {
                                     for ch in text.chars() {
                                         let bytes = encode_char(ch);
-                                        let _ = tx.try_send(ClientMsg::DataIn(DataIn {
-                                            payload: bytes,
-                                        }));
+                                        let _ = tx
+                                            .try_send(ClientMsg::DataIn(DataIn { payload: bytes }));
                                     }
                                 }
                             }
@@ -116,9 +113,8 @@ impl eframe::App for TerminalApp {
                                 };
                                 if let Some(bytes) = encode_key(*key, modifiers, app_cursor) {
                                     if let Some(tx) = &self.input_tx {
-                                        let _ = tx.try_send(ClientMsg::DataIn(DataIn {
-                                            payload: bytes,
-                                        }));
+                                        let _ = tx
+                                            .try_send(ClientMsg::DataIn(DataIn { payload: bytes }));
                                     }
                                 }
                             }
@@ -157,7 +153,9 @@ async fn try_connect(
             t.feed(b"\x1b[1;32mThis is green bold text.\x1b[0m\r\n");
             t.feed(b"\x1b[38;5;208mThis is 256-color orange.\x1b[0m\r\n");
             t.feed(b"\x1b[38;2;100;150;255mThis is RGB blue.\x1b[0m\r\n");
-            t.feed(b"\x1b[4mUnderlined\x1b[0m \x1b[9mStrikethrough\x1b[0m \x1b[7mReversed\x1b[0m\r\n");
+            t.feed(
+                b"\x1b[4mUnderlined\x1b[0m \x1b[9mStrikethrough\x1b[0m \x1b[7mReversed\x1b[0m\r\n",
+            );
             ctx.request_repaint();
             return Err(e.into());
         }
@@ -166,9 +164,7 @@ async fn try_connect(
     let mut grpc = Grpc::with_origin(channel, uri);
     let request_stream = tokio_stream::wrappers::ReceiverStream::new(input_rx);
     let codec = FlatBuffersCodec::<ClientMsg, ServerMsg>::default();
-    let path: http::uri::PathAndQuery = "/rterm.protocol.TerminalService/Session"
-        .parse()
-        .unwrap();
+    let path: http::uri::PathAndQuery = "/rterm.protocol.TerminalService/Session".parse().unwrap();
 
     // Send initial resize.
     input_tx
@@ -197,7 +193,9 @@ async fn try_connect(
             }
             Ok(ServerMsg::Exit(e)) => {
                 let mut t = terminal.lock().unwrap();
-                t.feed(format!("\r\n\x1b[33mShell exited with code {}\x1b[0m\r\n", e.code).as_bytes());
+                t.feed(
+                    format!("\r\n\x1b[33mShell exited with code {}\x1b[0m\r\n", e.code).as_bytes(),
+                );
                 ctx.request_repaint();
                 break;
             }

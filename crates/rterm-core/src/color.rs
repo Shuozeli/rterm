@@ -2,21 +2,16 @@
 ///
 /// Supports the default terminal color, 256-color indexed palette,
 /// and 24-bit RGB true color.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Color {
     /// The terminal's default foreground or background color.
+    #[default]
     Default,
     /// Standard 8 colors (0-7) and bright variants (8-15),
     /// plus the 216-color cube (16-231) and grayscale ramp (232-255).
     Indexed(u8),
     /// 24-bit true color.
     Rgb(u8, u8, u8),
-}
-
-impl Default for Color {
-    fn default() -> Self {
-        Self::Default
-    }
 }
 
 /// Named standard ANSI color indices for readability.

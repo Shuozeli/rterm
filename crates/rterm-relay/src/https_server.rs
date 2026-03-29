@@ -1,5 +1,6 @@
 /// Simple HTTPS server for serving the WASM page over TCP/TLS.
 /// This allows Chrome to accept the self-signed cert via the normal warning dialog.
+use crate::static_files::{guess_content_type, resolve_path};
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use std::net::SocketAddr;
@@ -69,29 +70,11 @@ async fn serve_static_hyper(
     uri_path: &str,
     cert_hash_b64: &str,
 ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, std::convert::Infallible> {
-    let clean = uri_path.trim_start_matches('/');
-    let file_path = if clean.is_empty() {
-        static_dir.join("index.html")
-    } else {
-        static_dir.join(clean)
-    };
-
-    // Prevent path traversal.
-    let file_path = if file_path.starts_with(static_dir) {
-        file_path
-    } else {
-        static_dir.join("index.html")
-    };
+    let file_path = resolve_path(uri_path, static_dir);
 
     match tokio::fs::read(&file_path).await {
         Ok(data) => {
-            let content_type = match file_path.extension().and_then(|e| e.to_str()) {
-                Some("html") => "text/html; charset=utf-8",
-                Some("js") => "application/javascript",
-                Some("wasm") => "application/wasm",
-                Some("css") => "text/css",
-                _ => "application/octet-stream",
-            };
+            let content_type = guess_content_type(&file_path);
 
             // For HTML files, inject the cert hash as a global JS variable
             // so the WASM client can use it for serverCertificateHashes.

@@ -3,10 +3,10 @@
 /// Accepts WebTransport sessions, reads length-prefixed FlatBuffers ClientMessages
 /// from a bidi stream, bridges to a PTY, and sends ServerMessages back.
 use crate::pty::PtySession;
+use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
 use h3::quic::BidiStream as _;
 use h3_webtransport::server::WebTransportSession;
 use rterm_proto::{ClientMsg, DataOut, ServerMsg};
-use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, info};
 
@@ -32,7 +32,8 @@ pub async fn handle_wt_session(
     info!("WebTransport bidi stream accepted");
 
     // Read the first message — must be Resize.
-    let first_msg = read_message(&mut recv).await?
+    let first_msg = read_message(&mut recv)
+        .await?
         .ok_or("empty stream — expected initial Resize")?;
     let first = ClientMsg::decode_flatbuffer(&first_msg)
         .map_err(|e| format!("decode first message: {}", e))?;
@@ -53,23 +54,21 @@ pub async fn handle_wt_session(
     tokio::spawn(async move {
         loop {
             match read_message(&mut recv).await {
-                Ok(Some(data)) => {
-                    match ClientMsg::decode_flatbuffer(&data) {
-                        Ok(ClientMsg::DataIn(d)) => {
-                            if stdin_tx.send(d.payload).await.is_err() {
-                                break;
-                            }
-                        }
-                        Ok(ClientMsg::Resize(r)) => {
-                            if resize_tx.send((r.cols, r.rows)).await.is_err() {
-                                break;
-                            }
-                        }
-                        Err(e) => {
-                            debug!("decode error: {}", e);
+                Ok(Some(data)) => match ClientMsg::decode_flatbuffer(&data) {
+                    Ok(ClientMsg::DataIn(d)) => {
+                        if stdin_tx.send(d.payload).await.is_err() {
+                            break;
                         }
                     }
-                }
+                    Ok(ClientMsg::Resize(r)) => {
+                        if resize_tx.send((r.cols, r.rows)).await.is_err() {
+                            break;
+                        }
+                    }
+                    Err(e) => {
+                        debug!("decode error: {}", e);
+                    }
+                },
                 Ok(None) => {
                     debug!("client bidi stream ended");
                     break;

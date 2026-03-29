@@ -44,9 +44,7 @@ fn indexed_to_color32(idx: u8) -> Color32 {
             let g = ((n / 6) % 6) as u32;
             let r = (n / 36) as u32;
             // Map 0..5 to 0, 95, 135, 175, 215, 255.
-            let to_val = |v: u32| -> u8 {
-                if v == 0 { 0 } else { (55 + v * 40) as u8 }
-            };
+            let to_val = |v: u32| -> u8 { if v == 0 { 0 } else { (55 + v * 40) as u8 } };
             Color32::from_rgb(to_val(r), to_val(g), to_val(b))
         }
         // Grayscale ramp: 232..=255 -> 8, 18, 28, ..., 238.

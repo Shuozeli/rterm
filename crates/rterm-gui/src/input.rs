@@ -3,22 +3,26 @@ use egui::Key;
 /// Encode an egui key event into VT escape sequence bytes.
 ///
 /// Returns None for keys that don't produce terminal input.
-pub fn encode_key(key: Key, modifiers: &egui::Modifiers, application_cursor: bool) -> Option<Vec<u8>> {
+pub fn encode_key(
+    key: Key,
+    modifiers: &egui::Modifiers,
+    application_cursor: bool,
+) -> Option<Vec<u8>> {
     // Ctrl+key combinations.
-    if modifiers.ctrl {
-        if let Some(ch) = key_to_char(key) {
-            let ctrl_byte = match ch {
-                'a'..='z' => (ch as u8) - b'a' + 1,
-                '@' => 0,
-                '[' => 27,
-                '\\' => 28,
-                ']' => 29,
-                '^' => 30,
-                '_' => 31,
-                _ => return None,
-            };
-            return Some(vec![ctrl_byte]);
-        }
+    if modifiers.ctrl
+        && let Some(ch) = key_to_char(key)
+    {
+        let ctrl_byte = match ch {
+            'a'..='z' => (ch as u8) - b'a' + 1,
+            '@' => 0,
+            '[' => 27,
+            '\\' => 28,
+            ']' => 29,
+            '^' => 30,
+            '_' => 31,
+            _ => return None,
+        };
+        return Some(vec![ctrl_byte]);
     }
 
     match key {
@@ -118,25 +122,40 @@ mod tests {
     #[test]
     fn arrow_keys_normal_mode() {
         let mods = egui::Modifiers::NONE;
-        assert_eq!(encode_key(Key::ArrowUp, &mods, false), Some(b"\x1b[A".to_vec()));
-        assert_eq!(encode_key(Key::ArrowDown, &mods, false), Some(b"\x1b[B".to_vec()));
+        assert_eq!(
+            encode_key(Key::ArrowUp, &mods, false),
+            Some(b"\x1b[A".to_vec())
+        );
+        assert_eq!(
+            encode_key(Key::ArrowDown, &mods, false),
+            Some(b"\x1b[B".to_vec())
+        );
     }
 
     #[test]
     fn arrow_keys_application_mode() {
         let mods = egui::Modifiers::NONE;
-        assert_eq!(encode_key(Key::ArrowUp, &mods, true), Some(b"\x1bOA".to_vec()));
+        assert_eq!(
+            encode_key(Key::ArrowUp, &mods, true),
+            Some(b"\x1bOA".to_vec())
+        );
     }
 
     #[test]
     fn ctrl_c() {
-        let mods = egui::Modifiers { ctrl: true, ..Default::default() };
+        let mods = egui::Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         assert_eq!(encode_key(Key::C, &mods, false), Some(vec![3])); // ETX
     }
 
     #[test]
     fn ctrl_d() {
-        let mods = egui::Modifiers { ctrl: true, ..Default::default() };
+        let mods = egui::Modifiers {
+            ctrl: true,
+            ..Default::default()
+        };
         assert_eq!(encode_key(Key::D, &mods, false), Some(vec![4])); // EOT
     }
 
@@ -144,7 +163,10 @@ mod tests {
     fn function_keys() {
         let mods = egui::Modifiers::NONE;
         assert_eq!(encode_key(Key::F1, &mods, false), Some(b"\x1bOP".to_vec()));
-        assert_eq!(encode_key(Key::F12, &mods, false), Some(b"\x1b[24~".to_vec()));
+        assert_eq!(
+            encode_key(Key::F12, &mods, false),
+            Some(b"\x1b[24~".to_vec())
+        );
     }
 
     #[test]
@@ -161,7 +183,10 @@ mod tests {
     #[test]
     fn delete_key() {
         let mods = egui::Modifiers::NONE;
-        assert_eq!(encode_key(Key::Delete, &mods, false), Some(b"\x1b[3~".to_vec()));
+        assert_eq!(
+            encode_key(Key::Delete, &mods, false),
+            Some(b"\x1b[3~".to_vec())
+        );
     }
 
     #[test]

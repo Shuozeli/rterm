@@ -20,7 +20,10 @@ fn feed_bytes(t: &mut Terminal, bytes: &[u8]) {
 fn ls_color_output() {
     let mut t = Terminal::new(80, 24);
     // Simulated ls --color output.
-    feed(&mut t, "\x1b[0m\x1b[01;34mDesktop\x1b[0m  \x1b[01;34mDocuments\x1b[0m  \x1b[01;32mscript.sh\x1b[0m  file.txt\r\n");
+    feed(
+        &mut t,
+        "\x1b[0m\x1b[01;34mDesktop\x1b[0m  \x1b[01;34mDocuments\x1b[0m  \x1b[01;32mscript.sh\x1b[0m  file.txt\r\n",
+    );
 
     assert_eq!(t.screen().cell(0, 0).ch, 'D');
     assert!(t.screen().cell(0, 0).attrs.bold); // bold
@@ -165,7 +168,7 @@ fn ink_cursor_hide_write_restore() {
     // Ink pattern: hide cursor, write at position, show cursor.
     feed(&mut t, "\x1b[?25l"); // hide cursor
     feed(&mut t, "\x1b[1;1H"); // home
-    feed(&mut t, "\x1b[2J");   // clear
+    feed(&mut t, "\x1b[2J"); // clear
     feed(&mut t, "\x1b[1;1H"); // home again
     feed(&mut t, "\x1b[32m✓\x1b[39m Task completed");
     feed(&mut t, "\x1b[?25h"); // show cursor
@@ -193,7 +196,10 @@ fn ink_multiline_rewrite() {
     // Write initial content.
     feed(&mut t, "\x1b[1;1HLine 1\r\nLine 2\r\nLine 3");
     // Ink goes back and rewrites.
-    feed(&mut t, "\x1b[1;1H\x1b[0KNew 1\r\n\x1b[0KNew 2\r\n\x1b[0KNew 3");
+    feed(
+        &mut t,
+        "\x1b[1;1H\x1b[0KNew 1\r\n\x1b[0KNew 2\r\n\x1b[0KNew 3",
+    );
     assert_eq!(t.screen().row_text(0), "New 1");
     assert_eq!(t.screen().row_text(1), "New 2");
     assert_eq!(t.screen().row_text(2), "New 3");
@@ -219,18 +225,25 @@ fn tui_rapid_screen_updates_no_panic() {
     for i in 0..50 {
         feed(&mut t, "\x1b[H"); // home
         for row in 0..24 {
-            feed(&mut t, &format!(
-                "\x1b[{};1H\x1b[0K  {} line {} update {}\r\n",
-                row + 1,
-                row,
-                i,
-                i * row
-            ));
+            feed(
+                &mut t,
+                &format!(
+                    "\x1b[{};1H\x1b[0K  {} line {} update {}\r\n",
+                    row + 1,
+                    row,
+                    i,
+                    i * row
+                ),
+            );
         }
     }
     // No panic = pass. Check last update is visible.
     let text = t.screen().row_text(0);
-    assert!(text.contains("49"), "last update should be visible: {}", text);
+    assert!(
+        text.contains("49"),
+        "last update should be visible: {}",
+        text
+    );
 }
 
 // ============================================================================
@@ -241,9 +254,9 @@ fn tui_rapid_screen_updates_no_panic() {
 fn empty_csi_params_default_to_1() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[5;5H"); // row 5, col 5
-    feed(&mut t, "\x1b[A");     // CUU with no param = move up 1
+    feed(&mut t, "\x1b[A"); // CUU with no param = move up 1
     assert_eq!(t.screen().cursor.row, 3);
-    feed(&mut t, "\x1b[B");     // CUD with no param = move down 1
+    feed(&mut t, "\x1b[B"); // CUD with no param = move down 1
     assert_eq!(t.screen().cursor.row, 4);
 }
 
@@ -302,16 +315,16 @@ fn tab_stops_at_8() {
 fn unknown_csi_sequences_ignored() {
     let mut t = Terminal::new(80, 24);
     // These are valid CSI but unimplemented — should not panic.
-    feed(&mut t, "\x1b[>4;2m");     // xterm private mode
-    feed(&mut t, "\x1b[?2004h");    // bracketed paste
-    feed(&mut t, "\x1b[?2004l");    // bracketed paste off
-    feed(&mut t, "\x1b[?1004h");    // focus events
-    feed(&mut t, "\x1b[?1004l");    // focus events off
-    feed(&mut t, "\x1b[22;0;0t");   // window manipulation
-    feed(&mut t, "\x1b[23;0;0t");   // window manipulation
-    feed(&mut t, "\x1b[>4;m");      // xterm private reset
-    feed(&mut t, "\x1b[22;2t");     // save title
-    feed(&mut t, "\x1b[23;2t");     // restore title
+    feed(&mut t, "\x1b[>4;2m"); // xterm private mode
+    feed(&mut t, "\x1b[?2004h"); // bracketed paste
+    feed(&mut t, "\x1b[?2004l"); // bracketed paste off
+    feed(&mut t, "\x1b[?1004h"); // focus events
+    feed(&mut t, "\x1b[?1004l"); // focus events off
+    feed(&mut t, "\x1b[22;0;0t"); // window manipulation
+    feed(&mut t, "\x1b[23;0;0t"); // window manipulation
+    feed(&mut t, "\x1b[>4;m"); // xterm private reset
+    feed(&mut t, "\x1b[22;2t"); // save title
+    feed(&mut t, "\x1b[23;2t"); // restore title
     feed(&mut t, "OK");
     assert_eq!(t.screen().cell(0, 0).ch, 'O');
 }
@@ -435,10 +448,10 @@ fn ink_status_bar_at_bottom() {
 fn ink_cursor_save_restore_pattern() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[5;10H"); // position
-    feed(&mut t, "\x1b7");       // save
-    feed(&mut t, "\x1b[1;1H");   // go home
+    feed(&mut t, "\x1b7"); // save
+    feed(&mut t, "\x1b[1;1H"); // go home
     feed(&mut t, "Header");
-    feed(&mut t, "\x1b8");       // restore
+    feed(&mut t, "\x1b8"); // restore
     feed(&mut t, "Body");
     // "Header" at row 0, "Body" at row 4 col 9.
     assert_eq!(t.screen().cell(0, 0).ch, 'H');
@@ -452,7 +465,10 @@ fn ink_multiline_component_rerender() {
     feed(&mut t, "\x1b[?25l"); // hide cursor
     feed(&mut t, "\x1b[1;1H");
     feed(&mut t, "\x1b[36m┌────────────────────┐\x1b[39m\r\n");
-    feed(&mut t, "\x1b[36m│\x1b[39m  Status: \x1b[32mOK\x1b[39m       \x1b[36m│\x1b[39m\r\n");
+    feed(
+        &mut t,
+        "\x1b[36m│\x1b[39m  Status: \x1b[32mOK\x1b[39m       \x1b[36m│\x1b[39m\r\n",
+    );
     feed(&mut t, "\x1b[36m└────────────────────┘\x1b[39m");
 
     // Verify box characters.
@@ -462,7 +478,10 @@ fn ink_multiline_component_rerender() {
     // Re-render (Ink does this on state change).
     feed(&mut t, "\x1b[1;1H"); // back to top
     feed(&mut t, "\x1b[36m┌────────────────────┐\x1b[39m\r\n");
-    feed(&mut t, "\x1b[36m│\x1b[39m  Status: \x1b[31mFAIL\x1b[39m     \x1b[36m│\x1b[39m\r\n");
+    feed(
+        &mut t,
+        "\x1b[36m│\x1b[39m  Status: \x1b[31mFAIL\x1b[39m     \x1b[36m│\x1b[39m\r\n",
+    );
     feed(&mut t, "\x1b[36m└────────────────────┘\x1b[39m");
     feed(&mut t, "\x1b[?25h"); // show cursor
 
@@ -478,7 +497,10 @@ fn xterm_private_mode_not_sgr_underline() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[>4m"); // xterm modifyOtherKeys — NOT underline
     feed(&mut t, "Hello");
-    assert!(!t.screen().cell(0, 0).attrs.underline, "CSI > 4 m should not set underline");
+    assert!(
+        !t.screen().cell(0, 0).attrs.underline,
+        "CSI > 4 m should not set underline"
+    );
 }
 
 #[test]
@@ -521,7 +543,10 @@ fn full_screen_of_text() {
     // Fill entire screen with text.
     for row in 0..24 {
         for col in 0..80 {
-            feed(&mut t, &((b'A' + (row * 80 + col) as u8 % 26) as char).to_string());
+            feed(
+                &mut t,
+                &((b'A' + (row * 80 + col) as u8 % 26) as char).to_string(),
+            );
         }
     }
     // Should have scrolled. No panic.

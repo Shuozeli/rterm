@@ -1,5 +1,6 @@
 use crate::cell::{Cell, CellAttributes};
 use crate::color::Color;
+use std::collections::VecDeque;
 
 /// Cursor position and state.
 #[derive(Debug, Clone)]
@@ -40,7 +41,7 @@ pub struct ScreenBuffer {
     /// The active viewport grid: rows x cols.
     grid: Vec<Vec<Cell>>,
     /// Scrollback buffer (lines that scrolled off the top).
-    scrollback: Vec<Vec<Cell>>,
+    scrollback: VecDeque<Vec<Cell>>,
     /// Maximum scrollback lines.
     max_scrollback: usize,
     /// Cursor position and visibility.
@@ -62,7 +63,7 @@ impl ScreenBuffer {
             cols,
             rows,
             grid,
-            scrollback: Vec::new(),
+            scrollback: VecDeque::new(),
             max_scrollback: 10_000,
             cursor: Cursor::default(),
             pen: Pen::default(),
@@ -94,7 +95,7 @@ impl ScreenBuffer {
                     // Only push non-empty rows to scrollback.
                     let is_empty = self.grid[0].iter().all(|c| c.ch == ' ');
                     if !is_empty {
-                        self.scrollback.push(self.grid.remove(0));
+                        self.scrollback.push_back(self.grid.remove(0));
                     } else {
                         self.grid.remove(0);
                     }
@@ -287,7 +288,7 @@ impl ScreenBuffer {
             // Push the line going off the top to scrollback (only if scroll region is full screen).
             if top == 0 {
                 let line = self.grid[top + i].clone();
-                self.scrollback.push(line);
+                self.scrollback.push_back(line);
             }
         }
         self.trim_scrollback();
@@ -321,7 +322,7 @@ impl ScreenBuffer {
 
     fn trim_scrollback(&mut self) {
         while self.scrollback.len() > self.max_scrollback {
-            self.scrollback.remove(0);
+            self.scrollback.pop_front();
         }
     }
 

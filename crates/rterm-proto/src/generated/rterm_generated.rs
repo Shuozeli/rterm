@@ -5,1027 +5,1203 @@ extern crate alloc;
 
 #[allow(unused_imports, dead_code)]
 pub mod rterm {
-  use super::*;
-
-  #[allow(unused_imports, dead_code)]
-  pub mod protocol {
     use super::*;
 
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct ClientBody(pub u8);
-    #[allow(non_upper_case_globals)]
-    impl ClientBody {
-      pub const NONE: Self = Self(0);
-      pub const DataIn: Self = Self(1);
-      pub const Resize: Self = Self(2);
+    #[allow(unused_imports, dead_code)]
+    pub mod protocol {
+        use super::*;
 
-      pub const ENUM_MIN: u8 = 0;
-      pub const ENUM_MAX: u8 = 2;
-      pub const ENUM_VALUES: &'static [Self] = &[
-        Self::NONE,
-        Self::DataIn,
-        Self::Resize,
-      ];
-      /// Returns the variant's name or "" if unknown.
-      pub fn variant_name(self) -> Option<&'static str> {
-        match self {
-          Self::NONE => Some("NONE"),
-          Self::DataIn => Some("DataIn"),
-          Self::Resize => Some("Resize"),
-          _ => None,
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        #[repr(transparent)]
+        pub struct ClientBody(pub u8);
+        #[allow(non_upper_case_globals)]
+        impl ClientBody {
+            pub const NONE: Self = Self(0);
+            pub const DataIn: Self = Self(1);
+            pub const Resize: Self = Self(2);
+
+            pub const ENUM_MIN: u8 = 0;
+            pub const ENUM_MAX: u8 = 2;
+            pub const ENUM_VALUES: &'static [Self] = &[Self::NONE, Self::DataIn, Self::Resize];
+            /// Returns the variant's name or "" if unknown.
+            pub fn variant_name(self) -> Option<&'static str> {
+                match self {
+                    Self::NONE => Some("NONE"),
+                    Self::DataIn => Some("DataIn"),
+                    Self::Resize => Some("Resize"),
+                    _ => None,
+                }
+            }
         }
-      }
-    }
-    impl ::core::fmt::Debug for ClientBody {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-        if let Some(name) = self.variant_name() {
-          f.write_str(name)
-        } else {
-          f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+        impl ::core::fmt::Debug for ClientBody {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                if let Some(name) = self.variant_name() {
+                    f.write_str(name)
+                } else {
+                    f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+                }
+            }
         }
-      }
-    }
-    impl<'a> ::flatbuffers::Follow<'a> for ClientBody {
-      type Inner = Self;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
-        Self(b)
-      }
-    }
-
-    impl ::flatbuffers::Push for ClientBody {
-      type Output = ClientBody;
-      #[inline]
-      unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-        unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
-      }
-    }
-
-    impl ::flatbuffers::EndianScalar for ClientBody {
-      type Scalar = u8;
-      #[inline]
-      fn to_little_endian(self) -> u8 {
-        self.0.to_le()
-      }
-      #[inline]
-      #[allow(clippy::wrong_self_convention)]
-      fn from_little_endian(v: u8) -> Self {
-        let b = u8::from_le(v);
-        Self(b)
-      }
-    }
-
-    impl<'a> ::flatbuffers::Verifiable for ClientBody {
-      #[inline]
-      fn run_verifier(
-    v: &mut ::flatbuffers::Verifier, pos: usize
-  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        u8::run_verifier(v, pos)
-      }
-    }
-
-    impl ::flatbuffers::SimpleToVerifyInSlice for ClientBody {}
-
-    pub struct ClientBodyUnionTableOffset {}
-
-    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-    #[repr(transparent)]
-    pub struct ServerBody(pub u8);
-    #[allow(non_upper_case_globals)]
-    impl ServerBody {
-      pub const NONE: Self = Self(0);
-      pub const DataOut: Self = Self(1);
-      pub const Exit: Self = Self(2);
-      pub const Error: Self = Self(3);
-
-      pub const ENUM_MIN: u8 = 0;
-      pub const ENUM_MAX: u8 = 3;
-      pub const ENUM_VALUES: &'static [Self] = &[
-        Self::NONE,
-        Self::DataOut,
-        Self::Exit,
-        Self::Error,
-      ];
-      /// Returns the variant's name or "" if unknown.
-      pub fn variant_name(self) -> Option<&'static str> {
-        match self {
-          Self::NONE => Some("NONE"),
-          Self::DataOut => Some("DataOut"),
-          Self::Exit => Some("Exit"),
-          Self::Error => Some("Error"),
-          _ => None,
+        impl<'a> ::flatbuffers::Follow<'a> for ClientBody {
+            type Inner = Self;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
+                Self(b)
+            }
         }
-      }
-    }
-    impl ::core::fmt::Debug for ServerBody {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-        if let Some(name) = self.variant_name() {
-          f.write_str(name)
-        } else {
-          f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+
+        impl ::flatbuffers::Push for ClientBody {
+            type Output = ClientBody;
+            #[inline]
+            unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+                unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
+            }
         }
-      }
-    }
-    impl<'a> ::flatbuffers::Follow<'a> for ServerBody {
-      type Inner = Self;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
-        Self(b)
-      }
-    }
 
-    impl ::flatbuffers::Push for ServerBody {
-      type Output = ServerBody;
-      #[inline]
-      unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
-        unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
-      }
-    }
-
-    impl ::flatbuffers::EndianScalar for ServerBody {
-      type Scalar = u8;
-      #[inline]
-      fn to_little_endian(self) -> u8 {
-        self.0.to_le()
-      }
-      #[inline]
-      #[allow(clippy::wrong_self_convention)]
-      fn from_little_endian(v: u8) -> Self {
-        let b = u8::from_le(v);
-        Self(b)
-      }
-    }
-
-    impl<'a> ::flatbuffers::Verifiable for ServerBody {
-      #[inline]
-      fn run_verifier(
-    v: &mut ::flatbuffers::Verifier, pos: usize
-  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        u8::run_verifier(v, pos)
-      }
-    }
-
-    impl ::flatbuffers::SimpleToVerifyInSlice for ServerBody {}
-
-    pub struct ServerBodyUnionTableOffset {}
-
-    pub enum DataInOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct DataIn<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for DataIn<'a> {
-      type Inner = DataIn<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> DataIn<'a> {
-      pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        DataIn { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args DataInArgs<'args>
-      ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
-        let mut builder = DataInBuilder::new(_fbb);
-        if let Some(x) = args.payload { builder.add_payload(x); }
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(DataIn::VT_PAYLOAD, None)}
-      }
-    }
-
-    impl ::flatbuffers::Verifiable for DataIn<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("payload", Self::VT_PAYLOAD, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct DataInArgs<'a> {
-        pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
-    }
-    impl<'a> Default for DataInArgs<'a> {
-      #[inline]
-      fn default() -> Self {
-        DataInArgs {
-          payload: None,
+        impl ::flatbuffers::EndianScalar for ClientBody {
+            type Scalar = u8;
+            #[inline]
+            fn to_little_endian(self) -> u8 {
+                self.0.to_le()
+            }
+            #[inline]
+            #[allow(clippy::wrong_self_convention)]
+            fn from_little_endian(v: u8) -> Self {
+                let b = u8::from_le(v);
+                Self(b)
+            }
         }
-      }
-    }
 
-    pub struct DataInBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataInBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_payload(&mut self, payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(DataIn::VT_PAYLOAD, payload);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> DataInBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        DataInBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl<'a> ::flatbuffers::Verifiable for ClientBody {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                u8::run_verifier(v, pos)
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<DataIn<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
 
-    impl ::core::fmt::Debug for DataIn<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("DataIn");
-        ds.field("payload", &self.payload());
-        ds.finish()
-      }
-    }
+        impl ::flatbuffers::SimpleToVerifyInSlice for ClientBody {}
 
-    #[inline]
-    pub fn createDataIn<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args DataInArgs<'args>,
-    ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
-      let mut builder = DataInBuilder::new(fbb);
-      if let Some(x) = args.payload { builder.add_payload(x); }
-      builder.finish()
-    }
+        pub struct ClientBodyUnionTableOffset {}
 
-    pub enum ResizeOffset {}
-    #[derive(Copy, Clone, PartialEq)]
+        #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        #[repr(transparent)]
+        pub struct ServerBody(pub u8);
+        #[allow(non_upper_case_globals)]
+        impl ServerBody {
+            pub const NONE: Self = Self(0);
+            pub const DataOut: Self = Self(1);
+            pub const Exit: Self = Self(2);
+            pub const Error: Self = Self(3);
 
-    pub struct Resize<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for Resize<'a> {
-      type Inner = Resize<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> Resize<'a> {
-      pub const VT_COLS: ::flatbuffers::VOffsetT = 4;
-      pub const VT_ROWS: ::flatbuffers::VOffsetT = 6;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        Resize { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args ResizeArgs
-      ) -> ::flatbuffers::WIPOffset<Resize<'bldr>> {
-        let mut builder = ResizeBuilder::new(_fbb);
-        builder.add_rows(args.rows);
-        builder.add_cols(args.cols);
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn cols(&self) -> u16 {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<u16>(Resize::VT_COLS, Some(0)).unwrap()}
-      }
-      #[inline]
-      pub fn rows(&self) -> u16 {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<u16>(Resize::VT_ROWS, Some(0)).unwrap()}
-      }
-    }
-
-    impl ::flatbuffers::Verifiable for Resize<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<u16>("cols", Self::VT_COLS, false)?
-         .visit_field::<u16>("rows", Self::VT_ROWS, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct ResizeArgs {
-        pub cols: u16,
-        pub rows: u16,
-    }
-    impl<'a> Default for ResizeArgs {
-      #[inline]
-      fn default() -> Self {
-        ResizeArgs {
-          cols: 0,
-          rows: 0,
+            pub const ENUM_MIN: u8 = 0;
+            pub const ENUM_MAX: u8 = 3;
+            pub const ENUM_VALUES: &'static [Self] =
+                &[Self::NONE, Self::DataOut, Self::Exit, Self::Error];
+            /// Returns the variant's name or "" if unknown.
+            pub fn variant_name(self) -> Option<&'static str> {
+                match self {
+                    Self::NONE => Some("NONE"),
+                    Self::DataOut => Some("DataOut"),
+                    Self::Exit => Some("Exit"),
+                    Self::Error => Some("Error"),
+                    _ => None,
+                }
+            }
         }
-      }
-    }
-
-    pub struct ResizeBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ResizeBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_cols(&mut self, cols: u16) {
-        self.fbb_.push_slot::<u16>(Resize::VT_COLS, cols, 0);
-      }
-      #[inline]
-      pub fn add_rows(&mut self, rows: u16) {
-        self.fbb_.push_slot::<u16>(Resize::VT_ROWS, rows, 0);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ResizeBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        ResizeBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl ::core::fmt::Debug for ServerBody {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+                if let Some(name) = self.variant_name() {
+                    f.write_str(name)
+                } else {
+                    f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+                }
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<Resize<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
-
-    impl ::core::fmt::Debug for Resize<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("Resize");
-        ds.field("cols", &self.cols());
-        ds.field("rows", &self.rows());
-        ds.finish()
-      }
-    }
-
-    #[inline]
-    pub fn createResize<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args ResizeArgs,
-    ) -> ::flatbuffers::WIPOffset<Resize<'bldr>> {
-      let mut builder = ResizeBuilder::new(fbb);
-      builder.add_rows(args.rows);
-      builder.add_cols(args.cols);
-      builder.finish()
-    }
-
-    pub enum ClientMessageOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct ClientMessage<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for ClientMessage<'a> {
-      type Inner = ClientMessage<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> ClientMessage<'a> {
-      pub const VT_BODY_TYPE: ::flatbuffers::VOffsetT = 4;
-      pub const VT_BODY: ::flatbuffers::VOffsetT = 6;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        ClientMessage { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args ClientMessageArgs
-      ) -> ::flatbuffers::WIPOffset<ClientMessage<'bldr>> {
-        let mut builder = ClientMessageBuilder::new(_fbb);
-        if let Some(x) = args.body { builder.add_body(x); }
-        builder.add_body_type(args.body_type);
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn body_type(&self) -> ClientBody {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<ClientBody>(ClientMessage::VT_BODY_TYPE, Some(ClientBody(0))).unwrap()}
-      }
-      #[inline]
-      pub fn body(&self) -> Option<::flatbuffers::Table<'a>> {
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Table<'a>>>(ClientMessage::VT_BODY, None)}
-      }
-
-      #[inline]
-      pub fn body_as_data_in(&self) -> Option<DataIn<'a>> {
-        if self.body_type() == ClientBody::DataIn {
-          self.body().map(|t| unsafe { DataIn::init_from_table(t) })
-        } else {
-          None
+        impl<'a> ::flatbuffers::Follow<'a> for ServerBody {
+            type Inner = Self;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
+                Self(b)
+            }
         }
-      }
 
-      #[inline]
-      pub fn body_as_resize(&self) -> Option<Resize<'a>> {
-        if self.body_type() == ClientBody::Resize {
-          self.body().map(|t| unsafe { Resize::init_from_table(t) })
-        } else {
-          None
+        impl ::flatbuffers::Push for ServerBody {
+            type Output = ServerBody;
+            #[inline]
+            unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+                unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
+            }
         }
-      }
-    }
 
-    impl ::flatbuffers::Verifiable for ClientMessage<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<ClientBody>("body_type", Self::VT_BODY_TYPE, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct ClientMessageArgs {
-        pub body_type: ClientBody,
-        pub body: Option<::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>>,
-    }
-    impl<'a> Default for ClientMessageArgs {
-      #[inline]
-      fn default() -> Self {
-        ClientMessageArgs {
-          body_type: ClientBody(0),
-          body: None,
+        impl ::flatbuffers::EndianScalar for ServerBody {
+            type Scalar = u8;
+            #[inline]
+            fn to_little_endian(self) -> u8 {
+                self.0.to_le()
+            }
+            #[inline]
+            #[allow(clippy::wrong_self_convention)]
+            fn from_little_endian(v: u8) -> Self {
+                let b = u8::from_le(v);
+                Self(b)
+            }
         }
-      }
-    }
 
-    pub struct ClientMessageBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ClientMessageBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_body_type(&mut self, body_type: ClientBody) {
-        self.fbb_.push_slot::<ClientBody>(ClientMessage::VT_BODY_TYPE, body_type, ClientBody(0));
-      }
-      #[inline]
-      pub fn add_body(&mut self, body: ::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ClientMessage::VT_BODY, body);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ClientMessageBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        ClientMessageBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl<'a> ::flatbuffers::Verifiable for ServerBody {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                u8::run_verifier(v, pos)
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<ClientMessage<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
 
-    impl ::core::fmt::Debug for ClientMessage<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("ClientMessage");
-        ds.field("body_type", &self.body_type());
-        ds.finish()
-      }
-    }
+        impl ::flatbuffers::SimpleToVerifyInSlice for ServerBody {}
 
-    #[inline]
-    pub fn createClientMessage<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args ClientMessageArgs,
-    ) -> ::flatbuffers::WIPOffset<ClientMessage<'bldr>> {
-      let mut builder = ClientMessageBuilder::new(fbb);
-      if let Some(x) = args.body { builder.add_body(x); }
-      builder.add_body_type(args.body_type);
-      builder.finish()
-    }
+        pub struct ServerBodyUnionTableOffset {}
 
-    pub enum DataOutOffset {}
-    #[derive(Copy, Clone, PartialEq)]
+        pub enum DataInOffset {}
+        #[derive(Copy, Clone, PartialEq)]
 
-    pub struct DataOut<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for DataOut<'a> {
-      type Inner = DataOut<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> DataOut<'a> {
-      pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        DataOut { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args DataOutArgs<'args>
-      ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
-        let mut builder = DataOutBuilder::new(_fbb);
-        if let Some(x) = args.payload { builder.add_payload(x); }
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(DataOut::VT_PAYLOAD, None)}
-      }
-    }
-
-    impl ::flatbuffers::Verifiable for DataOut<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("payload", Self::VT_PAYLOAD, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct DataOutArgs<'a> {
-        pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
-    }
-    impl<'a> Default for DataOutArgs<'a> {
-      #[inline]
-      fn default() -> Self {
-        DataOutArgs {
-          payload: None,
+        pub struct DataIn<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
         }
-      }
-    }
 
-    pub struct DataOutBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataOutBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_payload(&mut self, payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(DataOut::VT_PAYLOAD, payload);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> DataOutBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        DataOutBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl<'a> ::flatbuffers::Follow<'a> for DataIn<'a> {
+            type Inner = DataIn<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<DataOut<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
 
-    impl ::core::fmt::Debug for DataOut<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("DataOut");
-        ds.field("payload", &self.payload());
-        ds.finish()
-      }
-    }
+        impl<'a> DataIn<'a> {
+            pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
 
-    #[inline]
-    pub fn createDataOut<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args DataOutArgs<'args>,
-    ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
-      let mut builder = DataOutBuilder::new(fbb);
-      if let Some(x) = args.payload { builder.add_payload(x); }
-      builder.finish()
-    }
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                DataIn { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args DataInArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
+                let mut builder = DataInBuilder::new(_fbb);
+                if let Some(x) = args.payload {
+                    builder.add_payload(x);
+                }
+                builder.finish()
+            }
 
-    pub enum ExitOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Exit<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for Exit<'a> {
-      type Inner = Exit<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> Exit<'a> {
-      pub const VT_CODE: ::flatbuffers::VOffsetT = 4;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        Exit { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args ExitArgs
-      ) -> ::flatbuffers::WIPOffset<Exit<'bldr>> {
-        let mut builder = ExitBuilder::new(_fbb);
-        builder.add_code(args.code);
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn code(&self) -> i32 {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<i32>(Exit::VT_CODE, Some(0)).unwrap()}
-      }
-    }
-
-    impl ::flatbuffers::Verifiable for Exit<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<i32>("code", Self::VT_CODE, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct ExitArgs {
-        pub code: i32,
-    }
-    impl<'a> Default for ExitArgs {
-      #[inline]
-      fn default() -> Self {
-        ExitArgs {
-          code: 0,
+            #[inline]
+            pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(
+                            DataIn::VT_PAYLOAD,
+                            None,
+                        )
+                }
+            }
         }
-      }
-    }
 
-    pub struct ExitBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ExitBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_code(&mut self, code: i32) {
-        self.fbb_.push_slot::<i32>(Exit::VT_CODE, code, 0);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ExitBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        ExitBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl ::flatbuffers::Verifiable for DataIn<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>(
+                        "payload",
+                        Self::VT_PAYLOAD,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<Exit<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
-
-    impl ::core::fmt::Debug for Exit<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("Exit");
-        ds.field("code", &self.code());
-        ds.finish()
-      }
-    }
-
-    #[inline]
-    pub fn createExit<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args ExitArgs,
-    ) -> ::flatbuffers::WIPOffset<Exit<'bldr>> {
-      let mut builder = ExitBuilder::new(fbb);
-      builder.add_code(args.code);
-      builder.finish()
-    }
-
-    pub enum ErrorOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct Error<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for Error<'a> {
-      type Inner = Error<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> Error<'a> {
-      pub const VT_MESSAGE: ::flatbuffers::VOffsetT = 4;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        Error { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args ErrorArgs<'args>
-      ) -> ::flatbuffers::WIPOffset<Error<'bldr>> {
-        let mut builder = ErrorBuilder::new(_fbb);
-        if let Some(x) = args.message { builder.add_message(x); }
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn message(&self) -> Option<&'a str> {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(Error::VT_MESSAGE, None)}
-      }
-    }
-
-    impl ::flatbuffers::Verifiable for Error<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("message", Self::VT_MESSAGE, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct ErrorArgs<'a> {
-        pub message: Option<::flatbuffers::WIPOffset<&'a str>>,
-    }
-    impl<'a> Default for ErrorArgs<'a> {
-      #[inline]
-      fn default() -> Self {
-        ErrorArgs {
-          message: None,
+        pub struct DataInArgs<'a> {
+            pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
         }
-      }
-    }
-
-    pub struct ErrorBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ErrorBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_message(&mut self, message: ::flatbuffers::WIPOffset<&'b  str>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(Error::VT_MESSAGE, message);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ErrorBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        ErrorBuilder {
-          fbb_: _fbb,
-          start_: start,
+        impl<'a> Default for DataInArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                DataInArgs { payload: None }
+            }
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<Error<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
 
-    impl ::core::fmt::Debug for Error<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("Error");
-        ds.field("message", &self.message());
-        ds.finish()
-      }
-    }
-
-    #[inline]
-    pub fn createError<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args ErrorArgs<'args>,
-    ) -> ::flatbuffers::WIPOffset<Error<'bldr>> {
-      let mut builder = ErrorBuilder::new(fbb);
-      if let Some(x) = args.message { builder.add_message(x); }
-      builder.finish()
-    }
-
-    pub enum ServerMessageOffset {}
-    #[derive(Copy, Clone, PartialEq)]
-
-    pub struct ServerMessage<'a> {
-      pub _tab: ::flatbuffers::Table<'a>,
-    }
-
-    impl<'a> ::flatbuffers::Follow<'a> for ServerMessage<'a> {
-      type Inner = ServerMessage<'a>;
-      #[inline]
-      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
-        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
-      }
-    }
-
-    impl<'a> ServerMessage<'a> {
-      pub const VT_BODY_TYPE: ::flatbuffers::VOffsetT = 4;
-      pub const VT_BODY: ::flatbuffers::VOffsetT = 6;
-
-      #[inline]
-      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        ServerMessage { _tab: table }
-      }
-      #[allow(unused_mut)]
-      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args ServerMessageArgs
-      ) -> ::flatbuffers::WIPOffset<ServerMessage<'bldr>> {
-        let mut builder = ServerMessageBuilder::new(_fbb);
-        if let Some(x) = args.body { builder.add_body(x); }
-        builder.add_body_type(args.body_type);
-        builder.finish()
-      }
-
-
-      #[inline]
-      pub fn body_type(&self) -> ServerBody {
-        // Safety:
-        // Created from valid Table for this object
-        // which contains a valid value in this slot
-        unsafe { self._tab.get::<ServerBody>(ServerMessage::VT_BODY_TYPE, Some(ServerBody(0))).unwrap()}
-      }
-      #[inline]
-      pub fn body(&self) -> Option<::flatbuffers::Table<'a>> {
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Table<'a>>>(ServerMessage::VT_BODY, None)}
-      }
-
-      #[inline]
-      pub fn body_as_data_out(&self) -> Option<DataOut<'a>> {
-        if self.body_type() == ServerBody::DataOut {
-          self.body().map(|t| unsafe { DataOut::init_from_table(t) })
-        } else {
-          None
+        pub struct DataInBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
         }
-      }
-
-      #[inline]
-      pub fn body_as_exit(&self) -> Option<Exit<'a>> {
-        if self.body_type() == ServerBody::Exit {
-          self.body().map(|t| unsafe { Exit::init_from_table(t) })
-        } else {
-          None
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataInBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_payload(
+                &mut self,
+                payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b, u8>>,
+            ) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(DataIn::VT_PAYLOAD, payload);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> DataInBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                DataInBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<DataIn<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
         }
-      }
 
-      #[inline]
-      pub fn body_as_error(&self) -> Option<Error<'a>> {
-        if self.body_type() == ServerBody::Error {
-          self.body().map(|t| unsafe { Error::init_from_table(t) })
-        } else {
-          None
+        impl ::core::fmt::Debug for DataIn<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("DataIn");
+                ds.field("payload", &self.payload());
+                ds.finish()
+            }
         }
-      }
-    }
 
-    impl ::flatbuffers::Verifiable for ServerMessage<'_> {
-      #[inline]
-      fn run_verifier(
-        v: &mut ::flatbuffers::Verifier, pos: usize
-      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
-        v.visit_table(pos)?
-         .visit_field::<ServerBody>("body_type", Self::VT_BODY_TYPE, false)?
-         .finish();
-        Ok(())
-      }
-    }
-    pub struct ServerMessageArgs {
-        pub body_type: ServerBody,
-        pub body: Option<::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>>,
-    }
-    impl<'a> Default for ServerMessageArgs {
-      #[inline]
-      fn default() -> Self {
-        ServerMessageArgs {
-          body_type: ServerBody(0),
-          body: None,
+        #[inline]
+        pub fn createDataIn<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args DataInArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
+            let mut builder = DataInBuilder::new(fbb);
+            if let Some(x) = args.payload {
+                builder.add_payload(x);
+            }
+            builder.finish()
         }
-      }
-    }
 
-    pub struct ServerMessageBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
-      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
-      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
-    }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ServerMessageBuilder<'a, 'b, A> {
-      #[inline]
-      pub fn add_body_type(&mut self, body_type: ServerBody) {
-        self.fbb_.push_slot::<ServerBody>(ServerMessage::VT_BODY_TYPE, body_type, ServerBody(0));
-      }
-      #[inline]
-      pub fn add_body(&mut self, body: ::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ServerMessage::VT_BODY, body);
-      }
-      #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ServerMessageBuilder<'a, 'b, A> {
-        let start = _fbb.start_table();
-        ServerMessageBuilder {
-          fbb_: _fbb,
-          start_: start,
+        pub enum ResizeOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct Resize<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
         }
-      }
-      #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<ServerMessage<'a>> {
-        let o = self.fbb_.end_table(self.start_);
-        ::flatbuffers::WIPOffset::new(o.value())
-      }
-    }
 
-    impl ::core::fmt::Debug for ServerMessage<'_> {
-      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("ServerMessage");
-        ds.field("body_type", &self.body_type());
-        ds.finish()
-      }
-    }
+        impl<'a> ::flatbuffers::Follow<'a> for Resize<'a> {
+            type Inner = Resize<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
 
-    #[inline]
-    pub fn createServerMessage<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
-      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args ServerMessageArgs,
-    ) -> ::flatbuffers::WIPOffset<ServerMessage<'bldr>> {
-      let mut builder = ServerMessageBuilder::new(fbb);
-      if let Some(x) = args.body { builder.add_body(x); }
-      builder.add_body_type(args.body_type);
-      builder.finish()
-    }
+        impl<'a> Resize<'a> {
+            pub const VT_COLS: ::flatbuffers::VOffsetT = 4;
+            pub const VT_ROWS: ::flatbuffers::VOffsetT = 6;
 
-  } // protocol
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                Resize { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ResizeArgs,
+            ) -> ::flatbuffers::WIPOffset<Resize<'bldr>> {
+                let mut builder = ResizeBuilder::new(_fbb);
+                builder.add_rows(args.rows);
+                builder.add_cols(args.cols);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn cols(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<u16>(Resize::VT_COLS, Some(0)).unwrap() }
+            }
+            #[inline]
+            pub fn rows(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<u16>(Resize::VT_ROWS, Some(0)).unwrap() }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for Resize<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<u16>("cols", Self::VT_COLS, false)?
+                    .visit_field::<u16>("rows", Self::VT_ROWS, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ResizeArgs {
+            pub cols: u16,
+            pub rows: u16,
+        }
+        impl<'a> Default for ResizeArgs {
+            #[inline]
+            fn default() -> Self {
+                ResizeArgs { cols: 0, rows: 0 }
+            }
+        }
+
+        pub struct ResizeBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ResizeBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_cols(&mut self, cols: u16) {
+                self.fbb_.push_slot::<u16>(Resize::VT_COLS, cols, 0);
+            }
+            #[inline]
+            pub fn add_rows(&mut self, rows: u16) {
+                self.fbb_.push_slot::<u16>(Resize::VT_ROWS, rows, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ResizeBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ResizeBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<Resize<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for Resize<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("Resize");
+                ds.field("cols", &self.cols());
+                ds.field("rows", &self.rows());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createResize<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ResizeArgs,
+        ) -> ::flatbuffers::WIPOffset<Resize<'bldr>> {
+            let mut builder = ResizeBuilder::new(fbb);
+            builder.add_rows(args.rows);
+            builder.add_cols(args.cols);
+            builder.finish()
+        }
+
+        pub enum ClientMessageOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct ClientMessage<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ClientMessage<'a> {
+            type Inner = ClientMessage<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ClientMessage<'a> {
+            pub const VT_BODY_TYPE: ::flatbuffers::VOffsetT = 4;
+            pub const VT_BODY: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ClientMessage { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ClientMessageArgs,
+            ) -> ::flatbuffers::WIPOffset<ClientMessage<'bldr>> {
+                let mut builder = ClientMessageBuilder::new(_fbb);
+                if let Some(x) = args.body {
+                    builder.add_body(x);
+                }
+                builder.add_body_type(args.body_type);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn body_type(&self) -> ClientBody {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<ClientBody>(ClientMessage::VT_BODY_TYPE, Some(ClientBody(0)))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn body(&self) -> Option<::flatbuffers::Table<'a>> {
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Table<'a>>>(
+                            ClientMessage::VT_BODY,
+                            None,
+                        )
+                }
+            }
+
+            #[inline]
+            pub fn body_as_data_in(&self) -> Option<DataIn<'a>> {
+                if self.body_type() == ClientBody::DataIn {
+                    self.body().map(|t| unsafe { DataIn::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_resize(&self) -> Option<Resize<'a>> {
+                if self.body_type() == ClientBody::Resize {
+                    self.body().map(|t| unsafe { Resize::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ClientMessage<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<ClientBody>("body_type", Self::VT_BODY_TYPE, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ClientMessageArgs {
+            pub body_type: ClientBody,
+            pub body: Option<::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>>,
+        }
+        impl<'a> Default for ClientMessageArgs {
+            #[inline]
+            fn default() -> Self {
+                ClientMessageArgs {
+                    body_type: ClientBody(0),
+                    body: None,
+                }
+            }
+        }
+
+        pub struct ClientMessageBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ClientMessageBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_body_type(&mut self, body_type: ClientBody) {
+                self.fbb_.push_slot::<ClientBody>(
+                    ClientMessage::VT_BODY_TYPE,
+                    body_type,
+                    ClientBody(0),
+                );
+            }
+            #[inline]
+            pub fn add_body(
+                &mut self,
+                body: ::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>,
+            ) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(ClientMessage::VT_BODY, body);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ClientMessageBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ClientMessageBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ClientMessage<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ClientMessage<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ClientMessage");
+                ds.field("body_type", &self.body_type());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createClientMessage<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ClientMessageArgs,
+        ) -> ::flatbuffers::WIPOffset<ClientMessage<'bldr>> {
+            let mut builder = ClientMessageBuilder::new(fbb);
+            if let Some(x) = args.body {
+                builder.add_body(x);
+            }
+            builder.add_body_type(args.body_type);
+            builder.finish()
+        }
+
+        pub enum DataOutOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct DataOut<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for DataOut<'a> {
+            type Inner = DataOut<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> DataOut<'a> {
+            pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                DataOut { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args DataOutArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
+                let mut builder = DataOutBuilder::new(_fbb);
+                if let Some(x) = args.payload {
+                    builder.add_payload(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(
+                            DataOut::VT_PAYLOAD,
+                            None,
+                        )
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for DataOut<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>(
+                        "payload",
+                        Self::VT_PAYLOAD,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct DataOutArgs<'a> {
+            pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
+        }
+        impl<'a> Default for DataOutArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                DataOutArgs { payload: None }
+            }
+        }
+
+        pub struct DataOutBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataOutBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_payload(
+                &mut self,
+                payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b, u8>>,
+            ) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(DataOut::VT_PAYLOAD, payload);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> DataOutBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                DataOutBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<DataOut<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for DataOut<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("DataOut");
+                ds.field("payload", &self.payload());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createDataOut<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args DataOutArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
+            let mut builder = DataOutBuilder::new(fbb);
+            if let Some(x) = args.payload {
+                builder.add_payload(x);
+            }
+            builder.finish()
+        }
+
+        pub enum ExitOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct Exit<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for Exit<'a> {
+            type Inner = Exit<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> Exit<'a> {
+            pub const VT_CODE: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                Exit { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ExitArgs,
+            ) -> ::flatbuffers::WIPOffset<Exit<'bldr>> {
+                let mut builder = ExitBuilder::new(_fbb);
+                builder.add_code(args.code);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn code(&self) -> i32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<i32>(Exit::VT_CODE, Some(0)).unwrap() }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for Exit<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<i32>("code", Self::VT_CODE, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ExitArgs {
+            pub code: i32,
+        }
+        impl<'a> Default for ExitArgs {
+            #[inline]
+            fn default() -> Self {
+                ExitArgs { code: 0 }
+            }
+        }
+
+        pub struct ExitBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ExitBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_code(&mut self, code: i32) {
+                self.fbb_.push_slot::<i32>(Exit::VT_CODE, code, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ExitBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ExitBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<Exit<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for Exit<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("Exit");
+                ds.field("code", &self.code());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createExit<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ExitArgs,
+        ) -> ::flatbuffers::WIPOffset<Exit<'bldr>> {
+            let mut builder = ExitBuilder::new(fbb);
+            builder.add_code(args.code);
+            builder.finish()
+        }
+
+        pub enum ErrorOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct Error<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for Error<'a> {
+            type Inner = Error<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> Error<'a> {
+            pub const VT_MESSAGE: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                Error { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ErrorArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<Error<'bldr>> {
+                let mut builder = ErrorBuilder::new(_fbb);
+                if let Some(x) = args.message {
+                    builder.add_message(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn message(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(Error::VT_MESSAGE, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for Error<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "message",
+                        Self::VT_MESSAGE,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ErrorArgs<'a> {
+            pub message: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for ErrorArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                ErrorArgs { message: None }
+            }
+        }
+
+        pub struct ErrorBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ErrorBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_message(&mut self, message: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(Error::VT_MESSAGE, message);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ErrorBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ErrorBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<Error<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for Error<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("Error");
+                ds.field("message", &self.message());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createError<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ErrorArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<Error<'bldr>> {
+            let mut builder = ErrorBuilder::new(fbb);
+            if let Some(x) = args.message {
+                builder.add_message(x);
+            }
+            builder.finish()
+        }
+
+        pub enum ServerMessageOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct ServerMessage<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ServerMessage<'a> {
+            type Inner = ServerMessage<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ServerMessage<'a> {
+            pub const VT_BODY_TYPE: ::flatbuffers::VOffsetT = 4;
+            pub const VT_BODY: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ServerMessage { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ServerMessageArgs,
+            ) -> ::flatbuffers::WIPOffset<ServerMessage<'bldr>> {
+                let mut builder = ServerMessageBuilder::new(_fbb);
+                if let Some(x) = args.body {
+                    builder.add_body(x);
+                }
+                builder.add_body_type(args.body_type);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn body_type(&self) -> ServerBody {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<ServerBody>(ServerMessage::VT_BODY_TYPE, Some(ServerBody(0)))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn body(&self) -> Option<::flatbuffers::Table<'a>> {
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Table<'a>>>(
+                            ServerMessage::VT_BODY,
+                            None,
+                        )
+                }
+            }
+
+            #[inline]
+            pub fn body_as_data_out(&self) -> Option<DataOut<'a>> {
+                if self.body_type() == ServerBody::DataOut {
+                    self.body().map(|t| unsafe { DataOut::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_exit(&self) -> Option<Exit<'a>> {
+                if self.body_type() == ServerBody::Exit {
+                    self.body().map(|t| unsafe { Exit::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_error(&self) -> Option<Error<'a>> {
+                if self.body_type() == ServerBody::Error {
+                    self.body().map(|t| unsafe { Error::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ServerMessage<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<ServerBody>("body_type", Self::VT_BODY_TYPE, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ServerMessageArgs {
+            pub body_type: ServerBody,
+            pub body: Option<::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>>,
+        }
+        impl<'a> Default for ServerMessageArgs {
+            #[inline]
+            fn default() -> Self {
+                ServerMessageArgs {
+                    body_type: ServerBody(0),
+                    body: None,
+                }
+            }
+        }
+
+        pub struct ServerMessageBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ServerMessageBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_body_type(&mut self, body_type: ServerBody) {
+                self.fbb_.push_slot::<ServerBody>(
+                    ServerMessage::VT_BODY_TYPE,
+                    body_type,
+                    ServerBody(0),
+                );
+            }
+            #[inline]
+            pub fn add_body(
+                &mut self,
+                body: ::flatbuffers::WIPOffset<::flatbuffers::UnionWIPOffset>,
+            ) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(ServerMessage::VT_BODY, body);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ServerMessageBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ServerMessageBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ServerMessage<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ServerMessage<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ServerMessage");
+                ds.field("body_type", &self.body_type());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createServerMessage<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ServerMessageArgs,
+        ) -> ::flatbuffers::WIPOffset<ServerMessage<'bldr>> {
+            let mut builder = ServerMessageBuilder::new(fbb);
+            if let Some(x) = args.body {
+                builder.add_body(x);
+            }
+            builder.add_body_type(args.body_type);
+            builder.finish()
+        }
+    } // protocol
 } // rterm
 
 #[inline]
-pub fn root_as_client_message(buf: &[u8]) -> Result<rterm::protocol::ClientMessage<'_>, ::flatbuffers::InvalidFlatbuffer> {
-  ::flatbuffers::root::<rterm::protocol::ClientMessage>(buf)
+pub fn root_as_client_message(
+    buf: &[u8],
+) -> Result<rterm::protocol::ClientMessage<'_>, ::flatbuffers::InvalidFlatbuffer> {
+    ::flatbuffers::root::<rterm::protocol::ClientMessage>(buf)
 }
 
 #[inline]
-pub fn size_prefixed_root_as_client_message(buf: &[u8]) -> Result<rterm::protocol::ClientMessage<'_>, ::flatbuffers::InvalidFlatbuffer> {
-  ::flatbuffers::size_prefixed_root::<rterm::protocol::ClientMessage>(buf)
+pub fn size_prefixed_root_as_client_message(
+    buf: &[u8],
+) -> Result<rterm::protocol::ClientMessage<'_>, ::flatbuffers::InvalidFlatbuffer> {
+    ::flatbuffers::size_prefixed_root::<rterm::protocol::ClientMessage>(buf)
 }
 
 #[inline]
 /// # Safety
 /// Caller must ensure the buffer contains a valid FlatBuffer.
 pub unsafe fn root_as_client_message_unchecked(buf: &[u8]) -> rterm::protocol::ClientMessage<'_> {
-  unsafe { ::flatbuffers::root_unchecked::<rterm::protocol::ClientMessage>(buf) }
+    unsafe { ::flatbuffers::root_unchecked::<rterm::protocol::ClientMessage>(buf) }
 }

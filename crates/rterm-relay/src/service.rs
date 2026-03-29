@@ -13,8 +13,15 @@ use tracing::{debug, info};
 const DEFAULT_SHELL: &str = "/bin/bash";
 
 /// gRPC service that handles the TerminalService.Session bidi stream.
+#[derive(Clone)]
 pub struct TerminalServer {
     shell: String,
+}
+
+impl Default for TerminalServer {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl TerminalServer {
@@ -27,14 +34,6 @@ impl TerminalServer {
     pub fn with_shell(shell: impl Into<String>) -> Self {
         Self {
             shell: shell.into(),
-        }
-    }
-}
-
-impl Clone for TerminalServer {
-    fn clone(&self) -> Self {
-        Self {
-            shell: self.shell.clone(),
         }
     }
 }
@@ -131,8 +130,7 @@ impl tower_service::Service<http::Request<Body>> for TerminalServer {
         let shell = self.shell.clone();
         match req.uri().path() {
             "/rterm.protocol.TerminalService/Session" => Box::pin(async move {
-                let mut grpc =
-                    Grpc::new(FlatBuffersCodec::<ServerMsg, ClientMsg>::default());
+                let mut grpc = Grpc::new(FlatBuffersCodec::<ServerMsg, ClientMsg>::default());
                 Ok(grpc.streaming(TerminalSvc(shell), req).await)
             }),
             _ => Box::pin(async { Ok(Status::unimplemented("").into_http()) }),
@@ -146,10 +144,7 @@ mod tests {
 
     #[test]
     fn terminal_server_named_service() {
-        assert_eq!(
-            TerminalServer::NAME,
-            "rterm.protocol.TerminalService"
-        );
+        assert_eq!(TerminalServer::NAME, "rterm.protocol.TerminalService");
     }
 
     #[test]

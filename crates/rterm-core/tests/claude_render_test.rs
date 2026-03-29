@@ -6,7 +6,10 @@ use rterm_core::{Color, Terminal};
 fn claude_code_detailed_render() {
     let data = match std::fs::read("/tmp/claude-pty.bin") {
         Ok(d) => d,
-        Err(_) => { eprintln!("Skipping: /tmp/claude-pty.bin not found"); return; }
+        Err(_) => {
+            eprintln!("Skipping: /tmp/claude-pty.bin not found");
+            return;
+        }
     };
 
     let mut t = Terminal::new(80, 24);
@@ -26,17 +29,29 @@ fn claude_code_detailed_render() {
 
         for col in 0..80 {
             let cell = t.screen().cell(row, col);
-            if cell.attrs.underline { has_underline = true; }
-            if cell.attrs.dim { has_dim = true; }
+            if cell.attrs.underline {
+                has_underline = true;
+            }
+            if cell.attrs.dim {
+                has_dim = true;
+            }
             line.push(cell.ch);
         }
 
         let trimmed = line.trim_end().to_string();
         if !trimmed.is_empty() || has_underline || has_dim {
             let mut flags = Vec::new();
-            if has_underline { flags.push("UL"); }
-            if has_dim { flags.push("DIM"); }
-            let flag_str = if flags.is_empty() { "  ".to_string() } else { flags.join(",") };
+            if has_underline {
+                flags.push("UL");
+            }
+            if has_dim {
+                flags.push("DIM");
+            }
+            let flag_str = if flags.is_empty() {
+                "  ".to_string()
+            } else {
+                flags.join(",")
+            };
 
             let details: Vec<String> = (0..80)
                 .filter(|&c| {
@@ -47,24 +62,50 @@ fn claude_code_detailed_render() {
                 .map(|c| {
                     let cell = t.screen().cell(row, c);
                     let mut attrs = Vec::new();
-                    if cell.attrs.bold { attrs.push("B"); }
-                    if cell.attrs.dim { attrs.push("D"); }
-                    if cell.attrs.underline { attrs.push("U"); }
-                    if cell.attrs.reverse { attrs.push("R"); }
-                    if cell.bg != Color::Default { attrs.push("BG"); }
-                    format!("{}:'{}'{}", c, cell.ch,
-                        if attrs.is_empty() { String::new() }
-                        else { format!("({})", attrs.join(",")) })
+                    if cell.attrs.bold {
+                        attrs.push("B");
+                    }
+                    if cell.attrs.dim {
+                        attrs.push("D");
+                    }
+                    if cell.attrs.underline {
+                        attrs.push("U");
+                    }
+                    if cell.attrs.reverse {
+                        attrs.push("R");
+                    }
+                    if cell.bg != Color::Default {
+                        attrs.push("BG");
+                    }
+                    format!(
+                        "{}:'{}'{}",
+                        c,
+                        cell.ch,
+                        if attrs.is_empty() {
+                            String::new()
+                        } else {
+                            format!("({})", attrs.join(","))
+                        }
+                    )
                 })
                 .collect();
 
-            println!("Row {:2} [{}]: |{}|  cells: [{}]",
-                row, flag_str, trimmed, details.join(", "));
+            println!(
+                "Row {:2} [{}]: |{}|  cells: [{}]",
+                row,
+                flag_str,
+                trimmed,
+                details.join(", ")
+            );
         }
     }
 
-    println!("\nCursor: row={}, col={}, visible={}",
-        t.screen().cursor.row, t.screen().cursor.col, t.screen().cursor.visible);
+    println!(
+        "\nCursor: row={}, col={}, visible={}",
+        t.screen().cursor.row,
+        t.screen().cursor.col,
+        t.screen().cursor.visible
+    );
 
     // Key assertions
     assert_eq!(t.screen().cell(0, 0).ch, '╭', "Row 0 should start with ╭");
@@ -80,7 +121,10 @@ fn claude_code_detailed_render() {
         }
     }
     if !underline_rows.is_empty() {
-        println!("\nWARNING: Rows with underline attribute: {:?}", underline_rows);
+        println!(
+            "\nWARNING: Rows with underline attribute: {:?}",
+            underline_rows
+        );
         for &row in &underline_rows {
             let cells: Vec<String> = (0..80)
                 .filter(|&c| t.screen().cell(row, c).attrs.underline)

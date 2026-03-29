@@ -4,75 +4,82 @@
 
 Priority: logical correctness. No GUI.
 
-- [ ] Define Cell type (character, fg/bg color, attributes: bold/italic/underline/reverse/strikethrough)
-- [ ] Define Color type (default, indexed 0-255, RGB)
-- [ ] Define ScreenBuffer (2D grid of cells, cursor position, scroll region)
-- [ ] Implement ScreenBuffer operations: write char, move cursor, erase, scroll, insert/delete line
-- [ ] Implement scrollback ring buffer (circular, fixed max size)
-- [ ] Integrate vte crate: implement vte::Perform trait to dispatch parsed sequences
-- [ ] VT100 core: SGR (bold, underline, reverse, 8 foreground/background colors)
-- [ ] VT100 core: cursor movement (CUU/CUD/CUF/CUB/CUP/HVP)
-- [ ] VT100 core: erase (ED, EL)
-- [ ] VT100 core: scroll regions (DECSTBM), scroll up/down
-- [ ] VT100 core: line drawing characters (DEC Special Graphics)
-- [ ] VT100 core: autowrap mode, origin mode, insert mode
-- [ ] VT220: insert/delete character (ICH, DCH), insert/delete line (IL, DL)
-- [ ] VT220: device status report (DSR -> CPR)
-- [ ] VT220: soft terminal reset (DECSTR)
-- [ ] Alternate screen buffer (switch/restore)
-- [ ] Application cursor keys mode (DECCKM)
-- [ ] Show/hide cursor (DECTCEM)
-- [ ] Test harness: feed raw bytes -> assert cell content, cursor position, attributes
-- [ ] Test with captured output: ls --color, vim startup, htop frames
+- [x] Define Cell type (character, fg/bg color, attributes: bold/italic/underline/reverse/strikethrough)
+- [x] Define Color type (default, indexed 0-255, RGB)
+- [x] Define ScreenBuffer (2D grid of cells, cursor position, scroll region)
+- [x] Implement ScreenBuffer operations: write char, move cursor, erase, scroll, insert/delete line
+- [x] Implement scrollback ring buffer (circular, fixed max size)
+- [x] Integrate vte crate: implement vte::Perform trait to dispatch parsed sequences
+- [x] VT100 core: SGR (bold, underline, reverse, 8 foreground/background colors)
+- [x] VT100 core: cursor movement (CUU/CUD/CUF/CUB/CUP/HVP)
+- [x] VT100 core: erase (ED, EL)
+- [x] VT100 core: scroll regions (DECSTBM), scroll up/down
+- [ ] VT100 core: line drawing characters (DEC Special Graphics) -- relies on Unicode, no explicit charset switching
+- [x] VT100 core: autowrap mode, origin mode, insert mode
+- [x] VT220: insert/delete character (ICH, DCH), insert/delete line (IL, DL)
+- [x] VT220: device status report (DSR -> CPR)
+- [x] VT220: soft terminal reset (DECSTR)
+- [x] Alternate screen buffer (switch/restore)
+- [x] Application cursor keys mode (DECCKM)
+- [x] Show/hide cursor (DECTCEM)
+- [x] Test harness: feed raw bytes -> assert cell content, cursor position, attributes
+- [x] Test with captured output: ls --color, vim startup, htop frames
 - [ ] Dark launch validation: run against vttest captured sequences
 
 ## Phase 2: Protocol + Transport
 
 ### FlatBuffers Schema (rterm-proto)
-- [ ] Define FlatBuffers schema: ClientMessage (DataIn, Resize), ServerMessage (DataOut, Exit, Error)
-- [ ] Compile schema with flatbuffers-rs, generate Rust code
-- [ ] Define TerminalTransport trait (send, recv, close)
-- [ ] gRPC service definition: TerminalService.Session (bidi streaming)
-- [ ] Round-trip serialization tests for all message types
-- [ ] Fix any flatbuffers-rs bugs found during schema compilation
+- [x] Define FlatBuffers schema: ClientMessage (DataIn, Resize), ServerMessage (DataOut, Exit, Error)
+- [x] Compile schema with flatbuffers-rs, generate Rust code
+- [ ] Define TerminalTransport trait (send, recv, close) -- not implemented; transport handled by pure-grpc-rs and WebTransport directly
+- [x] gRPC service definition: TerminalService.Session (bidi streaming)
+- [x] Round-trip serialization tests for all message types
+- [x] Fix any flatbuffers-rs bugs found during schema compilation
 
 ### HTTP/3 Support in pure-grpc-rs
-- [ ] Add quinn as HTTP/3 transport backend in pure-grpc-rs
-- [ ] Implement gRPC framing over HTTP/3 streams (per A69 proposal)
-- [ ] Server-side: accept QUIC connections, route to gRPC handlers
-- [ ] Client-side: open QUIC connection, create gRPC bidi streams
-- [ ] TLS/certificate handling for QUIC (self-signed for localhost, proper certs for remote)
-- [ ] WebTransport compatibility layer (HTTP/3 CONNECT for browser clients)
-- [ ] Fix any pure-grpc-rs bugs found during bidi streaming
+- [x] Add quinn as HTTP/3 transport backend in pure-grpc-rs
+- [x] Implement gRPC framing over HTTP/3 streams (per A69 proposal)
+- [x] Server-side: accept QUIC connections, route to gRPC handlers
+- [x] Client-side: open QUIC connection, create gRPC bidi streams
+- [x] TLS/certificate handling for QUIC (self-signed for localhost, proper certs for remote)
+- [x] WebTransport compatibility layer (HTTP/3 CONNECT for browser clients) -- implemented as raw WebTransport bidi stream with length-prefixed FlatBuffers
+- [x] Fix any pure-grpc-rs bugs found during bidi streaming
 
 ### WebTransport Client for WASM
-- [ ] web-sys bindings for WebTransport API
-- [ ] Implement TerminalTransport trait over WebTransport bidi stream
-- [ ] gRPC framing over WebTransport stream
+- [x] web-sys bindings for WebTransport API
+- [x] Implement WebTransport bidi stream transport for WASM
+- [x] Length-prefixed FlatBuffers framing over WebTransport stream
 
 ### rterm-relay Server
-- [ ] Standalone gRPC/HTTP/3 server (quinn + pure-grpc-rs)
-- [ ] PTY spawning via portable-pty (configurable shell)
-- [ ] Bidirectional byte streaming: gRPC bidi stream <-> PTY
-- [ ] Terminal resize: Resize message -> PTY TIOCSWINSZ
-- [ ] Connection lifecycle: connect, spawn PTY, stream, disconnect, kill PTY
-- [ ] TLS certificate configuration
-- [ ] Test: native gRPC client connects, interactive shell session
-- [ ] Test: WASM WebTransport client connects, interactive shell session
-- [ ] Test: resize during vim session
+- [x] Standalone server (quinn + h3-webtransport for WebTransport, pure-grpc-rs for gRPC)
+- [x] PTY spawning via portable-pty (configurable shell)
+- [x] Bidirectional byte streaming: bidi stream <-> PTY
+- [x] Terminal resize: Resize message -> PTY TIOCSWINSZ
+- [x] Connection lifecycle: connect, spawn PTY, stream, disconnect, kill PTY
+- [x] TLS certificate configuration (auto-generated self-signed ECDSA P256, 14-day validity)
+- [x] HTTPS page server for serving WASM bundle (hyper over TCP/TLS)
+- [x] Cert hash injection into HTML for WebTransport serverCertificateHashes
+- [x] Test: native gRPC client connects, interactive shell session
+- [x] Test: resize during active session
+- [x] Test: concurrent sessions with isolation
+- [ ] Test: WASM WebTransport client automated test (manual testing done)
 
 ## Phase 3: egui Terminal Widget (WASM)
 
-- [ ] eframe WASM build setup (trunk or wasm-pack)
-- [ ] Basic terminal grid: render ScreenBuffer cells using egui built-in monospace font
-- [ ] Cursor rendering (block, underline, bar shapes)
-- [ ] Color rendering (8-color, 256-color, true color mapped to egui Color32)
-- [ ] Text attribute rendering (bold, italic, underline, reverse)
-- [ ] gRPC transport client in WASM (WebTransport -> pure-grpc-rs)
-- [ ] Wire: gRPC recv -> vte parser -> ScreenBuffer -> egui render
-- [ ] Keyboard input -> VT sequence encoding -> gRPC send
-- [ ] Mouse scroll -> scrollback navigation
-- [ ] Integration test: connect to rterm-relay, interactive shell in browser
+- [x] eframe WASM build setup (trunk)
+- [x] Basic terminal grid: render ScreenBuffer cells using egui built-in monospace font
+- [x] Cursor rendering (block shape)
+- [x] Color rendering (8-color, 256-color, true color mapped to egui Color32)
+- [x] Text attribute rendering (bold, italic, underline, reverse, dim, hidden, strikethrough)
+- [x] WebTransport client in WASM (web-sys WebTransport API)
+- [x] Wire: WebTransport recv -> vte parser -> ScreenBuffer -> egui render
+- [x] Keyboard input -> VT sequence encoding -> WebTransport send
+- [x] Mouse scroll -> scrollback navigation
+- [x] Text selection (click + drag) with clipboard copy
+- [x] Dynamic terminal resize based on available window space
+- [x] Synchronized output mode (batch repaints during CSI ?2026 h)
+- [ ] Cursor shapes (underline, bar -- currently block only)
+- [ ] Integration test: automated browser terminal test
 
 ## Phase 4: Native Shell (rterm-shell)
 
@@ -100,20 +107,20 @@ Priority: logical correctness. No GUI.
 
 ## Phase 6: Completeness
 
-- [ ] 256-color support (SGR 38;5;N / 48;5;N)
-- [ ] True color support (SGR 38;2;R;G;B / 48;2;R;G;B)
+- [x] 256-color support (SGR 38;5;N / 48;5;N)
+- [x] True color support (SGR 38;2;R;G;B / 48;2;R;G;B)
 - [ ] SGR mouse reporting (mode 1006)
-- [ ] Bracketed paste mode (mode 2004)
+- [ ] Bracketed paste mode (mode 2004) -- acknowledged but not processed
 - [ ] Focus events (mode 1004)
-- [ ] Synchronized output (mode 2026)
+- [x] Synchronized output (mode 2026)
 - [ ] Cursor shapes (DECSCUSR: block, underline, bar, blinking variants)
 - [ ] OSC 0/2: window title
 - [ ] OSC 8: hyperlinks
 - [ ] OSC 52: clipboard access
 - [ ] Colored underlines (SGR 58)
 - [ ] Underline styles (single, double, curly, dotted, dashed)
-- [ ] Text selection (click + drag)
-- [ ] Clipboard copy/paste
+- [x] Text selection (click + drag)
+- [x] Clipboard copy/paste
 - [ ] Scrollback search
 - [ ] Window/terminal size query responses
 

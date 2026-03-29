@@ -11,7 +11,7 @@ fn claude_code_output_no_panic() {
     };
     let mut t = Terminal::new(80, 24);
     t.feed(&data);
-    
+
     // Should not panic. Check screen has some content.
     let mut has_content = false;
     for row in 0..t.screen().rows() {
@@ -21,6 +21,13 @@ fn claude_code_output_no_panic() {
             println!("Row {:2}: |{}|", row, text);
         }
     }
-    println!("\nCursor: row={}, col={}", t.screen().cursor.row, t.screen().cursor.col);
-    assert!(has_content, "screen should have some content after Claude Code output");
+    println!(
+        "\nCursor: row={}, col={}",
+        t.screen().cursor.row,
+        t.screen().cursor.col
+    );
+    assert!(
+        has_content,
+        "screen should have some content after Claude Code output"
+    );
 }

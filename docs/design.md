@@ -5,7 +5,7 @@
 1. A correct, minimal terminal emulator built in Rust
 2. egui compiled to WASM is the universal renderer (no HTML, no JS)
 3. Runs on desktop (native WebView shell), browser, and mobile
-4. gRPC over HTTP/3 (QUIC) as the only transport. No HTTP/2, no WebSocket, no fallbacks
+4. HTTP/3 (QUIC) as the transport layer. Native clients use gRPC/H3; WASM browser clients use WebTransport with length-prefixed FlatBuffers. No HTTP/2, no WebSocket, no fallbacks
 5. Custom font rendering with ligature support (rustybuzz + fontdue)
 6. xterm-compatible terminal standard
 7. Dogfoods flatbuffers-rs and pure-grpc-rs (fix bugs upstream as found)
@@ -31,7 +31,7 @@ The WASM build is the first-class citizen. Every platform runs the same WASM bun
 VT emulation correctness is the top priority. A correct terminal with ugly fonts is useful. A pretty terminal that garbles vim output is not.
 
 ### HTTP/3 Only
-gRPC over QUIC everywhere. Native uses quinn. Browser WASM uses WebTransport API. One protocol, one transport, no negotiation, no fallbacks.
+QUIC everywhere. Native clients use gRPC over HTTP/3 (quinn + pure-grpc-rs). Browser WASM uses WebTransport API with length-prefixed FlatBuffers on a bidi stream. Both run over QUIC -- no TCP, no WebSocket, no fallbacks.
 
 ### Dogfooding
 flatbuffers-rs and pure-grpc-rs are first-party dependencies. Bugs found during rterm development are fixed in those repos directly. pure-grpc-rs gains HTTP/3 support as part of this project.

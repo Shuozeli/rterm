@@ -65,24 +65,36 @@ impl FlatBufferGrpcMessage for ClientMsg {
         match self {
             ClientMsg::DataIn(d) => {
                 let payload = fbb.create_vector(&d.payload);
-                let data_in = fbs::DataIn::create(&mut fbb, &fbs::DataInArgs {
-                    payload: Some(payload),
-                });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::DataIn,
-                    body: Some(data_in.as_union_value()),
-                });
+                let data_in = fbs::DataIn::create(
+                    &mut fbb,
+                    &fbs::DataInArgs {
+                        payload: Some(payload),
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::DataIn,
+                        body: Some(data_in.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ClientMsg::Resize(r) => {
-                let resize = fbs::Resize::create(&mut fbb, &fbs::ResizeArgs {
-                    cols: r.cols,
-                    rows: r.rows,
-                });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::Resize,
-                    body: Some(resize.as_union_value()),
-                });
+                let resize = fbs::Resize::create(
+                    &mut fbb,
+                    &fbs::ResizeArgs {
+                        cols: r.cols,
+                        rows: r.rows,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::Resize,
+                        body: Some(resize.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
         }
@@ -117,32 +129,47 @@ impl FlatBufferGrpcMessage for ServerMsg {
         match self {
             ServerMsg::DataOut(d) => {
                 let payload = fbb.create_vector(&d.payload);
-                let data_out = fbs::DataOut::create(&mut fbb, &fbs::DataOutArgs {
-                    payload: Some(payload),
-                });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::DataOut,
-                    body: Some(data_out.as_union_value()),
-                });
+                let data_out = fbs::DataOut::create(
+                    &mut fbb,
+                    &fbs::DataOutArgs {
+                        payload: Some(payload),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::DataOut,
+                        body: Some(data_out.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ServerMsg::Exit(e) => {
                 let exit = fbs::Exit::create(&mut fbb, &fbs::ExitArgs { code: e.code });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::Exit,
-                    body: Some(exit.as_union_value()),
-                });
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::Exit,
+                        body: Some(exit.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ServerMsg::Error(e) => {
                 let message = fbb.create_string(&e.message);
-                let error = fbs::Error::create(&mut fbb, &fbs::ErrorArgs {
-                    message: Some(message),
-                });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::Error,
-                    body: Some(error.as_union_value()),
-                });
+                let error = fbs::Error::create(
+                    &mut fbb,
+                    &fbs::ErrorArgs {
+                        message: Some(message),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::Error,
+                        body: Some(error.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
         }
@@ -183,7 +210,9 @@ mod tests {
 
     #[test]
     fn round_trip_client_data_in() {
-        let msg = ClientMsg::DataIn(DataIn { payload: b"hello".to_vec() });
+        let msg = ClientMsg::DataIn(DataIn {
+            payload: b"hello".to_vec(),
+        });
         let encoded = msg.encode_flatbuffer();
         let decoded = ClientMsg::decode_flatbuffer(&encoded).unwrap();
         match decoded {
@@ -232,7 +261,9 @@ mod tests {
 
     #[test]
     fn round_trip_server_error() {
-        let msg = ServerMsg::Error(ServerError { message: "PTY died".into() });
+        let msg = ServerMsg::Error(ServerError {
+            message: "PTY died".into(),
+        });
         let encoded = msg.encode_flatbuffer();
         let decoded = ServerMsg::decode_flatbuffer(&encoded).unwrap();
         match decoded {

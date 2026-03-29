@@ -9,8 +9,7 @@ use tracing::{debug, error, info};
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt()
         .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "info".into()),
+            tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()),
         )
         .init();
 
@@ -22,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use sha2::Digest;
     let hash = sha2::Sha256::digest(&cert_der);
     use base64::Engine;
-    let cert_hash_b64 = base64::engine::general_purpose::STANDARD.encode(&hash);
+    let cert_hash_b64 = base64::engine::general_purpose::STANDARD.encode(hash);
 
     let static_dir = find_static_dir();
     info!("Serving static files from: {}", static_dir.display());
@@ -36,7 +35,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let https_dir = static_dir.clone();
     let https_hash = cert_hash_b64.clone();
     tokio::spawn(async move {
-        if let Err(e) = https_server::serve_https(https_addr, https_dir, https_cert, https_key, https_hash).await {
+        if let Err(e) =
+            https_server::serve_https(https_addr, https_dir, https_cert, https_key, https_hash)
+                .await
+        {
             error!("HTTPS server error: {}", e);
         }
     });
@@ -100,10 +102,8 @@ async fn handle_connection(
                 if is_wt {
                     info!("WebTransport terminal session");
                     let session =
-                        h3_webtransport::server::WebTransportSession::accept(
-                            req, stream, h3_conn,
-                        )
-                        .await?;
+                        h3_webtransport::server::WebTransportSession::accept(req, stream, h3_conn)
+                            .await?;
                     wt_handler::handle_wt_session(session, "/bin/bash").await?;
                     return Ok(());
                 }
@@ -166,7 +166,10 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>) {
     params.not_after = now + time::Duration::days(14);
     let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
     let cert = params.self_signed(&key_pair).unwrap();
-    (cert.pem().into_bytes(), key_pair.serialize_pem().into_bytes())
+    (
+        cert.pem().into_bytes(),
+        key_pair.serialize_pem().into_bytes(),
+    )
 }
 
 fn extract_cert_der(cert_pem: &[u8]) -> Vec<u8> {

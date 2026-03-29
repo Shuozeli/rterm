@@ -173,9 +173,7 @@ impl Terminal {
 
                 30..=37 => self.screen_mut().pen.fg = Color::Indexed((code - 30) as u8),
                 38 => {
-                    if let Some((color, consumed)) =
-                        Self::parse_extended_color(&param_list[i..])
-                    {
+                    if let Some((color, consumed)) = Self::parse_extended_color(&param_list[i..]) {
                         self.screen_mut().pen.fg = color;
                         i += consumed;
                     }
@@ -184,9 +182,7 @@ impl Terminal {
 
                 40..=47 => self.screen_mut().pen.bg = Color::Indexed((code - 40) as u8),
                 48 => {
-                    if let Some((color, consumed)) =
-                        Self::parse_extended_color(&param_list[i..])
-                    {
+                    if let Some((color, consumed)) = Self::parse_extended_color(&param_list[i..]) {
                         self.screen_mut().pen.bg = color;
                         i += consumed;
                     }
@@ -208,15 +204,11 @@ impl Terminal {
             return None;
         }
         match remaining[0] {
-            5 if remaining.len() >= 2 => {
-                Some((Color::Indexed(remaining[1] as u8), 2))
-            }
-            2 if remaining.len() >= 4 => {
-                Some((
-                    Color::Rgb(remaining[1] as u8, remaining[2] as u8, remaining[3] as u8),
-                    4,
-                ))
-            }
+            5 if remaining.len() >= 2 => Some((Color::Indexed(remaining[1] as u8), 2)),
+            2 if remaining.len() >= 4 => Some((
+                Color::Rgb(remaining[1] as u8, remaining[2] as u8, remaining[3] as u8),
+                4,
+            )),
             _ => None,
         }
     }
@@ -273,8 +265,8 @@ impl vte::Perform for Terminal {
                 let next_tab = (s.cursor.col / 8 + 1) * 8;
                 s.cursor.col = next_tab.min(s.cols() - 1);
             }
-            0x0A | 0x0B | 0x0C => self.screen_mut().line_feed(), // LF, VT, FF
-            0x0D => self.screen_mut().carriage_return(),          // CR
+            0x0A..=0x0C => self.screen_mut().line_feed(), // LF, VT, FF
+            0x0D => self.screen_mut().carriage_return(),  // CR
             _ => {}
         }
     }
@@ -309,10 +301,10 @@ impl vte::Perform for Terminal {
 
         match action {
             // Cursor movement.
-            'A' => self.screen_mut().cursor_up(n),    // CUU
-            'B' => self.screen_mut().cursor_down(n),   // CUD
+            'A' => self.screen_mut().cursor_up(n),      // CUU
+            'B' => self.screen_mut().cursor_down(n),    // CUD
             'C' => self.screen_mut().cursor_forward(n), // CUF
-            'D' => self.screen_mut().cursor_back(n),   // CUB
+            'D' => self.screen_mut().cursor_back(n),    // CUB
             'H' | 'f' => {
                 // CUP / HVP: set cursor position (row;col, 1-indexed).
                 let row = if first == 0 { 1 } else { first as usize };
@@ -329,12 +321,12 @@ impl vte::Perform for Terminal {
             }
 
             // Erase.
-            'J' => self.screen_mut().erase_in_display(first),  // ED
-            'K' => self.screen_mut().erase_in_line(first),     // EL
+            'J' => self.screen_mut().erase_in_display(first), // ED
+            'K' => self.screen_mut().erase_in_line(first),    // EL
 
             // Scroll.
             'S' => self.screen_mut().scroll_up(n),   // SU
-            'T' => self.screen_mut().scroll_down(n),  // SD
+            'T' => self.screen_mut().scroll_down(n), // SD
             'r' => {
                 // DECSTBM: set scroll region.
                 let top = if first == 0 { 1 } else { first as usize };
@@ -347,10 +339,10 @@ impl vte::Perform for Terminal {
             }
 
             // Insert / Delete.
-            'L' => self.screen_mut().insert_lines(n),  // IL
-            'M' => self.screen_mut().delete_lines(n),  // DL
-            '@' => self.screen_mut().insert_chars(n),  // ICH
-            'P' => self.screen_mut().delete_chars(n),  // DCH
+            'L' => self.screen_mut().insert_lines(n), // IL
+            'M' => self.screen_mut().delete_lines(n), // DL
+            '@' => self.screen_mut().insert_chars(n), // ICH
+            'P' => self.screen_mut().delete_chars(n), // DCH
 
             // SGR — only handle standard SGR (no intermediates).
             // CSI > m and CSI < m are xterm/kitty private sequences, not SGR.
@@ -379,8 +371,8 @@ impl vte::Perform for Terminal {
 
     fn esc_dispatch(&mut self, intermediates: &[u8], _ignore: bool, byte: u8) {
         match (intermediates, byte) {
-            ([], b'7') => self.save_cursor(),    // DECSC
-            ([], b'8') => self.restore_cursor(),  // DECRC
+            ([], b'7') => self.save_cursor(),            // DECSC
+            ([], b'8') => self.restore_cursor(),         // DECRC
             ([], b'D') => self.screen_mut().line_feed(), // IND (index = LF)
             ([], b'M') => {
                 // RI (reverse index): move cursor up, scroll down if at top.
@@ -499,7 +491,7 @@ mod tests {
         let mut t = term();
         feed(&mut t, "Hello");
         feed(&mut t, "\x1b[3G"); // CHA to col 3
-        feed(&mut t, "\x1b[K");  // EL mode 0 (cursor to end)
+        feed(&mut t, "\x1b[K"); // EL mode 0 (cursor to end)
         assert_eq!(t.screen().row_text(0), "He");
     }
 
@@ -508,7 +500,7 @@ mod tests {
         let mut t = Terminal::new(10, 5);
         feed(&mut t, "A\r\nB\r\nC\r\nD\r\nE");
         feed(&mut t, "\x1b[2;4r"); // scroll region rows 2-4
-        feed(&mut t, "\x1b[S");     // scroll up 1
+        feed(&mut t, "\x1b[S"); // scroll up 1
         assert_eq!(t.screen().cell(0, 0).ch, 'A'); // outside region
         assert_eq!(t.screen().cell(1, 0).ch, 'C'); // shifted up
         assert_eq!(t.screen().cell(2, 0).ch, 'D');
@@ -548,7 +540,7 @@ mod tests {
     fn device_status_report_cursor_position() {
         let mut t = term();
         feed(&mut t, "\x1b[5;10H"); // cursor at row 5, col 10
-        feed(&mut t, "\x1b[6n");     // request CPR
+        feed(&mut t, "\x1b[6n"); // request CPR
         let response = t.take_response();
         assert_eq!(response, b"\x1b[5;10R");
     }
@@ -557,8 +549,8 @@ mod tests {
     fn insert_delete_chars() {
         let mut t = Terminal::new(10, 1);
         feed(&mut t, "ABCDE");
-        feed(&mut t, "\x1b[2G");  // col 2 (0-indexed: 1)
-        feed(&mut t, "\x1b[2@");  // insert 2 chars
+        feed(&mut t, "\x1b[2G"); // col 2 (0-indexed: 1)
+        feed(&mut t, "\x1b[2@"); // insert 2 chars
         assert_eq!(t.screen().cell(0, 0).ch, 'A');
         assert_eq!(t.screen().cell(0, 1).ch, ' ');
         assert_eq!(t.screen().cell(0, 2).ch, ' ');
@@ -570,7 +562,7 @@ mod tests {
         let mut t = Terminal::new(5, 4);
         feed(&mut t, "A\r\nB\r\nC\r\nD");
         feed(&mut t, "\x1b[2;1H"); // row 2
-        feed(&mut t, "\x1b[1L");    // insert 1 line
+        feed(&mut t, "\x1b[1L"); // insert 1 line
         assert_eq!(t.screen().cell(0, 0).ch, 'A');
         assert_eq!(t.screen().cell(1, 0).ch, ' '); // inserted
         assert_eq!(t.screen().cell(2, 0).ch, 'B');
@@ -597,9 +589,9 @@ mod tests {
     fn save_restore_cursor() {
         let mut t = term();
         feed(&mut t, "\x1b[5;10H"); // row 5, col 10
-        feed(&mut t, "\x1b7");       // DECSC
-        feed(&mut t, "\x1b[1;1H");   // move to 1,1
-        feed(&mut t, "\x1b8");       // DECRC
+        feed(&mut t, "\x1b7"); // DECSC
+        feed(&mut t, "\x1b[1;1H"); // move to 1,1
+        feed(&mut t, "\x1b8"); // DECRC
         assert_eq!(t.screen().cursor.row, 4);
         assert_eq!(t.screen().cursor.col, 9);
     }
@@ -632,7 +624,10 @@ mod tests {
     fn ls_color_output() {
         let mut t = Terminal::new(40, 5);
         // Simulated `ls --color` output with green for executables.
-        feed(&mut t, "\x1b[0m\x1b[01;32mscript.sh\x1b[0m  \x1b[01;34mdir/\x1b[0m\r\n");
+        feed(
+            &mut t,
+            "\x1b[0m\x1b[01;32mscript.sh\x1b[0m  \x1b[01;34mdir/\x1b[0m\r\n",
+        );
         // script.sh should be bold green.
         let cell = t.screen().cell(0, 0);
         assert_eq!(cell.ch, 's');

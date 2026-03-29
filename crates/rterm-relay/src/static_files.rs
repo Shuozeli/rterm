@@ -40,7 +40,7 @@ pub async fn serve_file(
     Ok(())
 }
 
-fn resolve_path(uri_path: &str, static_dir: &Path) -> PathBuf {
+pub fn resolve_path(uri_path: &str, static_dir: &Path) -> PathBuf {
     let clean = uri_path.trim_start_matches('/');
     let path = if clean.is_empty() {
         static_dir.join("index.html")
@@ -55,7 +55,7 @@ fn resolve_path(uri_path: &str, static_dir: &Path) -> PathBuf {
     }
 }
 
-fn guess_content_type(path: &Path) -> &'static str {
+pub fn guess_content_type(path: &Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("html") => "text/html; charset=utf-8",
         Some("js") => "application/javascript",

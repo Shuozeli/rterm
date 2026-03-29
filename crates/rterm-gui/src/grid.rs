@@ -147,13 +147,16 @@ pub fn terminal_grid(
 
     // Handle mouse wheel scrolling.
     let scroll_delta = ui.input(|i| {
-        i.events.iter().filter_map(|e| {
-            if let egui::Event::MouseWheel { delta, .. } = e {
-                Some(delta.y)
-            } else {
-                None
-            }
-        }).sum::<f32>()
+        i.events
+            .iter()
+            .filter_map(|e| {
+                if let egui::Event::MouseWheel { delta, .. } = e {
+                    Some(delta.y)
+                } else {
+                    None
+                }
+            })
+            .sum::<f32>()
     });
     if scroll_delta != 0.0 && response.hovered() {
         let scroll_lines = (scroll_delta / 3.0).round() as isize;
@@ -190,10 +193,8 @@ pub fn terminal_grid(
             let (fg, bg) = resolve_colors(cell.fg, cell.bg, cell.attrs.reverse, config);
             let fg = apply_dim_hidden(fg, bg, &cell.attrs);
 
-            let cell_rect = Rect::from_min_size(
-                Pos2::new(origin.x + col as f32 * cell_size.x, y),
-                cell_size,
-            );
+            let cell_rect =
+                Rect::from_min_size(Pos2::new(origin.x + col as f32 * cell_size.x, y), cell_size);
 
             // Background.
             if bg != config.default_bg {
@@ -222,7 +223,10 @@ pub fn terminal_grid(
             if cell.attrs.underline {
                 let line_y = cell_rect.max.y - 2.0;
                 painter.line_segment(
-                    [Pos2::new(cell_rect.min.x, line_y), Pos2::new(cell_rect.max.x, line_y)],
+                    [
+                        Pos2::new(cell_rect.min.x, line_y),
+                        Pos2::new(cell_rect.max.x, line_y),
+                    ],
                     egui::Stroke::new(1.0, fg),
                 );
             }
@@ -231,7 +235,10 @@ pub fn terminal_grid(
             if cell.attrs.strikethrough {
                 let line_y = cell_rect.center().y;
                 painter.line_segment(
-                    [Pos2::new(cell_rect.min.x, line_y), Pos2::new(cell_rect.max.x, line_y)],
+                    [
+                        Pos2::new(cell_rect.min.x, line_y),
+                        Pos2::new(cell_rect.max.x, line_y),
+                    ],
                     egui::Stroke::new(1.0, fg),
                 );
             }
@@ -239,7 +246,11 @@ pub fn terminal_grid(
     }
 
     // Paint cursor — only when not scrolled up (viewing live terminal).
-    if scroll_offset == 0 && buffer.cursor.visible && buffer.cursor.row < rows && buffer.cursor.col < cols {
+    if scroll_offset == 0
+        && buffer.cursor.visible
+        && buffer.cursor.row < rows
+        && buffer.cursor.col < cols
+    {
         let cursor_rect = Rect::from_min_size(
             Pos2::new(
                 origin.x + buffer.cursor.col as f32 * cell_size.x,
@@ -282,11 +293,7 @@ fn resolve_colors(
 ) -> (Color32, Color32) {
     let fg32 = to_egui_color(&fg, config.default_fg);
     let bg32 = to_egui_color(&bg, config.default_bg);
-    if reverse {
-        (bg32, fg32)
-    } else {
-        (fg32, bg32)
-    }
+    if reverse { (bg32, fg32) } else { (fg32, bg32) }
 }
 
 fn apply_dim_hidden(fg: Color32, bg: Color32, attrs: &CellAttributes) -> Color32 {

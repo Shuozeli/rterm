@@ -32,7 +32,10 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>) {
     params.not_after = now + time::Duration::days(14);
     let key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256).unwrap();
     let cert = params.self_signed(&key_pair).unwrap();
-    (cert.pem().into_bytes(), key_pair.serialize_pem().into_bytes())
+    (
+        cert.pem().into_bytes(),
+        key_pair.serialize_pem().into_bytes(),
+    )
 }
 
 async fn start_relay() -> (SocketAddr, Vec<u8>) {
@@ -41,8 +44,7 @@ async fn start_relay() -> (SocketAddr, Vec<u8>) {
 
 async fn start_relay_with_shell(shell: &str) -> (SocketAddr, Vec<u8>) {
     let (cert_pem, key_pem) = generate_cert();
-    let endpoint =
-        H3Server::bind("127.0.0.1:0".parse().unwrap(), &cert_pem, &key_pem).unwrap();
+    let endpoint = H3Server::bind("127.0.0.1:0".parse().unwrap(), &cert_pem, &key_pem).unwrap();
     let addr = endpoint.local_addr().unwrap();
 
     let server = TerminalServer::with_shell(shell);
@@ -63,9 +65,7 @@ async fn connect(addr: SocketAddr, ca_pem: &[u8]) -> Grpc<H3Channel> {
     let uri: http::Uri = format!("https://127.0.0.1:{}", addr.port())
         .parse()
         .unwrap();
-    let channel = H3Channel::connect(uri.clone(), Some(ca_pem))
-        .await
-        .unwrap();
+    let channel = H3Channel::connect(uri.clone(), Some(ca_pem)).await.unwrap();
     Grpc::with_origin(channel, uri)
 }
 
@@ -98,7 +98,10 @@ async fn open_session(
 /// Open a session without sending initial Resize (for error tests).
 async fn open_raw_session(
     grpc: &mut Grpc<H3Channel>,
-) -> (mpsc::Sender<ClientMsg>, Result<grpc_core::Response<Streaming<ServerMsg>>, Status>) {
+) -> (
+    mpsc::Sender<ClientMsg>,
+    Result<grpc_core::Response<Streaming<ServerMsg>>, Status>,
+) {
     let (tx, rx) = mpsc::channel::<ClientMsg>(64);
     let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
     let codec = FlatBuffersCodec::<ClientMsg, ServerMsg>::default();
@@ -274,9 +277,17 @@ async fn data_large_output() {
 
     // Read until we see "1000" — the last line.
     let output = read_until(&mut stream, "\n1000\r", 15).await;
-    assert!(output.contains("1000"), "missing last line, got {} bytes", output.len());
+    assert!(
+        output.contains("1000"),
+        "missing last line, got {} bytes",
+        output.len()
+    );
     // Large output was received (should be many KB).
-    assert!(output.len() > 1000, "output too small: {} bytes", output.len());
+    assert!(
+        output.len() > 1000,
+        "output too small: {} bytes",
+        output.len()
+    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -384,7 +395,11 @@ async fn interactive_vim_open_close() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Check if vim is available.
-    send(&tx, b"which vim > /dev/null 2>&1 && echo VIM_OK || echo VIM_MISSING\n").await;
+    send(
+        &tx,
+        b"which vim > /dev/null 2>&1 && echo VIM_OK || echo VIM_MISSING\n",
+    )
+    .await;
     let check = read_until(&mut stream, "VIM_", 3).await;
 
     if check.contains("VIM_MISSING") {
@@ -408,7 +423,11 @@ async fn interactive_vim_open_close() {
     // Shell should be alive.
     send(&tx, b"echo post_vim\n").await;
     let output = read_until(&mut stream, "post_vim", 3).await;
-    assert!(output.contains("post_vim"), "shell dead after vim: {:?}", output);
+    assert!(
+        output.contains("post_vim"),
+        "shell dead after vim: {:?}",
+        output
+    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -466,7 +485,11 @@ async fn resize_to_large() {
 
     send(&tx, b"stty size\n").await;
     let output = read_until(&mut stream, "100 300", 3).await;
-    assert!(output.contains("100 300"), "large resize failed: {:?}", output);
+    assert!(
+        output.contains("100 300"),
+        "large resize failed: {:?}",
+        output
+    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -490,7 +513,11 @@ async fn resize_rapid_multiple() {
     // Actually: i goes 0..10, last i=9. cols=40+9*5=85, rows=10+9*2=28.
     send(&tx, b"stty size\n").await;
     let output = read_until(&mut stream, "28 85", 3).await;
-    assert!(output.contains("28 85"), "rapid resize final size wrong: {:?}", output);
+    assert!(
+        output.contains("28 85"),
+        "rapid resize final size wrong: {:?}",
+        output
+    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -513,7 +540,11 @@ async fn resize_during_output() {
 
     // Wait for output to finish.
     let output = read_until(&mut stream, "2000", 10).await;
-    assert!(output.contains("2000"), "output incomplete after mid-resize: {:?}", &output[output.len().saturating_sub(100)..]);
+    assert!(
+        output.contains("2000"),
+        "output incomplete after mid-resize: {:?}",
+        &output[output.len().saturating_sub(100)..]
+    );
 
     send(&tx, b"exit\n").await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;
@@ -578,7 +609,11 @@ async fn error_invalid_shell() {
     // The server should return an error for invalid shell.
     match result {
         Err(status) => {
-            assert_ne!(status.code(), grpc_core::Code::Ok, "expected error for invalid shell");
+            assert_ne!(
+                status.code(),
+                grpc_core::Code::Ok,
+                "expected error for invalid shell"
+            );
         }
         Ok(resp) => {
             let mut stream = resp.into_inner();
@@ -600,7 +635,10 @@ async fn error_connect_nonexistent_server() {
     // Self-signed cert for a server that doesn't exist.
     let (cert, _) = generate_cert();
     let result = H3Channel::connect(uri, Some(&cert)).await;
-    assert!(result.is_err(), "should fail to connect to non-existent server");
+    assert!(
+        result.is_err(),
+        "should fail to connect to non-existent server"
+    );
 }
 
 // ============================================================================
