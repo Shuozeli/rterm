@@ -699,4 +699,178 @@ mod tests {
             ColorKind::Rgb(100, 150, 200)
         );
     }
+
+    #[test]
+    fn color_indexed_boundary() {
+        assert_eq!(unpack_color(pack_color_indexed(0)), ColorKind::Indexed(0));
+        assert_eq!(
+            unpack_color(pack_color_indexed(255)),
+            ColorKind::Indexed(255)
+        );
+    }
+
+    #[test]
+    fn color_rgb_boundary() {
+        assert_eq!(
+            unpack_color(pack_color_rgb(0, 0, 0)),
+            ColorKind::Rgb(0, 0, 0)
+        );
+        assert_eq!(
+            unpack_color(pack_color_rgb(255, 255, 255)),
+            ColorKind::Rgb(255, 255, 255)
+        );
+    }
+
+    #[test]
+    fn round_trip_mouse_event() {
+        let msg = ClientMsg::MouseEvent(MouseEvent {
+            row: 10,
+            col: 20,
+            button: 0,
+            modifiers: 5,
+            kind: 2,
+        });
+        let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ClientMsg::MouseEvent(m) => {
+                assert_eq!(m.row, 10);
+                assert_eq!(m.col, 20);
+                assert_eq!(m.button, 0);
+                assert_eq!(m.modifiers, 5);
+                assert_eq!(m.kind, 2);
+            }
+            _ => panic!("expected MouseEvent"),
+        }
+    }
+
+    #[test]
+    fn round_trip_scrollback_data() {
+        let msg = ServerMsg::ScrollbackData(ScrollbackDataMsg {
+            lines: vec![CellRangeData {
+                row: 5,
+                col_start: 0,
+                cells: vec![
+                    CellData {
+                        ch: 'A',
+                        fg: COLOR_DEFAULT,
+                        bg: COLOR_DEFAULT,
+                        attrs: 0,
+                    },
+                    CellData {
+                        ch: 'B',
+                        fg: pack_color_rgb(255, 0, 0),
+                        bg: COLOR_DEFAULT,
+                        attrs: ATTR_BOLD,
+                    },
+                ],
+            }],
+            offset: 10,
+            total: 100,
+        });
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ServerMsg::ScrollbackData(sd) => {
+                assert_eq!(sd.offset, 10);
+                assert_eq!(sd.total, 100);
+                assert_eq!(sd.lines.len(), 1);
+                assert_eq!(sd.lines[0].row, 5);
+                assert_eq!(sd.lines[0].cells[0].ch, 'A');
+                assert_eq!(sd.lines[0].cells[1].fg, pack_color_rgb(255, 0, 0));
+                assert_eq!(sd.lines[0].cells[1].attrs, ATTR_BOLD);
+            }
+            _ => panic!("expected ScrollbackData"),
+        }
+    }
+
+    #[test]
+    fn round_trip_error_msg() {
+        let msg = ServerMsg::Error(ServerError {
+            message: "something broke".into(),
+        });
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ServerMsg::Error(e) => assert_eq!(e.message, "something broke"),
+            _ => panic!("expected Error"),
+        }
+    }
+
+    #[test]
+    fn round_trip_screen_update_no_title() {
+        let msg = ServerMsg::ScreenUpdate(ScreenUpdateData {
+            changes: vec![],
+            cursor: CursorData {
+                row: 0,
+                col: 0,
+                visible: true,
+            },
+            cols: 80,
+            rows: 24,
+            title: None,
+        });
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ServerMsg::ScreenUpdate(su) => {
+                assert!(su.title.is_none());
+                assert_eq!(su.cols, 80);
+            }
+            _ => panic!("expected ScreenUpdate"),
+        }
+    }
+
+    #[test]
+    fn round_trip_snapshot_with_title() {
+        let msg = ServerMsg::ScreenSnapshot(ScreenSnapshotData {
+            rows: vec![],
+            cursor: CursorData {
+                row: 5,
+                col: 10,
+                visible: false,
+            },
+            cols: 120,
+            num_rows: 40,
+            title: Some("my terminal".into()),
+            scrollback_len: 500,
+        });
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ServerMsg::ScreenSnapshot(ss) => {
+                assert_eq!(ss.title.as_deref(), Some("my terminal"));
+                assert_eq!(ss.scrollback_len, 500);
+                assert!(!ss.cursor.visible);
+            }
+            _ => panic!("expected ScreenSnapshot"),
+        }
+    }
+
+    #[test]
+    fn decode_invalid_client_msg() {
+        let result = ClientMsg::decode_flatbuffer(&[0xFF, 0x00, 0x01]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn decode_invalid_server_msg() {
+        let result = ServerMsg::decode_flatbuffer(&[0xFF, 0x00, 0x01]);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn attr_bitflags() {
+        assert_eq!(ATTR_BOLD, 1);
+        assert_eq!(ATTR_ITALIC, 2);
+        assert_eq!(ATTR_UNDERLINE, 4);
+        assert_eq!(ATTR_STRIKETHROUGH, 8);
+        assert_eq!(ATTR_REVERSE, 16);
+        assert_eq!(ATTR_DIM, 32);
+        assert_eq!(ATTR_HIDDEN, 64);
+        // No overlap.
+        let all = ATTR_BOLD
+            | ATTR_ITALIC
+            | ATTR_UNDERLINE
+            | ATTR_STRIKETHROUGH
+            | ATTR_REVERSE
+            | ATTR_DIM
+            | ATTR_HIDDEN;
+        assert_eq!(all, 127);
+    }
 }

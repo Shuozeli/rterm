@@ -188,7 +188,7 @@ async fn try_connect(
     // Read PTY output and feed to terminal.
     while let Some(msg) = stream.next().await {
         match msg {
-            Ok(ServerMsg::ScreenUpdate(d)) => {
+            Ok(ServerMsg::ScreenUpdate(_d)) => {
                 let mut t = terminal.lock().unwrap();
                 t.feed(&format!("screen update").into_bytes());
                 ctx.request_repaint();
