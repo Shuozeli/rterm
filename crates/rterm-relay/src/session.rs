@@ -123,7 +123,10 @@ pub async fn run_session(
         }
 
         if let Some(update) = prev.diff(terminal.screen())
-            && server_tx.send(ServerMsg::ScreenUpdate(update)).await.is_err()
+            && server_tx
+                .send(ServerMsg::ScreenUpdate(update))
+                .await
+                .is_err()
         {
             break;
         }
