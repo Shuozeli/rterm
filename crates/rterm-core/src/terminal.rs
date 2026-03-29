@@ -747,9 +747,77 @@ mod tests {
     #[test]
     fn extended_color_invalid() {
         let mut t = term();
-        // SGR 38;9;... — invalid sub-command, should be ignored.
         feed(&mut t, "\x1b[38;9;1;2;3mX\x1b[0m");
-        // Should not crash, X rendered with default color.
         assert_eq!(t.screen().cell(0, 0).ch, 'X');
+    }
+
+    #[test]
+    fn vpa_line_position_absolute() {
+        let mut t = term();
+        feed(&mut t, "\x1b[5d"); // VPA: move to row 5 (1-indexed)
+        assert_eq!(t.screen().cursor.row, 4);
+    }
+
+    #[test]
+    fn cha_cursor_character_absolute() {
+        let mut t = term();
+        feed(&mut t, "\x1b[10G"); // CHA: move to col 10 (1-indexed)
+        assert_eq!(t.screen().cursor.col, 9);
+    }
+
+    #[test]
+    fn reverse_index_at_top() {
+        let mut t = Terminal::new(10, 3);
+        feed(&mut t, "Line0\r\nLine1\r\nLine2");
+        feed(&mut t, "\x1b[H"); // home
+        feed(&mut t, "\x1bM"); // RI: reverse index at top — should scroll down
+        assert_eq!(t.screen().cell(0, 0).ch, ' '); // blank line inserted
+        assert_eq!(t.screen().cell(1, 0).ch, 'L'); // old line 0
+    }
+
+    #[test]
+    fn reverse_index_not_at_top() {
+        let mut t = Terminal::new(10, 3);
+        feed(&mut t, "\x1b[2;1H"); // row 2
+        feed(&mut t, "\x1bM"); // RI: just moves up
+        assert_eq!(t.screen().cursor.row, 0);
+    }
+
+    #[test]
+    fn scroll_up_command() {
+        let mut t = Terminal::new(10, 3);
+        feed(&mut t, "A\r\nB\r\nC");
+        feed(&mut t, "\x1b[1S"); // SU: scroll up 1
+        assert_eq!(t.screen().cell(0, 0).ch, 'B');
+        assert_eq!(t.screen().cell(1, 0).ch, 'C');
+        assert_eq!(t.screen().cell(2, 0).ch, ' ');
+    }
+
+    #[test]
+    fn scroll_down_command() {
+        let mut t = Terminal::new(10, 3);
+        feed(&mut t, "A\r\nB\r\nC");
+        feed(&mut t, "\x1b[1T"); // SD: scroll down 1
+        assert_eq!(t.screen().cell(0, 0).ch, ' ');
+        assert_eq!(t.screen().cell(1, 0).ch, 'A');
+        assert_eq!(t.screen().cell(2, 0).ch, 'B');
+    }
+
+    #[test]
+    fn esc_d_index() {
+        let mut t = Terminal::new(10, 3);
+        feed(&mut t, "\x1b[3;1H"); // last row
+        feed(&mut t, "\x1bD"); // IND: index (same as LF)
+        // At bottom, should scroll up.
+        assert_eq!(t.screen().cursor.row, 2);
+    }
+
+    #[test]
+    fn origin_mode() {
+        let mut t = Terminal::new(80, 24);
+        feed(&mut t, "\x1b[?6h"); // DECOM on
+        assert!(t.modes.origin);
+        feed(&mut t, "\x1b[?6l"); // DECOM off
+        assert!(!t.modes.origin);
     }
 }

@@ -100,16 +100,36 @@ impl PtySpawner for RealPtySpawner {
     }
 }
 
+// Backward compat.
+pub struct PtySession;
+impl PtySession {
+    pub fn spawn(
+        shell: &str,
+        cols: u16,
+        rows: u16,
+    ) -> Result<PtyHandle, Box<dyn std::error::Error + Send + Sync>> {
+        RealPtySpawner.spawn(shell, cols, rows)
+    }
+}
+
 /// Fake PTY spawner for tests. Uses in-memory channels.
+/// After `spawn()`, call `take_control()` to get handles for reading
+/// what was sent to stdin and resize.
 #[cfg(test)]
 pub mod fake {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    /// Control handle for verifying what the session sent to the PTY.
+    pub struct FakePtyControl {
+        pub stdin_rx: mpsc::Receiver<Vec<u8>>,
+        pub resize_rx: mpsc::Receiver<(u16, u16)>,
+    }
 
     pub struct FakePtySpawner {
-        /// Pre-loaded stdout data. Sent to the PTY handle's stdout_rx.
         pub stdout_data: Vec<Vec<u8>>,
-        /// If true, spawn returns an error.
         pub fail: bool,
+        control: Arc<Mutex<Option<FakePtyControl>>>,
     }
 
     impl FakePtySpawner {
@@ -117,6 +137,7 @@ pub mod fake {
             Self {
                 stdout_data: Vec::new(),
                 fail: false,
+                control: Arc::new(Mutex::new(None)),
             }
         }
 
@@ -129,12 +150,12 @@ pub mod fake {
             self.fail = true;
             self
         }
-    }
 
-    /// Returned alongside PtyHandle so tests can read what was sent to stdin.
-    pub struct FakePtyControl {
-        pub stdin_rx: mpsc::Receiver<Vec<u8>>,
-        pub resize_rx: mpsc::Receiver<(u16, u16)>,
+        /// Take the control handle after spawn() was called.
+        /// Returns None if spawn wasn't called or already taken.
+        pub fn take_control(&self) -> Option<FakePtyControl> {
+            self.control.lock().unwrap().take()
+        }
     }
 
     impl PtySpawner for FakePtySpawner {
@@ -148,9 +169,15 @@ pub mod fake {
                 return Err("fake PTY spawn failure".into());
             }
 
-            let (stdin_tx, _stdin_rx) = mpsc::channel(64);
+            let (stdin_tx, stdin_rx) = mpsc::channel(64);
             let (stdout_tx, stdout_rx) = mpsc::channel(64);
-            let (resize_tx, _resize_rx) = mpsc::channel(8);
+            let (resize_tx, resize_rx) = mpsc::channel(8);
+
+            // Store control handles so tests can read stdin/resize.
+            *self.control.lock().unwrap() = Some(FakePtyControl {
+                stdin_rx,
+                resize_rx,
+            });
 
             // Send pre-loaded stdout data.
             let data = self.stdout_data.clone();
@@ -160,7 +187,6 @@ pub mod fake {
                         break;
                     }
                 }
-                // Drop stdout_tx to signal EOF.
             });
 
             Ok(PtyHandle {
@@ -172,19 +198,6 @@ pub mod fake {
     }
 }
 
-// Backward compat: PtySession delegates to RealPtySpawner.
-pub struct PtySession;
-
-impl PtySession {
-    pub fn spawn(
-        shell: &str,
-        cols: u16,
-        rows: u16,
-    ) -> Result<PtyHandle, Box<dyn std::error::Error + Send + Sync>> {
-        RealPtySpawner.spawn(shell, cols, rows)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::fake::*;
@@ -192,7 +205,6 @@ mod tests {
 
     #[test]
     fn pty_handle_fields() {
-        // PtyHandle is just a struct of channels — verify it exists.
         fn assert_send<T: Send>() {}
         assert_send::<PtyHandle>();
     }
@@ -207,7 +219,6 @@ mod tests {
     async fn fake_spawner_returns_handle() {
         let spawner = FakePtySpawner::new();
         let handle = spawner.spawn("bash", 80, 24).unwrap();
-        // Handle should have valid channels.
         drop(handle.stdin_tx);
         drop(handle.resize_tx);
     }
@@ -216,19 +227,36 @@ mod tests {
     async fn fake_spawner_sends_stdout() {
         let spawner = FakePtySpawner::new().with_stdout(vec![b"hello".to_vec(), b"world".to_vec()]);
         let mut handle = spawner.spawn("bash", 80, 24).unwrap();
-
-        let msg1 = handle.stdout_rx.recv().await.unwrap();
-        assert_eq!(msg1, b"hello");
-        let msg2 = handle.stdout_rx.recv().await.unwrap();
-        assert_eq!(msg2, b"world");
-        // EOF.
+        assert_eq!(handle.stdout_rx.recv().await.unwrap(), b"hello");
+        assert_eq!(handle.stdout_rx.recv().await.unwrap(), b"world");
         assert!(handle.stdout_rx.recv().await.is_none());
     }
 
     #[tokio::test]
     async fn fake_spawner_can_fail() {
         let spawner = FakePtySpawner::new().failing();
-        let result = spawner.spawn("bash", 80, 24);
-        assert!(result.is_err());
+        assert!(spawner.spawn("bash", 80, 24).is_err());
+    }
+
+    #[tokio::test]
+    async fn fake_spawner_control_reads_stdin() {
+        let spawner = FakePtySpawner::new();
+        let handle = spawner.spawn("bash", 80, 24).unwrap();
+        let mut ctrl = spawner.take_control().unwrap();
+
+        handle.stdin_tx.send(b"test input".to_vec()).await.unwrap();
+        let received = ctrl.stdin_rx.recv().await.unwrap();
+        assert_eq!(received, b"test input");
+    }
+
+    #[tokio::test]
+    async fn fake_spawner_control_reads_resize() {
+        let spawner = FakePtySpawner::new();
+        let handle = spawner.spawn("bash", 80, 24).unwrap();
+        let mut ctrl = spawner.take_control().unwrap();
+
+        handle.resize_tx.send((120, 40)).await.unwrap();
+        let (cols, rows) = ctrl.resize_rx.recv().await.unwrap();
+        assert_eq!((cols, rows), (120, 40));
     }
 }

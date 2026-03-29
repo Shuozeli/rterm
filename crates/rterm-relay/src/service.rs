@@ -1,15 +1,15 @@
-use crate::pty::PtySession;
-use crate::screen_diff::{self, PrevScreen};
+use crate::pty::RealPtySpawner;
+use crate::session;
 use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::body::Body;
 use grpc_core::{BoxFuture, Request, Response, Status, Streaming};
 use grpc_server::{Grpc, NamedService, StreamingService};
-use rterm_core::Terminal;
 use rterm_proto::*;
 use std::convert::Infallible;
 use std::task::{Context, Poll};
-use tokio_stream::Stream;
-use tracing::{debug, info};
+use tokio::sync::mpsc;
+use tokio_stream::{Stream, StreamExt};
+use tracing::debug;
 
 const DEFAULT_SHELL: &str = "/bin/bash";
 
@@ -49,69 +49,32 @@ impl StreamingService<ClientMsg> for TerminalSvc {
         Box::pin(async move {
             let mut input = request.into_inner();
 
-            let (cols, rows) = match input.message().await? {
-                Some(ClientMsg::Resize(r)) => (r.cols, r.rows),
-                Some(_) => return Err(Status::invalid_argument("first message must be Resize")),
-                None => return Err(Status::invalid_argument("empty stream")),
-            };
+            // Bridge gRPC Streaming<ClientMsg> -> mpsc channel -> session.
+            let (client_tx, mut client_rx) = mpsc::channel(64);
+            let (server_tx, server_rx) = mpsc::channel(64);
 
-            info!("spawning PTY: shell={}, size={}x{}", shell, cols, rows);
-
-            let pty = PtySession::spawn(&shell, cols, rows)
-                .map_err(|e| Status::internal(format!("failed to spawn PTY: {e}")))?;
-
-            let stdin_tx = pty.stdin_tx;
-            let resize_tx = pty.resize_tx;
-
+            // Forward gRPC stream to channel.
             tokio::spawn(async move {
                 while let Ok(Some(msg)) = input.message().await {
-                    match msg {
-                        ClientMsg::KeyInput(k) => {
-                            if stdin_tx.send(k.data).await.is_err() {
-                                break;
-                            }
-                        }
-                        ClientMsg::PasteInput(p) => {
-                            if stdin_tx.send(p.text.into_bytes()).await.is_err() {
-                                break;
-                            }
-                        }
-                        ClientMsg::Resize(r) => {
-                            if resize_tx.send((r.cols, r.rows)).await.is_err() {
-                                break;
-                            }
-                        }
-                        ClientMsg::MouseEvent(_) => {}
-                    }
-                }
-                debug!("client input stream ended");
-            });
-
-            let mut terminal = Terminal::new(cols as usize, rows as usize);
-            let mut prev = PrevScreen::new(cols as usize, rows as usize);
-            let mut stdout_rx = pty.stdout_rx;
-
-            let ss = screen_diff::snapshot(terminal.screen());
-            prev.update_from_snapshot(&ss);
-            let (tx, rx) = tokio::sync::mpsc::channel(64);
-            let _ = tx.send(Ok(ServerMsg::ScreenSnapshot(ss))).await;
-
-            tokio::spawn(async move {
-                while let Some(data) = stdout_rx.recv().await {
-                    terminal.feed(&data);
-                    if terminal.is_sync_mode() {
-                        continue;
-                    }
-                    if let Some(update) = prev.diff(terminal.screen())
-                        && tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err()
-                    {
+                    if client_tx.send(msg).await.is_err() {
                         break;
                     }
                 }
-                let _ = tx.send(Ok(ServerMsg::Exit(Exit { code: 0 }))).await;
+                debug!("gRPC client stream ended");
             });
 
-            let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+            // Run session in background.
+            let spawner = RealPtySpawner;
+            tokio::spawn(async move {
+                if let Err(e) =
+                    session::run_session(&mut client_rx, &server_tx, &spawner, &shell).await
+                {
+                    debug!("session error: {}", e);
+                }
+            });
+
+            // Convert channel to response stream.
+            let stream = tokio_stream::wrappers::ReceiverStream::new(server_rx).map(Ok);
             Ok(Response::new(Box::pin(stream) as SessionResponseStream))
         })
     }
@@ -153,5 +116,17 @@ mod tests {
     fn terminal_server_is_clone() {
         let s = TerminalServer::new();
         let _s2 = s.clone();
+    }
+
+    #[test]
+    fn terminal_server_default() {
+        let s = TerminalServer::default();
+        assert!(s.shell.is_empty() || s.shell == DEFAULT_SHELL);
+    }
+
+    #[test]
+    fn terminal_server_with_shell() {
+        let s = TerminalServer::with_shell("/bin/zsh");
+        assert_eq!(s.shell, "/bin/zsh");
     }
 }

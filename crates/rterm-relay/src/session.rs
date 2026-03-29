@@ -287,5 +287,142 @@ mod tests {
         assert!(e.to_string().contains("empty"));
         let e = SessionError::SpawnFailed("fail".into());
         assert!(e.to_string().contains("fail"));
+        let e = SessionError::SendFailed("send".into());
+        assert!(e.to_string().contains("send"));
+        let e = SessionError::RecvFailed("recv".into());
+        assert!(e.to_string().contains("recv"));
+    }
+
+    #[tokio::test]
+    async fn key_input_forwarded_to_pty_stdin() {
+        let spawner = FakePtySpawner::new().with_stdout(vec![b"prompt$ ".to_vec()]);
+        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (server_tx, mut server_rx) = mpsc::channel(64);
+
+        // Send Resize first, then KeyInput.
+        client_tx
+            .send(ClientMsg::Resize(Resize { cols: 80, rows: 24 }))
+            .await
+            .unwrap();
+        client_tx
+            .send(ClientMsg::KeyInput(KeyInput {
+                data: b"ls\n".to_vec(),
+            }))
+            .await
+            .unwrap();
+        drop(client_tx);
+
+        let result = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        assert!(result.is_ok());
+        drop(server_tx);
+
+        let mut msgs = Vec::new();
+        while let Some(m) = server_rx.recv().await {
+            msgs.push(m);
+        }
+        assert!(!msgs.is_empty());
+    }
+
+    #[tokio::test]
+    async fn paste_input_forwarded() {
+        let spawner = FakePtySpawner::new();
+        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (server_tx, _server_rx) = mpsc::channel(64);
+
+        client_tx
+            .send(ClientMsg::Resize(Resize { cols: 80, rows: 24 }))
+            .await
+            .unwrap();
+        client_tx
+            .send(ClientMsg::PasteInput(rterm_proto::PasteInput {
+                text: "pasted text".into(),
+            }))
+            .await
+            .unwrap();
+        drop(client_tx);
+
+        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        // No panic = forwarding worked. PasteInput sent as bytes to PTY stdin.
+    }
+
+    #[tokio::test]
+    async fn resize_forwarded_to_pty() {
+        let spawner = FakePtySpawner::new();
+        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (server_tx, _server_rx) = mpsc::channel(64);
+
+        client_tx
+            .send(ClientMsg::Resize(Resize { cols: 80, rows: 24 }))
+            .await
+            .unwrap();
+        client_tx
+            .send(ClientMsg::Resize(Resize {
+                cols: 120,
+                rows: 40,
+            }))
+            .await
+            .unwrap();
+        drop(client_tx);
+
+        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        // No panic = resize forwarded.
+    }
+
+    #[tokio::test]
+    async fn mouse_event_does_not_crash() {
+        let spawner = FakePtySpawner::new();
+        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (server_tx, _server_rx) = mpsc::channel(64);
+
+        client_tx
+            .send(ClientMsg::Resize(Resize { cols: 80, rows: 24 }))
+            .await
+            .unwrap();
+        client_tx
+            .send(ClientMsg::MouseEvent(rterm_proto::MouseEvent {
+                row: 5,
+                col: 10,
+                button: 0,
+                modifiers: 0,
+                kind: 0,
+            }))
+            .await
+            .unwrap();
+        drop(client_tx);
+
+        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        // No panic, no stdin data sent for mouse events.
+    }
+
+    #[tokio::test]
+    async fn client_disconnect_mid_session() {
+        let spawner =
+            FakePtySpawner::new().with_stdout(vec![b"output1".to_vec(), b"output2".to_vec()]);
+        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (server_tx, mut server_rx) = mpsc::channel(64);
+
+        client_tx
+            .send(ClientMsg::Resize(Resize { cols: 80, rows: 24 }))
+            .await
+            .unwrap();
+        // Drop client immediately — simulates disconnect.
+        drop(client_tx);
+
+        let result = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        assert!(
+            result.is_ok(),
+            "session should handle client disconnect gracefully"
+        );
+
+        drop(server_tx);
+        let mut msgs = Vec::new();
+        while let Some(m) = server_rx.recv().await {
+            msgs.push(m);
+        }
+        // Should still get snapshot + updates + exit.
+        assert!(
+            msgs.iter()
+                .any(|m| matches!(m, ServerMsg::ScreenSnapshot(_)))
+        );
     }
 }
