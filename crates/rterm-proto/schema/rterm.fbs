@@ -1,65 +1,164 @@
-// rterm protocol: FlatBuffers schema for terminal communication.
+// rterm protocol v2: typed screen updates.
 //
-// Client sends ClientMessage (keyboard input, resize events).
-// Server sends ServerMessage (PTY output, exit status, errors).
-// Carried over gRPC bidi streaming on HTTP/3.
+// The server runs VT emulation and sends structured screen diffs.
+// The client is a thin renderer — it just paints what the server tells it.
 
 namespace rterm.protocol;
 
-// --- Client to Server ---
+// ============================================================================
+// Client → Server
+// ============================================================================
 
-table DataIn {
-    /// Raw bytes from keyboard input (VT-encoded).
-    payload: [ubyte];
+/// Keyboard input (VT-encoded bytes for the PTY).
+table KeyInput {
+    data: [ubyte];
 }
 
+/// Text paste (server will bracket-wrap for bracketed paste mode).
+table PasteInput {
+    text: string;
+}
+
+/// Terminal resize request.
 table Resize {
-    /// Terminal width in columns.
     cols: uint16;
-    /// Terminal height in rows.
     rows: uint16;
 }
 
+/// Mouse event.
+table MouseEvent {
+    row: uint16;
+    col: uint16;
+    button: uint8;     // 0=left, 1=middle, 2=right, 3=release
+    modifiers: uint8;  // bitflags: 1=shift, 2=alt, 4=ctrl
+    kind: MouseEventKind;
+}
+
+enum MouseEventKind : uint8 {
+    Press = 0,
+    Release = 1,
+    Drag = 2,
+    ScrollUp = 3,
+    ScrollDown = 4,
+}
+
 union ClientBody {
-    DataIn,
+    KeyInput,
+    PasteInput,
     Resize,
+    MouseEvent,
 }
 
 table ClientMessage {
     body: ClientBody;
 }
 
-// --- Server to Client ---
+// ============================================================================
+// Server → Client
+// ============================================================================
 
-table DataOut {
-    /// Raw bytes from PTY stdout.
-    payload: [ubyte];
+/// A single terminal cell with character and style.
+struct Cell {
+    /// Unicode codepoint.
+    ch: uint32;
+    /// Foreground color: 0x00RRGGBB for RGB, 0xFF0000II for indexed, 0xFFFFFFFF for default.
+    fg: uint32;
+    /// Background color: same encoding as fg.
+    bg: uint32;
+    /// Attribute flags (bitfield):
+    ///   bit 0: bold
+    ///   bit 1: italic
+    ///   bit 2: underline
+    ///   bit 3: strikethrough
+    ///   bit 4: reverse
+    ///   bit 5: dim
+    ///   bit 6: hidden
+    attrs: uint8;
 }
 
+/// A contiguous range of cells on a single row.
+table CellRange {
+    row: uint16;
+    col_start: uint16;
+    cells: [Cell];
+}
+
+/// Cursor state.
+table CursorState {
+    row: uint16;
+    col: uint16;
+    visible: bool;
+}
+
+/// A screen update: changed cells + cursor.
+table ScreenUpdate {
+    /// Changed cell ranges (only cells that differ from last frame).
+    changes: [CellRange];
+    /// Current cursor state.
+    cursor: CursorState;
+    /// Terminal dimensions (cols x rows).
+    cols: uint16;
+    rows: uint16;
+    /// Window title (from OSC 0/2), null if unchanged.
+    title: string;
+}
+
+/// Full screen snapshot (sent on initial connect or after resize).
+table ScreenSnapshot {
+    /// All rows, in order.
+    rows: [CellRange];
+    /// Current cursor state.
+    cursor: CursorState;
+    /// Terminal dimensions.
+    cols: uint16;
+    num_rows: uint16;
+    /// Window title.
+    title: string;
+    /// Number of scrollback lines available.
+    scrollback_len: uint32;
+}
+
+/// Scrollback data (sent when client requests scroll).
+table ScrollbackData {
+    /// Lines from scrollback buffer.
+    lines: [CellRange];
+    /// Offset from bottom (0 = most recent scrollback line).
+    offset: uint32;
+    /// Total scrollback lines available.
+    total: uint32;
+}
+
+/// Shell exited.
 table Exit {
-    /// Shell process exit code.
     code: int32;
 }
 
+/// Error message.
 table Error {
-    /// Human-readable error message.
     message: string;
 }
 
+/// Bell (BEL character received).
+table Bell {}
+
 union ServerBody {
-    DataOut,
+    ScreenUpdate,
+    ScreenSnapshot,
+    ScrollbackData,
     Exit,
     Error,
+    Bell,
 }
 
 table ServerMessage {
     body: ServerBody;
 }
 
-// --- gRPC Service ---
+// ============================================================================
+// gRPC Service (for native clients)
+// ============================================================================
 
 rpc_service TerminalService {
-    /// Bidirectional streaming: client sends input/resize, server sends PTY output/exit/error.
     Session(ClientMessage): ServerMessage (streaming: "bidi");
 }
 

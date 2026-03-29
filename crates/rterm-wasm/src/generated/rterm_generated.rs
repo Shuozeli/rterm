@@ -11,28 +11,131 @@ pub mod rterm {
   pub mod protocol {
     use super::*;
 
+    #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+    pub const ENUM_MIN_MOUSEEVENTKIND: u8 = 0;
+    #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+    pub const ENUM_MAX_MOUSEEVENTKIND: u8 = 4;
+    #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+    #[allow(non_camel_case_types)]
+    pub const ENUM_VALUES_MOUSEEVENTKIND: [MouseEventKind; 5] = [
+      MouseEventKind::Press,
+      MouseEventKind::Release,
+      MouseEventKind::Drag,
+      MouseEventKind::ScrollUp,
+      MouseEventKind::ScrollDown,
+    ];
+
+    #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+    #[repr(transparent)]
+    pub struct MouseEventKind(pub u8);
+    #[allow(non_upper_case_globals)]
+    impl MouseEventKind {
+      pub const Press: Self = Self(0);
+      pub const Release: Self = Self(1);
+      pub const Drag: Self = Self(2);
+      pub const ScrollUp: Self = Self(3);
+      pub const ScrollDown: Self = Self(4);
+
+      pub const ENUM_MIN: u8 = 0;
+      pub const ENUM_MAX: u8 = 4;
+      pub const ENUM_VALUES: &'static [Self] = &[
+        Self::Press,
+        Self::Release,
+        Self::Drag,
+        Self::ScrollUp,
+        Self::ScrollDown,
+      ];
+      /// Returns the variant's name or "" if unknown.
+      pub fn variant_name(self) -> Option<&'static str> {
+        match self {
+          Self::Press => Some("Press"),
+          Self::Release => Some("Release"),
+          Self::Drag => Some("Drag"),
+          Self::ScrollUp => Some("ScrollUp"),
+          Self::ScrollDown => Some("ScrollDown"),
+          _ => None,
+        }
+      }
+    }
+    impl ::core::fmt::Debug for MouseEventKind {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        if let Some(name) = self.variant_name() {
+          f.write_str(name)
+        } else {
+          f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+        }
+      }
+    }
+    impl<'a> ::flatbuffers::Follow<'a> for MouseEventKind {
+      type Inner = Self;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        let b = unsafe { ::flatbuffers::read_scalar_at::<u8>(buf, loc) };
+        Self(b)
+      }
+    }
+
+    impl ::flatbuffers::Push for MouseEventKind {
+      type Output = MouseEventKind;
+      #[inline]
+      unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { ::flatbuffers::emplace_scalar::<u8>(dst, self.0) };
+      }
+    }
+
+    impl ::flatbuffers::EndianScalar for MouseEventKind {
+      type Scalar = u8;
+      #[inline]
+      fn to_little_endian(self) -> u8 {
+        self.0.to_le()
+      }
+      #[inline]
+      #[allow(clippy::wrong_self_convention)]
+      fn from_little_endian(v: u8) -> Self {
+        let b = u8::from_le(v);
+        Self(b)
+      }
+    }
+
+    impl<'a> ::flatbuffers::Verifiable for MouseEventKind {
+      #[inline]
+      fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        u8::run_verifier(v, pos)
+      }
+    }
+
+    impl ::flatbuffers::SimpleToVerifyInSlice for MouseEventKind {}
+
     #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
     #[repr(transparent)]
     pub struct ClientBody(pub u8);
     #[allow(non_upper_case_globals)]
     impl ClientBody {
       pub const NONE: Self = Self(0);
-      pub const DataIn: Self = Self(1);
-      pub const Resize: Self = Self(2);
+      pub const KeyInput: Self = Self(1);
+      pub const PasteInput: Self = Self(2);
+      pub const Resize: Self = Self(3);
+      pub const MouseEvent: Self = Self(4);
 
       pub const ENUM_MIN: u8 = 0;
-      pub const ENUM_MAX: u8 = 2;
+      pub const ENUM_MAX: u8 = 4;
       pub const ENUM_VALUES: &'static [Self] = &[
         Self::NONE,
-        Self::DataIn,
+        Self::KeyInput,
+        Self::PasteInput,
         Self::Resize,
+        Self::MouseEvent,
       ];
       /// Returns the variant's name or "" if unknown.
       pub fn variant_name(self) -> Option<&'static str> {
         match self {
           Self::NONE => Some("NONE"),
-          Self::DataIn => Some("DataIn"),
+          Self::KeyInput => Some("KeyInput"),
+          Self::PasteInput => Some("PasteInput"),
           Self::Resize => Some("Resize"),
+          Self::MouseEvent => Some("MouseEvent"),
           _ => None,
         }
       }
@@ -96,25 +199,34 @@ pub mod rterm {
     #[allow(non_upper_case_globals)]
     impl ServerBody {
       pub const NONE: Self = Self(0);
-      pub const DataOut: Self = Self(1);
-      pub const Exit: Self = Self(2);
-      pub const Error: Self = Self(3);
+      pub const ScreenUpdate: Self = Self(1);
+      pub const ScreenSnapshot: Self = Self(2);
+      pub const ScrollbackData: Self = Self(3);
+      pub const Exit: Self = Self(4);
+      pub const Error: Self = Self(5);
+      pub const Bell: Self = Self(6);
 
       pub const ENUM_MIN: u8 = 0;
-      pub const ENUM_MAX: u8 = 3;
+      pub const ENUM_MAX: u8 = 6;
       pub const ENUM_VALUES: &'static [Self] = &[
         Self::NONE,
-        Self::DataOut,
+        Self::ScreenUpdate,
+        Self::ScreenSnapshot,
+        Self::ScrollbackData,
         Self::Exit,
         Self::Error,
+        Self::Bell,
       ];
       /// Returns the variant's name or "" if unknown.
       pub fn variant_name(self) -> Option<&'static str> {
         match self {
           Self::NONE => Some("NONE"),
-          Self::DataOut => Some("DataOut"),
+          Self::ScreenUpdate => Some("ScreenUpdate"),
+          Self::ScreenSnapshot => Some("ScreenSnapshot"),
+          Self::ScrollbackData => Some("ScrollbackData"),
           Self::Exit => Some("Exit"),
           Self::Error => Some("Error"),
+          Self::Bell => Some("Bell"),
           _ => None,
         }
       }
@@ -172,110 +284,217 @@ pub mod rterm {
 
     pub struct ServerBodyUnionTableOffset {}
 
-    pub enum DataInOffset {}
+    pub enum KeyInputOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
-    pub struct DataIn<'a> {
+    pub struct KeyInput<'a> {
       pub _tab: ::flatbuffers::Table<'a>,
     }
 
-    impl<'a> ::flatbuffers::Follow<'a> for DataIn<'a> {
-      type Inner = DataIn<'a>;
+    impl<'a> ::flatbuffers::Follow<'a> for KeyInput<'a> {
+      type Inner = KeyInput<'a>;
       #[inline]
       unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
         Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
       }
     }
 
-    impl<'a> DataIn<'a> {
-      pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
+    impl<'a> KeyInput<'a> {
+      pub const VT_DATA: ::flatbuffers::VOffsetT = 4;
 
       #[inline]
       pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        DataIn { _tab: table }
+        KeyInput { _tab: table }
       }
       #[allow(unused_mut)]
       pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
         _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args DataInArgs<'args>
-      ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
-        let mut builder = DataInBuilder::new(_fbb);
-        if let Some(x) = args.payload { builder.add_payload(x); }
+        args: &'args KeyInputArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<KeyInput<'bldr>> {
+        let mut builder = KeyInputBuilder::new(_fbb);
+        if let Some(x) = args.data { builder.add_data(x); }
         builder.finish()
       }
 
 
       #[inline]
-      pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+      pub fn data(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
         // Safety:
         // Created from valid Table for this object
         // which contains a valid value in this slot
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(DataIn::VT_PAYLOAD, None)}
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(KeyInput::VT_DATA, None)}
       }
     }
 
-    impl ::flatbuffers::Verifiable for DataIn<'_> {
+    impl ::flatbuffers::Verifiable for KeyInput<'_> {
       #[inline]
       fn run_verifier(
         v: &mut ::flatbuffers::Verifier, pos: usize
       ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
         v.visit_table(pos)?
-         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("payload", Self::VT_PAYLOAD, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("data", Self::VT_DATA, false)?
          .finish();
         Ok(())
       }
     }
-    pub struct DataInArgs<'a> {
-        pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
+    pub struct KeyInputArgs<'a> {
+        pub data: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
     }
-    impl<'a> Default for DataInArgs<'a> {
+    impl<'a> Default for KeyInputArgs<'a> {
       #[inline]
       fn default() -> Self {
-        DataInArgs {
-          payload: None,
+        KeyInputArgs {
+          data: None,
         }
       }
     }
 
-    pub struct DataInBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+    pub struct KeyInputBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
       fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
       start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
     }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataInBuilder<'a, 'b, A> {
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> KeyInputBuilder<'a, 'b, A> {
       #[inline]
-      pub fn add_payload(&mut self, payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(DataIn::VT_PAYLOAD, payload);
+      pub fn add_data(&mut self, data: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(KeyInput::VT_DATA, data);
       }
       #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> DataInBuilder<'a, 'b, A> {
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> KeyInputBuilder<'a, 'b, A> {
         let start = _fbb.start_table();
-        DataInBuilder {
+        KeyInputBuilder {
           fbb_: _fbb,
           start_: start,
         }
       }
       #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<DataIn<'a>> {
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<KeyInput<'a>> {
         let o = self.fbb_.end_table(self.start_);
         ::flatbuffers::WIPOffset::new(o.value())
       }
     }
 
-    impl ::core::fmt::Debug for DataIn<'_> {
+    impl ::core::fmt::Debug for KeyInput<'_> {
       fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("DataIn");
-        ds.field("payload", &self.payload());
+        let mut ds = f.debug_struct("KeyInput");
+        ds.field("data", &self.data());
         ds.finish()
       }
     }
 
     #[inline]
-    pub fn createDataIn<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    pub fn createKeyInput<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
       fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args DataInArgs<'args>,
-    ) -> ::flatbuffers::WIPOffset<DataIn<'bldr>> {
-      let mut builder = DataInBuilder::new(fbb);
-      if let Some(x) = args.payload { builder.add_payload(x); }
+      args: &'args KeyInputArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<KeyInput<'bldr>> {
+      let mut builder = KeyInputBuilder::new(fbb);
+      if let Some(x) = args.data { builder.add_data(x); }
+      builder.finish()
+    }
+
+    pub enum PasteInputOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct PasteInput<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for PasteInput<'a> {
+      type Inner = PasteInput<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> PasteInput<'a> {
+      pub const VT_TEXT: ::flatbuffers::VOffsetT = 4;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        PasteInput { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args PasteInputArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<PasteInput<'bldr>> {
+        let mut builder = PasteInputBuilder::new(_fbb);
+        if let Some(x) = args.text { builder.add_text(x); }
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn text(&self) -> Option<&'a str> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(PasteInput::VT_TEXT, None)}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for PasteInput<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("text", Self::VT_TEXT, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct PasteInputArgs<'a> {
+        pub text: Option<::flatbuffers::WIPOffset<&'a str>>,
+    }
+    impl<'a> Default for PasteInputArgs<'a> {
+      #[inline]
+      fn default() -> Self {
+        PasteInputArgs {
+          text: None,
+        }
+      }
+    }
+
+    pub struct PasteInputBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> PasteInputBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_text(&mut self, text: ::flatbuffers::WIPOffset<&'b  str>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(PasteInput::VT_TEXT, text);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> PasteInputBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        PasteInputBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<PasteInput<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for PasteInput<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("PasteInput");
+        ds.field("text", &self.text());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createPasteInput<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args PasteInputArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<PasteInput<'bldr>> {
+      let mut builder = PasteInputBuilder::new(fbb);
+      if let Some(x) = args.text { builder.add_text(x); }
       builder.finish()
     }
 
@@ -404,6 +623,185 @@ pub mod rterm {
       builder.finish()
     }
 
+    pub enum MouseEventOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct MouseEvent<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for MouseEvent<'a> {
+      type Inner = MouseEvent<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> MouseEvent<'a> {
+      pub const VT_ROW: ::flatbuffers::VOffsetT = 4;
+      pub const VT_COL: ::flatbuffers::VOffsetT = 6;
+      pub const VT_BUTTON: ::flatbuffers::VOffsetT = 8;
+      pub const VT_MODIFIERS: ::flatbuffers::VOffsetT = 10;
+      pub const VT_KIND: ::flatbuffers::VOffsetT = 12;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        MouseEvent { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args MouseEventArgs
+      ) -> ::flatbuffers::WIPOffset<MouseEvent<'bldr>> {
+        let mut builder = MouseEventBuilder::new(_fbb);
+        builder.add_col(args.col);
+        builder.add_row(args.row);
+        builder.add_kind(args.kind);
+        builder.add_modifiers(args.modifiers);
+        builder.add_button(args.button);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn row(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(MouseEvent::VT_ROW, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn col(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(MouseEvent::VT_COL, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn button(&self) -> u8 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u8>(MouseEvent::VT_BUTTON, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn modifiers(&self) -> u8 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u8>(MouseEvent::VT_MODIFIERS, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn kind(&self) -> MouseEventKind {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<MouseEventKind>(MouseEvent::VT_KIND, Some(MouseEventKind(0))).unwrap()}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for MouseEvent<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<u16>("row", Self::VT_ROW, false)?
+         .visit_field::<u16>("col", Self::VT_COL, false)?
+         .visit_field::<u8>("button", Self::VT_BUTTON, false)?
+         .visit_field::<u8>("modifiers", Self::VT_MODIFIERS, false)?
+         .visit_field::<MouseEventKind>("kind", Self::VT_KIND, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct MouseEventArgs {
+        pub row: u16,
+        pub col: u16,
+        pub button: u8,
+        pub modifiers: u8,
+        pub kind: MouseEventKind,
+    }
+    impl<'a> Default for MouseEventArgs {
+      #[inline]
+      fn default() -> Self {
+        MouseEventArgs {
+          row: 0,
+          col: 0,
+          button: 0,
+          modifiers: 0,
+          kind: MouseEventKind(0),
+        }
+      }
+    }
+
+    pub struct MouseEventBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> MouseEventBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_row(&mut self, row: u16) {
+        self.fbb_.push_slot::<u16>(MouseEvent::VT_ROW, row, 0);
+      }
+      #[inline]
+      pub fn add_col(&mut self, col: u16) {
+        self.fbb_.push_slot::<u16>(MouseEvent::VT_COL, col, 0);
+      }
+      #[inline]
+      pub fn add_button(&mut self, button: u8) {
+        self.fbb_.push_slot::<u8>(MouseEvent::VT_BUTTON, button, 0);
+      }
+      #[inline]
+      pub fn add_modifiers(&mut self, modifiers: u8) {
+        self.fbb_.push_slot::<u8>(MouseEvent::VT_MODIFIERS, modifiers, 0);
+      }
+      #[inline]
+      pub fn add_kind(&mut self, kind: MouseEventKind) {
+        self.fbb_.push_slot::<MouseEventKind>(MouseEvent::VT_KIND, kind, MouseEventKind(0));
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> MouseEventBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        MouseEventBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<MouseEvent<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for MouseEvent<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("MouseEvent");
+        ds.field("row", &self.row());
+        ds.field("col", &self.col());
+        ds.field("button", &self.button());
+        ds.field("modifiers", &self.modifiers());
+        ds.field("kind", &self.kind());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createMouseEvent<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args MouseEventArgs,
+    ) -> ::flatbuffers::WIPOffset<MouseEvent<'bldr>> {
+      let mut builder = MouseEventBuilder::new(fbb);
+      builder.add_col(args.col);
+      builder.add_row(args.row);
+      builder.add_kind(args.kind);
+      builder.add_modifiers(args.modifiers);
+      builder.add_button(args.button);
+      builder.finish()
+    }
+
     pub enum ClientMessageOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
@@ -452,9 +850,18 @@ pub mod rterm {
       }
 
       #[inline]
-      pub fn body_as_data_in(&self) -> Option<DataIn<'a>> {
-        if self.body_type() == ClientBody::DataIn {
-          self.body().map(|t| unsafe { DataIn::init_from_table(t) })
+      pub fn body_as_key_input(&self) -> Option<KeyInput<'a>> {
+        if self.body_type() == ClientBody::KeyInput {
+          self.body().map(|t| unsafe { KeyInput::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_paste_input(&self) -> Option<PasteInput<'a>> {
+        if self.body_type() == ClientBody::PasteInput {
+          self.body().map(|t| unsafe { PasteInput::init_from_table(t) })
         } else {
           None
         }
@@ -464,6 +871,15 @@ pub mod rterm {
       pub fn body_as_resize(&self) -> Option<Resize<'a>> {
         if self.body_type() == ClientBody::Resize {
           self.body().map(|t| unsafe { Resize::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_mouse_event(&self) -> Option<MouseEvent<'a>> {
+        if self.body_type() == ClientBody::MouseEvent {
+          self.body().map(|t| unsafe { MouseEvent::init_from_table(t) })
         } else {
           None
         }
@@ -542,110 +958,972 @@ pub mod rterm {
       builder.finish()
     }
 
-    pub enum DataOutOffset {}
+    // struct Cell, aligned to 4
+    #[repr(transparent)]
+    #[derive(Clone, Copy, PartialEq)]
+    pub struct Cell(pub [u8; 16]);
+
+    impl Default for Cell {
+      fn default() -> Self {
+        Self([0; 16])
+      }
+    }
+
+    impl ::core::fmt::Debug for Cell {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
+        let mut s = f.debug_struct("Cell");
+        s.field("ch", &self.ch());
+        s.field("fg", &self.fg());
+        s.field("bg", &self.bg());
+        s.field("attrs", &self.attrs());
+        s.finish()
+      }
+    }
+
+    impl Cell {
+      pub fn new(ch: u32, fg: u32, bg: u32, attrs: u8) -> Self {
+        let mut s = Self([0; 16]);
+        s.set_ch(ch);
+        s.set_fg(fg);
+        s.set_bg(bg);
+        s.set_attrs(attrs);
+        s
+      }
+
+      pub fn ch(&self) -> u32 {
+        let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
+        ::flatbuffers::EndianScalar::from_little_endian(unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            self.0[0..].as_ptr(),
+            mem.as_mut_ptr() as *mut u8,
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+          mem.assume_init()
+        })
+      }
+
+      pub fn set_ch(&mut self, ch: u32) {
+        let ch_le = ::flatbuffers::EndianScalar::to_little_endian(ch);
+        unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            &ch_le as *const _ as *const u8,
+            self.0[0..].as_mut_ptr(),
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+        }
+      }
+
+      pub fn fg(&self) -> u32 {
+        let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
+        ::flatbuffers::EndianScalar::from_little_endian(unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            self.0[4..].as_ptr(),
+            mem.as_mut_ptr() as *mut u8,
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+          mem.assume_init()
+        })
+      }
+
+      pub fn set_fg(&mut self, fg: u32) {
+        let fg_le = ::flatbuffers::EndianScalar::to_little_endian(fg);
+        unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            &fg_le as *const _ as *const u8,
+            self.0[4..].as_mut_ptr(),
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+        }
+      }
+
+      pub fn bg(&self) -> u32 {
+        let mut mem = ::core::mem::MaybeUninit::<<u32 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
+        ::flatbuffers::EndianScalar::from_little_endian(unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            self.0[8..].as_ptr(),
+            mem.as_mut_ptr() as *mut u8,
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+          mem.assume_init()
+        })
+      }
+
+      pub fn set_bg(&mut self, bg: u32) {
+        let bg_le = ::flatbuffers::EndianScalar::to_little_endian(bg);
+        unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            &bg_le as *const _ as *const u8,
+            self.0[8..].as_mut_ptr(),
+            ::core::mem::size_of::<<u32 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+        }
+      }
+
+      pub fn attrs(&self) -> u8 {
+        let mut mem = ::core::mem::MaybeUninit::<<u8 as ::flatbuffers::EndianScalar>::Scalar>::uninit();
+        ::flatbuffers::EndianScalar::from_little_endian(unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            self.0[12..].as_ptr(),
+            mem.as_mut_ptr() as *mut u8,
+            ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+          mem.assume_init()
+        })
+      }
+
+      pub fn set_attrs(&mut self, attrs: u8) {
+        let attrs_le = ::flatbuffers::EndianScalar::to_little_endian(attrs);
+        unsafe {
+          ::core::ptr::copy_nonoverlapping(
+            &attrs_le as *const _ as *const u8,
+            self.0[12..].as_mut_ptr(),
+            ::core::mem::size_of::<<u8 as ::flatbuffers::EndianScalar>::Scalar>(),
+          );
+        }
+      }
+
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for Cell {
+      type Inner = &'a Cell;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        unsafe { <&'a Cell>::follow(buf, loc) }
+      }
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for &'a Cell {
+      type Inner = &'a Cell;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        unsafe { ::flatbuffers::follow_cast_ref::<Cell>(buf, loc) }
+      }
+    }
+
+    impl<'b> ::flatbuffers::Push for Cell {
+      type Output = Cell;
+      #[inline]
+      unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        let src = unsafe { ::core::slice::from_raw_parts(self as *const Cell as *const u8, <Self as ::flatbuffers::Push>::size()) };
+        dst.copy_from_slice(src);
+      }
+      #[inline]
+      fn alignment() -> ::flatbuffers::PushAlignment {
+        ::flatbuffers::PushAlignment::new(4)
+      }
+    }
+
+    impl<'a> ::flatbuffers::Verifiable for Cell {
+      #[inline]
+      fn run_verifier(v: &mut ::flatbuffers::Verifier, pos: usize) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.in_buffer::<Self>(pos)
+      }
+    }
+
+    impl ::flatbuffers::SimpleToVerifyInSlice for Cell {}
+
+    pub enum CellRangeOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
-    pub struct DataOut<'a> {
+    pub struct CellRange<'a> {
       pub _tab: ::flatbuffers::Table<'a>,
     }
 
-    impl<'a> ::flatbuffers::Follow<'a> for DataOut<'a> {
-      type Inner = DataOut<'a>;
+    impl<'a> ::flatbuffers::Follow<'a> for CellRange<'a> {
+      type Inner = CellRange<'a>;
       #[inline]
       unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
         Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
       }
     }
 
-    impl<'a> DataOut<'a> {
-      pub const VT_PAYLOAD: ::flatbuffers::VOffsetT = 4;
+    impl<'a> CellRange<'a> {
+      pub const VT_ROW: ::flatbuffers::VOffsetT = 4;
+      pub const VT_COL_START: ::flatbuffers::VOffsetT = 6;
+      pub const VT_CELLS: ::flatbuffers::VOffsetT = 8;
 
       #[inline]
       pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
-        DataOut { _tab: table }
+        CellRange { _tab: table }
       }
       #[allow(unused_mut)]
       pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
         _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-        args: &'args DataOutArgs<'args>
-      ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
-        let mut builder = DataOutBuilder::new(_fbb);
-        if let Some(x) = args.payload { builder.add_payload(x); }
+        args: &'args CellRangeArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<CellRange<'bldr>> {
+        let mut builder = CellRangeBuilder::new(_fbb);
+        if let Some(x) = args.cells { builder.add_cells(x); }
+        builder.add_col_start(args.col_start);
+        builder.add_row(args.row);
         builder.finish()
       }
 
 
       #[inline]
-      pub fn payload(&self) -> Option<::flatbuffers::Vector<'a, u8>> {
+      pub fn row(&self) -> u16 {
         // Safety:
         // Created from valid Table for this object
         // which contains a valid value in this slot
-        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, u8>>>(DataOut::VT_PAYLOAD, None)}
+        unsafe { self._tab.get::<u16>(CellRange::VT_ROW, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn col_start(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(CellRange::VT_COL_START, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn cells(&self) -> Option<::flatbuffers::Vector<'a, Cell>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, Cell>>>(CellRange::VT_CELLS, None)}
       }
     }
 
-    impl ::flatbuffers::Verifiable for DataOut<'_> {
+    impl ::flatbuffers::Verifiable for CellRange<'_> {
       #[inline]
       fn run_verifier(
         v: &mut ::flatbuffers::Verifier, pos: usize
       ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
         v.visit_table(pos)?
-         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, u8>>>("payload", Self::VT_PAYLOAD, false)?
+         .visit_field::<u16>("row", Self::VT_ROW, false)?
+         .visit_field::<u16>("col_start", Self::VT_COL_START, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, Cell>>>("cells", Self::VT_CELLS, false)?
          .finish();
         Ok(())
       }
     }
-    pub struct DataOutArgs<'a> {
-        pub payload: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, u8>>>,
+    pub struct CellRangeArgs<'a> {
+        pub row: u16,
+        pub col_start: u16,
+        pub cells: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, Cell>>>,
     }
-    impl<'a> Default for DataOutArgs<'a> {
+    impl<'a> Default for CellRangeArgs<'a> {
       #[inline]
       fn default() -> Self {
-        DataOutArgs {
-          payload: None,
+        CellRangeArgs {
+          row: 0,
+          col_start: 0,
+          cells: None,
         }
       }
     }
 
-    pub struct DataOutBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+    pub struct CellRangeBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
       fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
       start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
     }
-    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DataOutBuilder<'a, 'b, A> {
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> CellRangeBuilder<'a, 'b, A> {
       #[inline]
-      pub fn add_payload(&mut self, payload: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , u8>>) {
-        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(DataOut::VT_PAYLOAD, payload);
+      pub fn add_row(&mut self, row: u16) {
+        self.fbb_.push_slot::<u16>(CellRange::VT_ROW, row, 0);
       }
       #[inline]
-      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> DataOutBuilder<'a, 'b, A> {
+      pub fn add_col_start(&mut self, col_start: u16) {
+        self.fbb_.push_slot::<u16>(CellRange::VT_COL_START, col_start, 0);
+      }
+      #[inline]
+      pub fn add_cells(&mut self, cells: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , Cell>>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(CellRange::VT_CELLS, cells);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> CellRangeBuilder<'a, 'b, A> {
         let start = _fbb.start_table();
-        DataOutBuilder {
+        CellRangeBuilder {
           fbb_: _fbb,
           start_: start,
         }
       }
       #[inline]
-      pub fn finish(self) -> ::flatbuffers::WIPOffset<DataOut<'a>> {
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<CellRange<'a>> {
         let o = self.fbb_.end_table(self.start_);
         ::flatbuffers::WIPOffset::new(o.value())
       }
     }
 
-    impl ::core::fmt::Debug for DataOut<'_> {
+    impl ::core::fmt::Debug for CellRange<'_> {
       fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-        let mut ds = f.debug_struct("DataOut");
-        ds.field("payload", &self.payload());
+        let mut ds = f.debug_struct("CellRange");
+        ds.field("row", &self.row());
+        ds.field("col_start", &self.col_start());
+        ds.field("cells", &self.cells());
         ds.finish()
       }
     }
 
     #[inline]
-    pub fn createDataOut<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    pub fn createCellRange<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
       fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
-      args: &'args DataOutArgs<'args>,
-    ) -> ::flatbuffers::WIPOffset<DataOut<'bldr>> {
-      let mut builder = DataOutBuilder::new(fbb);
-      if let Some(x) = args.payload { builder.add_payload(x); }
+      args: &'args CellRangeArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<CellRange<'bldr>> {
+      let mut builder = CellRangeBuilder::new(fbb);
+      if let Some(x) = args.cells { builder.add_cells(x); }
+      builder.add_col_start(args.col_start);
+      builder.add_row(args.row);
+      builder.finish()
+    }
+
+    pub enum CursorStateOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct CursorState<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for CursorState<'a> {
+      type Inner = CursorState<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> CursorState<'a> {
+      pub const VT_ROW: ::flatbuffers::VOffsetT = 4;
+      pub const VT_COL: ::flatbuffers::VOffsetT = 6;
+      pub const VT_VISIBLE: ::flatbuffers::VOffsetT = 8;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        CursorState { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args CursorStateArgs
+      ) -> ::flatbuffers::WIPOffset<CursorState<'bldr>> {
+        let mut builder = CursorStateBuilder::new(_fbb);
+        builder.add_col(args.col);
+        builder.add_row(args.row);
+        builder.add_visible(args.visible);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn row(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(CursorState::VT_ROW, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn col(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(CursorState::VT_COL, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn visible(&self) -> bool {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<bool>(CursorState::VT_VISIBLE, Some(false)).unwrap()}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for CursorState<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<u16>("row", Self::VT_ROW, false)?
+         .visit_field::<u16>("col", Self::VT_COL, false)?
+         .visit_field::<bool>("visible", Self::VT_VISIBLE, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct CursorStateArgs {
+        pub row: u16,
+        pub col: u16,
+        pub visible: bool,
+    }
+    impl<'a> Default for CursorStateArgs {
+      #[inline]
+      fn default() -> Self {
+        CursorStateArgs {
+          row: 0,
+          col: 0,
+          visible: false,
+        }
+      }
+    }
+
+    pub struct CursorStateBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> CursorStateBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_row(&mut self, row: u16) {
+        self.fbb_.push_slot::<u16>(CursorState::VT_ROW, row, 0);
+      }
+      #[inline]
+      pub fn add_col(&mut self, col: u16) {
+        self.fbb_.push_slot::<u16>(CursorState::VT_COL, col, 0);
+      }
+      #[inline]
+      pub fn add_visible(&mut self, visible: bool) {
+        self.fbb_.push_slot::<bool>(CursorState::VT_VISIBLE, visible, false);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> CursorStateBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        CursorStateBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<CursorState<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for CursorState<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("CursorState");
+        ds.field("row", &self.row());
+        ds.field("col", &self.col());
+        ds.field("visible", &self.visible());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createCursorState<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args CursorStateArgs,
+    ) -> ::flatbuffers::WIPOffset<CursorState<'bldr>> {
+      let mut builder = CursorStateBuilder::new(fbb);
+      builder.add_col(args.col);
+      builder.add_row(args.row);
+      builder.add_visible(args.visible);
+      builder.finish()
+    }
+
+    pub enum ScreenUpdateOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct ScreenUpdate<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for ScreenUpdate<'a> {
+      type Inner = ScreenUpdate<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> ScreenUpdate<'a> {
+      pub const VT_CHANGES: ::flatbuffers::VOffsetT = 4;
+      pub const VT_CURSOR: ::flatbuffers::VOffsetT = 6;
+      pub const VT_COLS: ::flatbuffers::VOffsetT = 8;
+      pub const VT_ROWS: ::flatbuffers::VOffsetT = 10;
+      pub const VT_TITLE: ::flatbuffers::VOffsetT = 12;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        ScreenUpdate { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args ScreenUpdateArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<ScreenUpdate<'bldr>> {
+        let mut builder = ScreenUpdateBuilder::new(_fbb);
+        if let Some(x) = args.title { builder.add_title(x); }
+        if let Some(x) = args.cursor { builder.add_cursor(x); }
+        if let Some(x) = args.changes { builder.add_changes(x); }
+        builder.add_rows(args.rows);
+        builder.add_cols(args.cols);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn changes(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>(ScreenUpdate::VT_CHANGES, None)}
+      }
+      #[inline]
+      pub fn cursor(&self) -> Option<CursorState<'a>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<CursorState>>(ScreenUpdate::VT_CURSOR, None)}
+      }
+      #[inline]
+      pub fn cols(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(ScreenUpdate::VT_COLS, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn rows(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(ScreenUpdate::VT_ROWS, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn title(&self) -> Option<&'a str> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(ScreenUpdate::VT_TITLE, None)}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for ScreenUpdate<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<CellRange<'_>>>>>("changes", Self::VT_CHANGES, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<CursorState>>("cursor", Self::VT_CURSOR, false)?
+         .visit_field::<u16>("cols", Self::VT_COLS, false)?
+         .visit_field::<u16>("rows", Self::VT_ROWS, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("title", Self::VT_TITLE, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct ScreenUpdateArgs<'a> {
+        pub changes: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>,
+        pub cursor: Option<::flatbuffers::WIPOffset<CursorState<'a>>>,
+        pub cols: u16,
+        pub rows: u16,
+        pub title: Option<::flatbuffers::WIPOffset<&'a str>>,
+    }
+    impl<'a> Default for ScreenUpdateArgs<'a> {
+      #[inline]
+      fn default() -> Self {
+        ScreenUpdateArgs {
+          changes: None,
+          cursor: None,
+          cols: 0,
+          rows: 0,
+          title: None,
+        }
+      }
+    }
+
+    pub struct ScreenUpdateBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScreenUpdateBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_changes(&mut self, changes: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<CellRange<'b>>>>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScreenUpdate::VT_CHANGES, changes);
+      }
+      #[inline]
+      pub fn add_cursor(&mut self, cursor: ::flatbuffers::WIPOffset<CursorState<'b >>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<CursorState>>(ScreenUpdate::VT_CURSOR, cursor);
+      }
+      #[inline]
+      pub fn add_cols(&mut self, cols: u16) {
+        self.fbb_.push_slot::<u16>(ScreenUpdate::VT_COLS, cols, 0);
+      }
+      #[inline]
+      pub fn add_rows(&mut self, rows: u16) {
+        self.fbb_.push_slot::<u16>(ScreenUpdate::VT_ROWS, rows, 0);
+      }
+      #[inline]
+      pub fn add_title(&mut self, title: ::flatbuffers::WIPOffset<&'b  str>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScreenUpdate::VT_TITLE, title);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ScreenUpdateBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        ScreenUpdateBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<ScreenUpdate<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for ScreenUpdate<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("ScreenUpdate");
+        ds.field("changes", &self.changes());
+        ds.field("cursor", &self.cursor());
+        ds.field("cols", &self.cols());
+        ds.field("rows", &self.rows());
+        ds.field("title", &self.title());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createScreenUpdate<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args ScreenUpdateArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<ScreenUpdate<'bldr>> {
+      let mut builder = ScreenUpdateBuilder::new(fbb);
+      if let Some(x) = args.title { builder.add_title(x); }
+      if let Some(x) = args.cursor { builder.add_cursor(x); }
+      if let Some(x) = args.changes { builder.add_changes(x); }
+      builder.add_rows(args.rows);
+      builder.add_cols(args.cols);
+      builder.finish()
+    }
+
+    pub enum ScreenSnapshotOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct ScreenSnapshot<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for ScreenSnapshot<'a> {
+      type Inner = ScreenSnapshot<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> ScreenSnapshot<'a> {
+      pub const VT_ROWS: ::flatbuffers::VOffsetT = 4;
+      pub const VT_CURSOR: ::flatbuffers::VOffsetT = 6;
+      pub const VT_COLS: ::flatbuffers::VOffsetT = 8;
+      pub const VT_NUM_ROWS: ::flatbuffers::VOffsetT = 10;
+      pub const VT_TITLE: ::flatbuffers::VOffsetT = 12;
+      pub const VT_SCROLLBACK_LEN: ::flatbuffers::VOffsetT = 14;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        ScreenSnapshot { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args ScreenSnapshotArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<ScreenSnapshot<'bldr>> {
+        let mut builder = ScreenSnapshotBuilder::new(_fbb);
+        if let Some(x) = args.title { builder.add_title(x); }
+        if let Some(x) = args.cursor { builder.add_cursor(x); }
+        if let Some(x) = args.rows { builder.add_rows(x); }
+        builder.add_scrollback_len(args.scrollback_len);
+        builder.add_num_rows(args.num_rows);
+        builder.add_cols(args.cols);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn rows(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>(ScreenSnapshot::VT_ROWS, None)}
+      }
+      #[inline]
+      pub fn cursor(&self) -> Option<CursorState<'a>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<CursorState>>(ScreenSnapshot::VT_CURSOR, None)}
+      }
+      #[inline]
+      pub fn cols(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(ScreenSnapshot::VT_COLS, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn num_rows(&self) -> u16 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u16>(ScreenSnapshot::VT_NUM_ROWS, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn title(&self) -> Option<&'a str> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(ScreenSnapshot::VT_TITLE, None)}
+      }
+      #[inline]
+      pub fn scrollback_len(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScreenSnapshot::VT_SCROLLBACK_LEN, Some(0)).unwrap()}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for ScreenSnapshot<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<CellRange<'_>>>>>("rows", Self::VT_ROWS, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<CursorState>>("cursor", Self::VT_CURSOR, false)?
+         .visit_field::<u16>("cols", Self::VT_COLS, false)?
+         .visit_field::<u16>("num_rows", Self::VT_NUM_ROWS, false)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("title", Self::VT_TITLE, false)?
+         .visit_field::<u32>("scrollback_len", Self::VT_SCROLLBACK_LEN, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct ScreenSnapshotArgs<'a> {
+        pub rows: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>,
+        pub cursor: Option<::flatbuffers::WIPOffset<CursorState<'a>>>,
+        pub cols: u16,
+        pub num_rows: u16,
+        pub title: Option<::flatbuffers::WIPOffset<&'a str>>,
+        pub scrollback_len: u32,
+    }
+    impl<'a> Default for ScreenSnapshotArgs<'a> {
+      #[inline]
+      fn default() -> Self {
+        ScreenSnapshotArgs {
+          rows: None,
+          cursor: None,
+          cols: 0,
+          num_rows: 0,
+          title: None,
+          scrollback_len: 0,
+        }
+      }
+    }
+
+    pub struct ScreenSnapshotBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScreenSnapshotBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_rows(&mut self, rows: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<CellRange<'b>>>>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScreenSnapshot::VT_ROWS, rows);
+      }
+      #[inline]
+      pub fn add_cursor(&mut self, cursor: ::flatbuffers::WIPOffset<CursorState<'b >>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<CursorState>>(ScreenSnapshot::VT_CURSOR, cursor);
+      }
+      #[inline]
+      pub fn add_cols(&mut self, cols: u16) {
+        self.fbb_.push_slot::<u16>(ScreenSnapshot::VT_COLS, cols, 0);
+      }
+      #[inline]
+      pub fn add_num_rows(&mut self, num_rows: u16) {
+        self.fbb_.push_slot::<u16>(ScreenSnapshot::VT_NUM_ROWS, num_rows, 0);
+      }
+      #[inline]
+      pub fn add_title(&mut self, title: ::flatbuffers::WIPOffset<&'b  str>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScreenSnapshot::VT_TITLE, title);
+      }
+      #[inline]
+      pub fn add_scrollback_len(&mut self, scrollback_len: u32) {
+        self.fbb_.push_slot::<u32>(ScreenSnapshot::VT_SCROLLBACK_LEN, scrollback_len, 0);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ScreenSnapshotBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        ScreenSnapshotBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<ScreenSnapshot<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for ScreenSnapshot<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("ScreenSnapshot");
+        ds.field("rows", &self.rows());
+        ds.field("cursor", &self.cursor());
+        ds.field("cols", &self.cols());
+        ds.field("num_rows", &self.num_rows());
+        ds.field("title", &self.title());
+        ds.field("scrollback_len", &self.scrollback_len());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createScreenSnapshot<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args ScreenSnapshotArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<ScreenSnapshot<'bldr>> {
+      let mut builder = ScreenSnapshotBuilder::new(fbb);
+      if let Some(x) = args.title { builder.add_title(x); }
+      if let Some(x) = args.cursor { builder.add_cursor(x); }
+      if let Some(x) = args.rows { builder.add_rows(x); }
+      builder.add_scrollback_len(args.scrollback_len);
+      builder.add_num_rows(args.num_rows);
+      builder.add_cols(args.cols);
+      builder.finish()
+    }
+
+    pub enum ScrollbackDataOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct ScrollbackData<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for ScrollbackData<'a> {
+      type Inner = ScrollbackData<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> ScrollbackData<'a> {
+      pub const VT_LINES: ::flatbuffers::VOffsetT = 4;
+      pub const VT_OFFSET: ::flatbuffers::VOffsetT = 6;
+      pub const VT_TOTAL: ::flatbuffers::VOffsetT = 8;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        ScrollbackData { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args ScrollbackDataArgs<'args>
+      ) -> ::flatbuffers::WIPOffset<ScrollbackData<'bldr>> {
+        let mut builder = ScrollbackDataBuilder::new(_fbb);
+        if let Some(x) = args.lines { builder.add_lines(x); }
+        builder.add_total(args.total);
+        builder.add_offset(args.offset);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn lines(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>> {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>(ScrollbackData::VT_LINES, None)}
+      }
+      #[inline]
+      pub fn offset(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScrollbackData::VT_OFFSET, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn total(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScrollbackData::VT_TOTAL, Some(0)).unwrap()}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for ScrollbackData<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<CellRange<'_>>>>>("lines", Self::VT_LINES, false)?
+         .visit_field::<u32>("offset", Self::VT_OFFSET, false)?
+         .visit_field::<u32>("total", Self::VT_TOTAL, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct ScrollbackDataArgs<'a> {
+        pub lines: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>>,
+        pub offset: u32,
+        pub total: u32,
+    }
+    impl<'a> Default for ScrollbackDataArgs<'a> {
+      #[inline]
+      fn default() -> Self {
+        ScrollbackDataArgs {
+          lines: None,
+          offset: 0,
+          total: 0,
+        }
+      }
+    }
+
+    pub struct ScrollbackDataBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScrollbackDataBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_lines(&mut self, lines: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<CellRange<'b>>>>) {
+        self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScrollbackData::VT_LINES, lines);
+      }
+      #[inline]
+      pub fn add_offset(&mut self, offset: u32) {
+        self.fbb_.push_slot::<u32>(ScrollbackData::VT_OFFSET, offset, 0);
+      }
+      #[inline]
+      pub fn add_total(&mut self, total: u32) {
+        self.fbb_.push_slot::<u32>(ScrollbackData::VT_TOTAL, total, 0);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ScrollbackDataBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        ScrollbackDataBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<ScrollbackData<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for ScrollbackData<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("ScrollbackData");
+        ds.field("lines", &self.lines());
+        ds.field("offset", &self.offset());
+        ds.field("total", &self.total());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createScrollbackData<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args ScrollbackDataArgs<'args>,
+    ) -> ::flatbuffers::WIPOffset<ScrollbackData<'bldr>> {
+      let mut builder = ScrollbackDataBuilder::new(fbb);
+      if let Some(x) = args.lines { builder.add_lines(x); }
+      builder.add_total(args.total);
+      builder.add_offset(args.offset);
       builder.finish()
     }
 
@@ -863,6 +2141,95 @@ pub mod rterm {
       builder.finish()
     }
 
+    pub enum BellOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct Bell<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for Bell<'a> {
+      type Inner = Bell<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> Bell<'a> {
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        Bell { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args BellArgs
+      ) -> ::flatbuffers::WIPOffset<Bell<'bldr>> {
+        let mut builder = BellBuilder::new(_fbb);
+        builder.finish()
+      }
+
+
+    }
+
+    impl ::flatbuffers::Verifiable for Bell<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct BellArgs {
+    }
+    impl<'a> Default for BellArgs {
+      #[inline]
+      fn default() -> Self {
+        BellArgs {
+        }
+      }
+    }
+
+    pub struct BellBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> BellBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> BellBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        BellBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<Bell<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for Bell<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("Bell");
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createBell<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args BellArgs,
+    ) -> ::flatbuffers::WIPOffset<Bell<'bldr>> {
+      let mut builder = BellBuilder::new(fbb);
+      builder.finish()
+    }
+
     pub enum ServerMessageOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
@@ -911,9 +2278,27 @@ pub mod rterm {
       }
 
       #[inline]
-      pub fn body_as_data_out(&self) -> Option<DataOut<'a>> {
-        if self.body_type() == ServerBody::DataOut {
-          self.body().map(|t| unsafe { DataOut::init_from_table(t) })
+      pub fn body_as_screen_update(&self) -> Option<ScreenUpdate<'a>> {
+        if self.body_type() == ServerBody::ScreenUpdate {
+          self.body().map(|t| unsafe { ScreenUpdate::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_screen_snapshot(&self) -> Option<ScreenSnapshot<'a>> {
+        if self.body_type() == ServerBody::ScreenSnapshot {
+          self.body().map(|t| unsafe { ScreenSnapshot::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_scrollback_data(&self) -> Option<ScrollbackData<'a>> {
+        if self.body_type() == ServerBody::ScrollbackData {
+          self.body().map(|t| unsafe { ScrollbackData::init_from_table(t) })
         } else {
           None
         }
@@ -932,6 +2317,15 @@ pub mod rterm {
       pub fn body_as_error(&self) -> Option<Error<'a>> {
         if self.body_type() == ServerBody::Error {
           self.body().map(|t| unsafe { Error::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_bell(&self) -> Option<Bell<'a>> {
+        if self.body_type() == ServerBody::Bell {
+          self.body().map(|t| unsafe { Bell::init_from_table(t) })
         } else {
           None
         }

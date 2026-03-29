@@ -1,100 +1,216 @@
 #[allow(unused_imports, dead_code, clippy::all, non_snake_case)]
 mod generated;
 
-// Re-export the raw FlatBuffers types for direct use.
+/// Re-export the raw FlatBuffers types.
 pub use generated::rterm::protocol as fbs;
 
-/// Re-export flatbuffers for consumers to build messages.
+/// Re-export flatbuffers for consumers.
 pub use flatbuffers;
 
 use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
 
-// --- Owned message types for gRPC (Send + 'static) ---
+// ============================================================================
+// Client → Server messages
+// ============================================================================
 
-/// Client-to-server: keyboard input bytes.
 #[derive(Debug, Clone)]
-pub struct DataIn {
-    pub payload: Vec<u8>,
+pub struct KeyInput {
+    pub data: Vec<u8>,
 }
 
-/// Client-to-server: terminal resize.
+#[derive(Debug, Clone)]
+pub struct PasteInput {
+    pub text: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct Resize {
     pub cols: u16,
     pub rows: u16,
 }
 
-/// A client message: either data input or a resize event.
+#[derive(Debug, Clone)]
+pub struct MouseEvent {
+    pub row: u16,
+    pub col: u16,
+    pub button: u8,
+    pub modifiers: u8,
+    pub kind: u8, // MouseEventKind
+}
+
 #[derive(Debug, Clone)]
 pub enum ClientMsg {
-    DataIn(DataIn),
+    KeyInput(KeyInput),
+    PasteInput(PasteInput),
     Resize(Resize),
+    MouseEvent(MouseEvent),
 }
 
-/// Server-to-client: PTY output bytes.
+// ============================================================================
+// Server → Client messages
+// ============================================================================
+
+/// Packed color: 0x00RRGGBB for RGB, 0xFF0000II for indexed, 0xFFFFFFFF for default.
+pub const COLOR_DEFAULT: u32 = 0xFFFFFFFF;
+
+pub fn pack_color_indexed(idx: u8) -> u32 {
+    0xFF000000 | (idx as u32)
+}
+
+pub fn pack_color_rgb(r: u8, g: u8, b: u8) -> u32 {
+    ((r as u32) << 16) | ((g as u32) << 8) | (b as u32)
+}
+
+pub fn unpack_color(packed: u32) -> ColorKind {
+    if packed == COLOR_DEFAULT {
+        ColorKind::Default
+    } else if packed & 0xFF000000 == 0xFF000000 {
+        ColorKind::Indexed((packed & 0xFF) as u8)
+    } else {
+        ColorKind::Rgb(
+            ((packed >> 16) & 0xFF) as u8,
+            ((packed >> 8) & 0xFF) as u8,
+            (packed & 0xFF) as u8,
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColorKind {
+    Default,
+    Indexed(u8),
+    Rgb(u8, u8, u8),
+}
+
+/// Attribute bitflags.
+pub const ATTR_BOLD: u8 = 1 << 0;
+pub const ATTR_ITALIC: u8 = 1 << 1;
+pub const ATTR_UNDERLINE: u8 = 1 << 2;
+pub const ATTR_STRIKETHROUGH: u8 = 1 << 3;
+pub const ATTR_REVERSE: u8 = 1 << 4;
+pub const ATTR_DIM: u8 = 1 << 5;
+pub const ATTR_HIDDEN: u8 = 1 << 6;
+
 #[derive(Debug, Clone)]
-pub struct DataOut {
-    pub payload: Vec<u8>,
+pub struct CellData {
+    pub ch: char,
+    pub fg: u32,
+    pub bg: u32,
+    pub attrs: u8,
 }
 
-/// Server-to-client: shell process exited.
+#[derive(Debug, Clone)]
+pub struct CellRangeData {
+    pub row: u16,
+    pub col_start: u16,
+    pub cells: Vec<CellData>,
+}
+
+#[derive(Debug, Clone)]
+pub struct CursorData {
+    pub row: u16,
+    pub col: u16,
+    pub visible: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScreenUpdateData {
+    pub changes: Vec<CellRangeData>,
+    pub cursor: CursorData,
+    pub cols: u16,
+    pub rows: u16,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScreenSnapshotData {
+    pub rows: Vec<CellRangeData>,
+    pub cursor: CursorData,
+    pub cols: u16,
+    pub num_rows: u16,
+    pub title: Option<String>,
+    pub scrollback_len: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScrollbackRequest {
+    pub offset: u32,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScrollbackDataMsg {
+    pub lines: Vec<CellRangeData>,
+    pub offset: u32,
+    pub total: u32,
+}
+
 #[derive(Debug, Clone)]
 pub struct Exit {
     pub code: i32,
 }
 
-/// Server-to-client: error message.
 #[derive(Debug, Clone)]
 pub struct ServerError {
     pub message: String,
 }
 
-/// A server message: PTY output, exit, or error.
 #[derive(Debug, Clone)]
 pub enum ServerMsg {
-    DataOut(DataOut),
+    ScreenUpdate(ScreenUpdateData),
+    ScreenSnapshot(ScreenSnapshotData),
+    ScrollbackData(ScrollbackDataMsg),
     Exit(Exit),
     Error(ServerError),
+    Bell,
 }
 
-// --- FlatBufferGrpcMessage implementations ---
+// ============================================================================
+// FlatBufferGrpcMessage implementations
+// ============================================================================
 
 impl FlatBufferGrpcMessage for ClientMsg {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut fbb = flatbuffers::FlatBufferBuilder::new();
         match self {
-            ClientMsg::DataIn(d) => {
-                let payload = fbb.create_vector(&d.payload);
-                let data_in = fbs::DataIn::create(
-                    &mut fbb,
-                    &fbs::DataInArgs {
-                        payload: Some(payload),
-                    },
-                );
-                let msg = fbs::ClientMessage::create(
-                    &mut fbb,
-                    &fbs::ClientMessageArgs {
-                        body_type: fbs::ClientBody::DataIn,
-                        body: Some(data_in.as_union_value()),
-                    },
-                );
+            ClientMsg::KeyInput(k) => {
+                let data = fbb.create_vector(&k.data);
+                let ki = fbs::KeyInput::create(&mut fbb, &fbs::KeyInputArgs { data: Some(data) });
+                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+                    body_type: fbs::ClientBody::KeyInput,
+                    body: Some(ki.as_union_value()),
+                });
+                fbb.finish(msg, None);
+            }
+            ClientMsg::PasteInput(p) => {
+                let text = fbb.create_string(&p.text);
+                let pi = fbs::PasteInput::create(&mut fbb, &fbs::PasteInputArgs { text: Some(text) });
+                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+                    body_type: fbs::ClientBody::PasteInput,
+                    body: Some(pi.as_union_value()),
+                });
                 fbb.finish(msg, None);
             }
             ClientMsg::Resize(r) => {
-                let resize = fbs::Resize::create(
-                    &mut fbb,
-                    &fbs::ResizeArgs {
-                        cols: r.cols,
-                        rows: r.rows,
-                    },
-                );
-                let msg = fbs::ClientMessage::create(
-                    &mut fbb,
-                    &fbs::ClientMessageArgs {
-                        body_type: fbs::ClientBody::Resize,
-                        body: Some(resize.as_union_value()),
-                    },
-                );
+                let resize = fbs::Resize::create(&mut fbb, &fbs::ResizeArgs { cols: r.cols, rows: r.rows });
+                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+                    body_type: fbs::ClientBody::Resize,
+                    body: Some(resize.as_union_value()),
+                });
+                fbb.finish(msg, None);
+            }
+            ClientMsg::MouseEvent(m) => {
+                let me = fbs::MouseEvent::create(&mut fbb, &fbs::MouseEventArgs {
+                    row: m.row,
+                    col: m.col,
+                    button: m.button,
+                    modifiers: m.modifiers,
+                    kind: fbs::MouseEventKind(m.kind),
+                });
+                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+                    body_type: fbs::ClientBody::MouseEvent,
+                    body: Some(me.as_union_value()),
+                });
                 fbb.finish(msg, None);
             }
         }
@@ -105,20 +221,30 @@ impl FlatBufferGrpcMessage for ClientMsg {
         let msg = flatbuffers::root::<fbs::ClientMessage>(data)
             .map_err(|e| format!("invalid ClientMessage: {e}"))?;
         match msg.body_type() {
-            fbs::ClientBody::DataIn => {
-                let d = msg.body_as_data_in().ok_or("missing DataIn body")?;
-                Ok(ClientMsg::DataIn(DataIn {
-                    payload: d.payload().map(|p| p.bytes().to_vec()).unwrap_or_default(),
+            fbs::ClientBody::KeyInput => {
+                let k = msg.body_as_key_input().ok_or("missing KeyInput")?;
+                Ok(ClientMsg::KeyInput(KeyInput {
+                    data: k.data().map(|d| d.bytes().to_vec()).unwrap_or_default(),
+                }))
+            }
+            fbs::ClientBody::PasteInput => {
+                let p = msg.body_as_paste_input().ok_or("missing PasteInput")?;
+                Ok(ClientMsg::PasteInput(PasteInput {
+                    text: p.text().unwrap_or("").to_string(),
                 }))
             }
             fbs::ClientBody::Resize => {
-                let r = msg.body_as_resize().ok_or("missing Resize body")?;
-                Ok(ClientMsg::Resize(Resize {
-                    cols: r.cols(),
-                    rows: r.rows(),
+                let r = msg.body_as_resize().ok_or("missing Resize")?;
+                Ok(ClientMsg::Resize(Resize { cols: r.cols(), rows: r.rows() }))
+            }
+            fbs::ClientBody::MouseEvent => {
+                let m = msg.body_as_mouse_event().ok_or("missing MouseEvent")?;
+                Ok(ClientMsg::MouseEvent(MouseEvent {
+                    row: m.row(), col: m.col(), button: m.button(),
+                    modifiers: m.modifiers(), kind: m.kind().0,
                 }))
             }
-            _ => Err("unknown ClientBody type".into()),
+            _ => Err("unknown ClientBody".into()),
         }
     }
 }
@@ -127,49 +253,49 @@ impl FlatBufferGrpcMessage for ServerMsg {
     fn encode_flatbuffer(&self) -> Vec<u8> {
         let mut fbb = flatbuffers::FlatBufferBuilder::new();
         match self {
-            ServerMsg::DataOut(d) => {
-                let payload = fbb.create_vector(&d.payload);
-                let data_out = fbs::DataOut::create(
-                    &mut fbb,
-                    &fbs::DataOutArgs {
-                        payload: Some(payload),
-                    },
-                );
-                let msg = fbs::ServerMessage::create(
-                    &mut fbb,
-                    &fbs::ServerMessageArgs {
-                        body_type: fbs::ServerBody::DataOut,
-                        body: Some(data_out.as_union_value()),
-                    },
-                );
+            ServerMsg::ScreenUpdate(su) => {
+                encode_screen_update(&mut fbb, su);
+            }
+            ServerMsg::ScreenSnapshot(ss) => {
+                encode_screen_snapshot(&mut fbb, ss);
+            }
+            ServerMsg::ScrollbackData(sd) => {
+                let lines = encode_cell_ranges(&mut fbb, &sd.lines);
+                let lines_vec = fbb.create_vector(&lines);
+                let sbd = fbs::ScrollbackData::create(&mut fbb, &fbs::ScrollbackDataArgs {
+                    lines: Some(lines_vec),
+                    offset: sd.offset,
+                    total: sd.total,
+                });
+                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
+                    body_type: fbs::ServerBody::ScrollbackData,
+                    body: Some(sbd.as_union_value()),
+                });
                 fbb.finish(msg, None);
             }
             ServerMsg::Exit(e) => {
                 let exit = fbs::Exit::create(&mut fbb, &fbs::ExitArgs { code: e.code });
-                let msg = fbs::ServerMessage::create(
-                    &mut fbb,
-                    &fbs::ServerMessageArgs {
-                        body_type: fbs::ServerBody::Exit,
-                        body: Some(exit.as_union_value()),
-                    },
-                );
+                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
+                    body_type: fbs::ServerBody::Exit,
+                    body: Some(exit.as_union_value()),
+                });
                 fbb.finish(msg, None);
             }
             ServerMsg::Error(e) => {
                 let message = fbb.create_string(&e.message);
-                let error = fbs::Error::create(
-                    &mut fbb,
-                    &fbs::ErrorArgs {
-                        message: Some(message),
-                    },
-                );
-                let msg = fbs::ServerMessage::create(
-                    &mut fbb,
-                    &fbs::ServerMessageArgs {
-                        body_type: fbs::ServerBody::Error,
-                        body: Some(error.as_union_value()),
-                    },
-                );
+                let error = fbs::Error::create(&mut fbb, &fbs::ErrorArgs { message: Some(message) });
+                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
+                    body_type: fbs::ServerBody::Error,
+                    body: Some(error.as_union_value()),
+                });
+                fbb.finish(msg, None);
+            }
+            ServerMsg::Bell => {
+                let bell = fbs::Bell::create(&mut fbb, &fbs::BellArgs {});
+                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
+                    body_type: fbs::ServerBody::Bell,
+                    body: Some(bell.as_union_value()),
+                });
                 fbb.finish(msg, None);
             }
         }
@@ -180,25 +306,154 @@ impl FlatBufferGrpcMessage for ServerMsg {
         let msg = flatbuffers::root::<fbs::ServerMessage>(data)
             .map_err(|e| format!("invalid ServerMessage: {e}"))?;
         match msg.body_type() {
-            fbs::ServerBody::DataOut => {
-                let d = msg.body_as_data_out().ok_or("missing DataOut body")?;
-                Ok(ServerMsg::DataOut(DataOut {
-                    payload: d.payload().map(|p| p.bytes().to_vec()).unwrap_or_default(),
+            fbs::ServerBody::ScreenUpdate => {
+                let su = msg.body_as_screen_update().ok_or("missing ScreenUpdate")?;
+                Ok(ServerMsg::ScreenUpdate(decode_screen_update(&su)?))
+            }
+            fbs::ServerBody::ScreenSnapshot => {
+                let ss = msg.body_as_screen_snapshot().ok_or("missing ScreenSnapshot")?;
+                Ok(ServerMsg::ScreenSnapshot(decode_screen_snapshot(&ss)?))
+            }
+            fbs::ServerBody::ScrollbackData => {
+                let sd = msg.body_as_scrollback_data().ok_or("missing ScrollbackData")?;
+                Ok(ServerMsg::ScrollbackData(ScrollbackDataMsg {
+                    lines: decode_cell_ranges(sd.lines())?,
+                    offset: sd.offset(),
+                    total: sd.total(),
                 }))
             }
             fbs::ServerBody::Exit => {
-                let e = msg.body_as_exit().ok_or("missing Exit body")?;
+                let e = msg.body_as_exit().ok_or("missing Exit")?;
                 Ok(ServerMsg::Exit(Exit { code: e.code() }))
             }
             fbs::ServerBody::Error => {
-                let e = msg.body_as_error().ok_or("missing Error body")?;
-                Ok(ServerMsg::Error(ServerError {
-                    message: e.message().unwrap_or("").to_string(),
-                }))
+                let e = msg.body_as_error().ok_or("missing Error")?;
+                Ok(ServerMsg::Error(ServerError { message: e.message().unwrap_or("").to_string() }))
             }
-            _ => Err("unknown ServerBody type".into()),
+            fbs::ServerBody::Bell => Ok(ServerMsg::Bell),
+            _ => Err("unknown ServerBody".into()),
         }
     }
+}
+
+// ============================================================================
+// Encoding helpers
+// ============================================================================
+
+fn encode_cell_ranges<'a>(
+    fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
+    ranges: &[CellRangeData],
+) -> Vec<flatbuffers::WIPOffset<fbs::CellRange<'a>>> {
+    ranges.iter().map(|cr| {
+        let cells: Vec<fbs::Cell> = cr.cells.iter().map(|c| {
+            fbs::Cell::new(c.ch as u32, c.fg, c.bg, c.attrs)
+        }).collect();
+        let cells_vec = fbb.create_vector(&cells);
+        fbs::CellRange::create(fbb, &fbs::CellRangeArgs {
+            row: cr.row,
+            col_start: cr.col_start,
+            cells: Some(cells_vec),
+        })
+    }).collect()
+}
+
+fn encode_screen_update(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, su: &ScreenUpdateData) {
+    let changes = encode_cell_ranges(fbb, &su.changes);
+    let changes_vec = fbb.create_vector(&changes);
+    let cursor = fbs::CursorState::create(fbb, &fbs::CursorStateArgs {
+        row: su.cursor.row, col: su.cursor.col, visible: su.cursor.visible,
+    });
+    let title = su.title.as_ref().map(|t| fbb.create_string(t));
+    let screen = fbs::ScreenUpdate::create(fbb, &fbs::ScreenUpdateArgs {
+        changes: Some(changes_vec),
+        cursor: Some(cursor),
+        cols: su.cols, rows: su.rows,
+        title,
+    });
+    let msg = fbs::ServerMessage::create(fbb, &fbs::ServerMessageArgs {
+        body_type: fbs::ServerBody::ScreenUpdate,
+        body: Some(screen.as_union_value()),
+    });
+    fbb.finish(msg, None);
+}
+
+fn encode_screen_snapshot(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, ss: &ScreenSnapshotData) {
+    let rows = encode_cell_ranges(fbb, &ss.rows);
+    let rows_vec = fbb.create_vector(&rows);
+    let cursor = fbs::CursorState::create(fbb, &fbs::CursorStateArgs {
+        row: ss.cursor.row, col: ss.cursor.col, visible: ss.cursor.visible,
+    });
+    let title = ss.title.as_ref().map(|t| fbb.create_string(t));
+    let snapshot = fbs::ScreenSnapshot::create(fbb, &fbs::ScreenSnapshotArgs {
+        rows: Some(rows_vec),
+        cursor: Some(cursor),
+        cols: ss.cols, num_rows: ss.num_rows,
+        title, scrollback_len: ss.scrollback_len,
+    });
+    let msg = fbs::ServerMessage::create(fbb, &fbs::ServerMessageArgs {
+        body_type: fbs::ServerBody::ScreenSnapshot,
+        body: Some(snapshot.as_union_value()),
+    });
+    fbb.finish(msg, None);
+}
+
+// ============================================================================
+// Decoding helpers
+// ============================================================================
+
+fn decode_cell_ranges(
+    ranges: Option<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<fbs::CellRange<'_>>>>,
+) -> Result<Vec<CellRangeData>, String> {
+    let ranges = ranges.ok_or("missing cell ranges")?;
+    let mut result = Vec::new();
+    for cr in ranges.iter() {
+        let cells = cr.cells().ok_or("missing cells")?;
+        let cell_data: Vec<CellData> = cells.iter().map(|c| {
+            CellData {
+                ch: char::from_u32(c.ch()).unwrap_or(' '),
+                fg: c.fg(),
+                bg: c.bg(),
+                attrs: c.attrs(),
+            }
+        }).collect();
+        result.push(CellRangeData {
+            row: cr.row(),
+            col_start: cr.col_start(),
+            cells: cell_data,
+        });
+    }
+    Ok(result)
+}
+
+fn decode_screen_update(su: &fbs::ScreenUpdate<'_>) -> Result<ScreenUpdateData, String> {
+    let cursor_fb = su.cursor().ok_or("missing cursor")?;
+    Ok(ScreenUpdateData {
+        changes: decode_cell_ranges(su.changes())?,
+        cursor: CursorData {
+            row: cursor_fb.row(),
+            col: cursor_fb.col(),
+            visible: cursor_fb.visible(),
+        },
+        cols: su.cols(),
+        rows: su.rows(),
+        title: su.title().map(|t| t.to_string()),
+    })
+}
+
+fn decode_screen_snapshot(ss: &fbs::ScreenSnapshot<'_>) -> Result<ScreenSnapshotData, String> {
+    let cursor_fb = ss.cursor().ok_or("missing cursor")?;
+    Ok(ScreenSnapshotData {
+        rows: decode_cell_ranges(ss.rows())?,
+        cursor: CursorData {
+            row: cursor_fb.row(),
+            col: cursor_fb.col(),
+            visible: cursor_fb.visible(),
+        },
+        cols: ss.cols(),
+        num_rows: ss.num_rows(),
+        title: ss.title().map(|t| t.to_string()),
+        scrollback_len: ss.scrollback_len(),
+    })
 }
 
 /// gRPC service path for the Terminal service.
@@ -209,50 +464,92 @@ mod tests {
     use super::*;
 
     #[test]
-    fn round_trip_client_data_in() {
-        let msg = ClientMsg::DataIn(DataIn {
-            payload: b"hello".to_vec(),
-        });
-        let encoded = msg.encode_flatbuffer();
-        let decoded = ClientMsg::decode_flatbuffer(&encoded).unwrap();
+    fn round_trip_key_input() {
+        let msg = ClientMsg::KeyInput(KeyInput { data: b"hello".to_vec() });
+        let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
-            ClientMsg::DataIn(d) => assert_eq!(d.payload, b"hello"),
-            _ => panic!("expected DataIn"),
+            ClientMsg::KeyInput(k) => assert_eq!(k.data, b"hello"),
+            _ => panic!("expected KeyInput"),
         }
     }
 
     #[test]
-    fn round_trip_client_resize() {
-        let msg = ClientMsg::Resize(Resize { cols: 80, rows: 24 });
-        let encoded = msg.encode_flatbuffer();
-        let decoded = ClientMsg::decode_flatbuffer(&encoded).unwrap();
+    fn round_trip_paste() {
+        let msg = ClientMsg::PasteInput(PasteInput { text: "pasted text".into() });
+        let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
-            ClientMsg::Resize(r) => {
-                assert_eq!(r.cols, 80);
-                assert_eq!(r.rows, 24);
-            }
+            ClientMsg::PasteInput(p) => assert_eq!(p.text, "pasted text"),
+            _ => panic!("expected PasteInput"),
+        }
+    }
+
+    #[test]
+    fn round_trip_resize() {
+        let msg = ClientMsg::Resize(Resize { cols: 120, rows: 40 });
+        let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ClientMsg::Resize(r) => { assert_eq!(r.cols, 120); assert_eq!(r.rows, 40); }
             _ => panic!("expected Resize"),
         }
     }
 
     #[test]
-    fn round_trip_server_data_out() {
-        let msg = ServerMsg::DataOut(DataOut {
-            payload: b"\x1b[31mred\x1b[0m".to_vec(),
+    fn round_trip_screen_update() {
+        let msg = ServerMsg::ScreenUpdate(ScreenUpdateData {
+            changes: vec![CellRangeData {
+                row: 0,
+                col_start: 0,
+                cells: vec![
+                    CellData { ch: 'H', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: ATTR_BOLD },
+                    CellData { ch: 'i', fg: pack_color_rgb(255, 0, 0), bg: COLOR_DEFAULT, attrs: 0 },
+                ],
+            }],
+            cursor: CursorData { row: 0, col: 2, visible: true },
+            cols: 80, rows: 24,
+            title: Some("test".into()),
         });
-        let encoded = msg.encode_flatbuffer();
-        let decoded = ServerMsg::decode_flatbuffer(&encoded).unwrap();
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
-            ServerMsg::DataOut(d) => assert_eq!(d.payload, b"\x1b[31mred\x1b[0m"),
-            _ => panic!("expected DataOut"),
+            ServerMsg::ScreenUpdate(su) => {
+                assert_eq!(su.cols, 80);
+                assert_eq!(su.changes.len(), 1);
+                assert_eq!(su.changes[0].cells[0].ch, 'H');
+                assert_eq!(su.changes[0].cells[0].attrs, ATTR_BOLD);
+                assert_eq!(su.changes[0].cells[1].fg, pack_color_rgb(255, 0, 0));
+                assert_eq!(su.cursor.row, 0);
+                assert_eq!(su.cursor.col, 2);
+                assert_eq!(su.title.as_deref(), Some("test"));
+            }
+            _ => panic!("expected ScreenUpdate"),
         }
     }
 
     #[test]
-    fn round_trip_server_exit() {
+    fn round_trip_screen_snapshot() {
+        let msg = ServerMsg::ScreenSnapshot(ScreenSnapshotData {
+            rows: vec![CellRangeData {
+                row: 0, col_start: 0,
+                cells: vec![CellData { ch: 'A', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 }],
+            }],
+            cursor: CursorData { row: 0, col: 1, visible: true },
+            cols: 80, num_rows: 24,
+            title: None,
+            scrollback_len: 100,
+        });
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        match decoded {
+            ServerMsg::ScreenSnapshot(ss) => {
+                assert_eq!(ss.scrollback_len, 100);
+                assert_eq!(ss.rows[0].cells[0].ch, 'A');
+            }
+            _ => panic!("expected ScreenSnapshot"),
+        }
+    }
+
+    #[test]
+    fn round_trip_exit() {
         let msg = ServerMsg::Exit(Exit { code: 42 });
-        let encoded = msg.encode_flatbuffer();
-        let decoded = ServerMsg::decode_flatbuffer(&encoded).unwrap();
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
             ServerMsg::Exit(e) => assert_eq!(e.code, 42),
             _ => panic!("expected Exit"),
@@ -260,21 +557,16 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_server_error() {
-        let msg = ServerMsg::Error(ServerError {
-            message: "PTY died".into(),
-        });
-        let encoded = msg.encode_flatbuffer();
-        let decoded = ServerMsg::decode_flatbuffer(&encoded).unwrap();
-        match decoded {
-            ServerMsg::Error(e) => assert_eq!(e.message, "PTY died"),
-            _ => panic!("expected Error"),
-        }
+    fn round_trip_bell() {
+        let msg = ServerMsg::Bell;
+        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        assert!(matches!(decoded, ServerMsg::Bell));
     }
 
     #[test]
-    fn decode_invalid_data_fails() {
-        assert!(ClientMsg::decode_flatbuffer(&[0, 0]).is_err());
-        assert!(ServerMsg::decode_flatbuffer(&[0, 0]).is_err());
+    fn color_packing() {
+        assert_eq!(unpack_color(COLOR_DEFAULT), ColorKind::Default);
+        assert_eq!(unpack_color(pack_color_indexed(200)), ColorKind::Indexed(200));
+        assert_eq!(unpack_color(pack_color_rgb(100, 150, 200)), ColorKind::Rgb(100, 150, 200));
     }
 }
