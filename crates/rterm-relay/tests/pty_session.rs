@@ -137,7 +137,11 @@ struct ScreenState {
 
 impl ScreenState {
     fn new() -> Self {
-        Self { cells: Vec::new(), cols: 0, rows: 0 }
+        Self {
+            cells: Vec::new(),
+            cols: 0,
+            rows: 0,
+        }
     }
 
     fn apply(&mut self, msg: &ServerMsg) {
@@ -182,7 +186,8 @@ impl ScreenState {
 
     /// Get all screen text as a single string (rows joined by newlines, trimmed).
     fn text(&self) -> String {
-        self.cells.iter()
+        self.cells
+            .iter()
             .map(|row| row.iter().collect::<String>().trim_end().to_string())
             .collect::<Vec<_>>()
             .join("\n")
@@ -225,7 +230,9 @@ async fn read_all_bytes(stream: &mut Streaming<ServerMsg>, timeout_secs: u64) ->
             break;
         }
         match tokio::time::timeout(remaining, stream.next()).await {
-            Ok(Some(Ok(msg))) => { screen.apply(&msg); }
+            Ok(Some(Ok(msg))) => {
+                screen.apply(&msg);
+            }
             Ok(None) | Err(_) => break,
             Ok(Some(Err(e))) => panic!("stream error: {}", e),
         }

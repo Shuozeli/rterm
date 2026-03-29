@@ -176,41 +176,63 @@ impl FlatBufferGrpcMessage for ClientMsg {
             ClientMsg::KeyInput(k) => {
                 let data = fbb.create_vector(&k.data);
                 let ki = fbs::KeyInput::create(&mut fbb, &fbs::KeyInputArgs { data: Some(data) });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::KeyInput,
-                    body: Some(ki.as_union_value()),
-                });
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::KeyInput,
+                        body: Some(ki.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ClientMsg::PasteInput(p) => {
                 let text = fbb.create_string(&p.text);
-                let pi = fbs::PasteInput::create(&mut fbb, &fbs::PasteInputArgs { text: Some(text) });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::PasteInput,
-                    body: Some(pi.as_union_value()),
-                });
+                let pi =
+                    fbs::PasteInput::create(&mut fbb, &fbs::PasteInputArgs { text: Some(text) });
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::PasteInput,
+                        body: Some(pi.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ClientMsg::Resize(r) => {
-                let resize = fbs::Resize::create(&mut fbb, &fbs::ResizeArgs { cols: r.cols, rows: r.rows });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::Resize,
-                    body: Some(resize.as_union_value()),
-                });
+                let resize = fbs::Resize::create(
+                    &mut fbb,
+                    &fbs::ResizeArgs {
+                        cols: r.cols,
+                        rows: r.rows,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::Resize,
+                        body: Some(resize.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ClientMsg::MouseEvent(m) => {
-                let me = fbs::MouseEvent::create(&mut fbb, &fbs::MouseEventArgs {
-                    row: m.row,
-                    col: m.col,
-                    button: m.button,
-                    modifiers: m.modifiers,
-                    kind: fbs::MouseEventKind(m.kind),
-                });
-                let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-                    body_type: fbs::ClientBody::MouseEvent,
-                    body: Some(me.as_union_value()),
-                });
+                let me = fbs::MouseEvent::create(
+                    &mut fbb,
+                    &fbs::MouseEventArgs {
+                        row: m.row,
+                        col: m.col,
+                        button: m.button,
+                        modifiers: m.modifiers,
+                        kind: fbs::MouseEventKind(m.kind),
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::MouseEvent,
+                        body: Some(me.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
         }
@@ -235,13 +257,19 @@ impl FlatBufferGrpcMessage for ClientMsg {
             }
             fbs::ClientBody::Resize => {
                 let r = msg.body_as_resize().ok_or("missing Resize")?;
-                Ok(ClientMsg::Resize(Resize { cols: r.cols(), rows: r.rows() }))
+                Ok(ClientMsg::Resize(Resize {
+                    cols: r.cols(),
+                    rows: r.rows(),
+                }))
             }
             fbs::ClientBody::MouseEvent => {
                 let m = msg.body_as_mouse_event().ok_or("missing MouseEvent")?;
                 Ok(ClientMsg::MouseEvent(MouseEvent {
-                    row: m.row(), col: m.col(), button: m.button(),
-                    modifiers: m.modifiers(), kind: m.kind().0,
+                    row: m.row(),
+                    col: m.col(),
+                    button: m.button(),
+                    modifiers: m.modifiers(),
+                    kind: m.kind().0,
                 }))
             }
             _ => Err("unknown ClientBody".into()),
@@ -262,40 +290,60 @@ impl FlatBufferGrpcMessage for ServerMsg {
             ServerMsg::ScrollbackData(sd) => {
                 let lines = encode_cell_ranges(&mut fbb, &sd.lines);
                 let lines_vec = fbb.create_vector(&lines);
-                let sbd = fbs::ScrollbackData::create(&mut fbb, &fbs::ScrollbackDataArgs {
-                    lines: Some(lines_vec),
-                    offset: sd.offset,
-                    total: sd.total,
-                });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::ScrollbackData,
-                    body: Some(sbd.as_union_value()),
-                });
+                let sbd = fbs::ScrollbackData::create(
+                    &mut fbb,
+                    &fbs::ScrollbackDataArgs {
+                        lines: Some(lines_vec),
+                        offset: sd.offset,
+                        total: sd.total,
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::ScrollbackData,
+                        body: Some(sbd.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ServerMsg::Exit(e) => {
                 let exit = fbs::Exit::create(&mut fbb, &fbs::ExitArgs { code: e.code });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::Exit,
-                    body: Some(exit.as_union_value()),
-                });
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::Exit,
+                        body: Some(exit.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ServerMsg::Error(e) => {
                 let message = fbb.create_string(&e.message);
-                let error = fbs::Error::create(&mut fbb, &fbs::ErrorArgs { message: Some(message) });
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::Error,
-                    body: Some(error.as_union_value()),
-                });
+                let error = fbs::Error::create(
+                    &mut fbb,
+                    &fbs::ErrorArgs {
+                        message: Some(message),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::Error,
+                        body: Some(error.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
             ServerMsg::Bell => {
                 let bell = fbs::Bell::create(&mut fbb, &fbs::BellArgs {});
-                let msg = fbs::ServerMessage::create(&mut fbb, &fbs::ServerMessageArgs {
-                    body_type: fbs::ServerBody::Bell,
-                    body: Some(bell.as_union_value()),
-                });
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::Bell,
+                        body: Some(bell.as_union_value()),
+                    },
+                );
                 fbb.finish(msg, None);
             }
         }
@@ -311,11 +359,15 @@ impl FlatBufferGrpcMessage for ServerMsg {
                 Ok(ServerMsg::ScreenUpdate(decode_screen_update(&su)?))
             }
             fbs::ServerBody::ScreenSnapshot => {
-                let ss = msg.body_as_screen_snapshot().ok_or("missing ScreenSnapshot")?;
+                let ss = msg
+                    .body_as_screen_snapshot()
+                    .ok_or("missing ScreenSnapshot")?;
                 Ok(ServerMsg::ScreenSnapshot(decode_screen_snapshot(&ss)?))
             }
             fbs::ServerBody::ScrollbackData => {
-                let sd = msg.body_as_scrollback_data().ok_or("missing ScrollbackData")?;
+                let sd = msg
+                    .body_as_scrollback_data()
+                    .ok_or("missing ScrollbackData")?;
                 Ok(ServerMsg::ScrollbackData(ScrollbackDataMsg {
                     lines: decode_cell_ranges(sd.lines())?,
                     offset: sd.offset(),
@@ -328,7 +380,9 @@ impl FlatBufferGrpcMessage for ServerMsg {
             }
             fbs::ServerBody::Error => {
                 let e = msg.body_as_error().ok_or("missing Error")?;
-                Ok(ServerMsg::Error(ServerError { message: e.message().unwrap_or("").to_string() }))
+                Ok(ServerMsg::Error(ServerError {
+                    message: e.message().unwrap_or("").to_string(),
+                }))
             }
             fbs::ServerBody::Bell => Ok(ServerMsg::Bell),
             _ => Err("unknown ServerBody".into()),
@@ -344,56 +398,89 @@ fn encode_cell_ranges<'a>(
     fbb: &mut flatbuffers::FlatBufferBuilder<'a>,
     ranges: &[CellRangeData],
 ) -> Vec<flatbuffers::WIPOffset<fbs::CellRange<'a>>> {
-    ranges.iter().map(|cr| {
-        let cells: Vec<fbs::Cell> = cr.cells.iter().map(|c| {
-            fbs::Cell::new(c.ch as u32, c.fg, c.bg, c.attrs)
-        }).collect();
-        let cells_vec = fbb.create_vector(&cells);
-        fbs::CellRange::create(fbb, &fbs::CellRangeArgs {
-            row: cr.row,
-            col_start: cr.col_start,
-            cells: Some(cells_vec),
+    ranges
+        .iter()
+        .map(|cr| {
+            let cells: Vec<fbs::Cell> = cr
+                .cells
+                .iter()
+                .map(|c| fbs::Cell::new(c.ch as u32, c.fg, c.bg, c.attrs))
+                .collect();
+            let cells_vec = fbb.create_vector(&cells);
+            fbs::CellRange::create(
+                fbb,
+                &fbs::CellRangeArgs {
+                    row: cr.row,
+                    col_start: cr.col_start,
+                    cells: Some(cells_vec),
+                },
+            )
         })
-    }).collect()
+        .collect()
 }
 
 fn encode_screen_update(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, su: &ScreenUpdateData) {
     let changes = encode_cell_ranges(fbb, &su.changes);
     let changes_vec = fbb.create_vector(&changes);
-    let cursor = fbs::CursorState::create(fbb, &fbs::CursorStateArgs {
-        row: su.cursor.row, col: su.cursor.col, visible: su.cursor.visible,
-    });
+    let cursor = fbs::CursorState::create(
+        fbb,
+        &fbs::CursorStateArgs {
+            row: su.cursor.row,
+            col: su.cursor.col,
+            visible: su.cursor.visible,
+        },
+    );
     let title = su.title.as_ref().map(|t| fbb.create_string(t));
-    let screen = fbs::ScreenUpdate::create(fbb, &fbs::ScreenUpdateArgs {
-        changes: Some(changes_vec),
-        cursor: Some(cursor),
-        cols: su.cols, rows: su.rows,
-        title,
-    });
-    let msg = fbs::ServerMessage::create(fbb, &fbs::ServerMessageArgs {
-        body_type: fbs::ServerBody::ScreenUpdate,
-        body: Some(screen.as_union_value()),
-    });
+    let screen = fbs::ScreenUpdate::create(
+        fbb,
+        &fbs::ScreenUpdateArgs {
+            changes: Some(changes_vec),
+            cursor: Some(cursor),
+            cols: su.cols,
+            rows: su.rows,
+            title,
+        },
+    );
+    let msg = fbs::ServerMessage::create(
+        fbb,
+        &fbs::ServerMessageArgs {
+            body_type: fbs::ServerBody::ScreenUpdate,
+            body: Some(screen.as_union_value()),
+        },
+    );
     fbb.finish(msg, None);
 }
 
 fn encode_screen_snapshot(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, ss: &ScreenSnapshotData) {
     let rows = encode_cell_ranges(fbb, &ss.rows);
     let rows_vec = fbb.create_vector(&rows);
-    let cursor = fbs::CursorState::create(fbb, &fbs::CursorStateArgs {
-        row: ss.cursor.row, col: ss.cursor.col, visible: ss.cursor.visible,
-    });
+    let cursor = fbs::CursorState::create(
+        fbb,
+        &fbs::CursorStateArgs {
+            row: ss.cursor.row,
+            col: ss.cursor.col,
+            visible: ss.cursor.visible,
+        },
+    );
     let title = ss.title.as_ref().map(|t| fbb.create_string(t));
-    let snapshot = fbs::ScreenSnapshot::create(fbb, &fbs::ScreenSnapshotArgs {
-        rows: Some(rows_vec),
-        cursor: Some(cursor),
-        cols: ss.cols, num_rows: ss.num_rows,
-        title, scrollback_len: ss.scrollback_len,
-    });
-    let msg = fbs::ServerMessage::create(fbb, &fbs::ServerMessageArgs {
-        body_type: fbs::ServerBody::ScreenSnapshot,
-        body: Some(snapshot.as_union_value()),
-    });
+    let snapshot = fbs::ScreenSnapshot::create(
+        fbb,
+        &fbs::ScreenSnapshotArgs {
+            rows: Some(rows_vec),
+            cursor: Some(cursor),
+            cols: ss.cols,
+            num_rows: ss.num_rows,
+            title,
+            scrollback_len: ss.scrollback_len,
+        },
+    );
+    let msg = fbs::ServerMessage::create(
+        fbb,
+        &fbs::ServerMessageArgs {
+            body_type: fbs::ServerBody::ScreenSnapshot,
+            body: Some(snapshot.as_union_value()),
+        },
+    );
     fbb.finish(msg, None);
 }
 
@@ -408,14 +495,15 @@ fn decode_cell_ranges(
     let mut result = Vec::new();
     for cr in ranges.iter() {
         let cells = cr.cells().ok_or("missing cells")?;
-        let cell_data: Vec<CellData> = cells.iter().map(|c| {
-            CellData {
+        let cell_data: Vec<CellData> = cells
+            .iter()
+            .map(|c| CellData {
                 ch: char::from_u32(c.ch()).unwrap_or(' '),
                 fg: c.fg(),
                 bg: c.bg(),
                 attrs: c.attrs(),
-            }
-        }).collect();
+            })
+            .collect();
         result.push(CellRangeData {
             row: cr.row(),
             col_start: cr.col_start(),
@@ -465,7 +553,9 @@ mod tests {
 
     #[test]
     fn round_trip_key_input() {
-        let msg = ClientMsg::KeyInput(KeyInput { data: b"hello".to_vec() });
+        let msg = ClientMsg::KeyInput(KeyInput {
+            data: b"hello".to_vec(),
+        });
         let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
             ClientMsg::KeyInput(k) => assert_eq!(k.data, b"hello"),
@@ -475,7 +565,9 @@ mod tests {
 
     #[test]
     fn round_trip_paste() {
-        let msg = ClientMsg::PasteInput(PasteInput { text: "pasted text".into() });
+        let msg = ClientMsg::PasteInput(PasteInput {
+            text: "pasted text".into(),
+        });
         let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
             ClientMsg::PasteInput(p) => assert_eq!(p.text, "pasted text"),
@@ -485,10 +577,16 @@ mod tests {
 
     #[test]
     fn round_trip_resize() {
-        let msg = ClientMsg::Resize(Resize { cols: 120, rows: 40 });
+        let msg = ClientMsg::Resize(Resize {
+            cols: 120,
+            rows: 40,
+        });
         let decoded = ClientMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
-            ClientMsg::Resize(r) => { assert_eq!(r.cols, 120); assert_eq!(r.rows, 40); }
+            ClientMsg::Resize(r) => {
+                assert_eq!(r.cols, 120);
+                assert_eq!(r.rows, 40);
+            }
             _ => panic!("expected Resize"),
         }
     }
@@ -500,12 +598,27 @@ mod tests {
                 row: 0,
                 col_start: 0,
                 cells: vec![
-                    CellData { ch: 'H', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: ATTR_BOLD },
-                    CellData { ch: 'i', fg: pack_color_rgb(255, 0, 0), bg: COLOR_DEFAULT, attrs: 0 },
+                    CellData {
+                        ch: 'H',
+                        fg: COLOR_DEFAULT,
+                        bg: COLOR_DEFAULT,
+                        attrs: ATTR_BOLD,
+                    },
+                    CellData {
+                        ch: 'i',
+                        fg: pack_color_rgb(255, 0, 0),
+                        bg: COLOR_DEFAULT,
+                        attrs: 0,
+                    },
                 ],
             }],
-            cursor: CursorData { row: 0, col: 2, visible: true },
-            cols: 80, rows: 24,
+            cursor: CursorData {
+                row: 0,
+                col: 2,
+                visible: true,
+            },
+            cols: 80,
+            rows: 24,
             title: Some("test".into()),
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
@@ -528,11 +641,22 @@ mod tests {
     fn round_trip_screen_snapshot() {
         let msg = ServerMsg::ScreenSnapshot(ScreenSnapshotData {
             rows: vec![CellRangeData {
-                row: 0, col_start: 0,
-                cells: vec![CellData { ch: 'A', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 }],
+                row: 0,
+                col_start: 0,
+                cells: vec![CellData {
+                    ch: 'A',
+                    fg: COLOR_DEFAULT,
+                    bg: COLOR_DEFAULT,
+                    attrs: 0,
+                }],
             }],
-            cursor: CursorData { row: 0, col: 1, visible: true },
-            cols: 80, num_rows: 24,
+            cursor: CursorData {
+                row: 0,
+                col: 1,
+                visible: true,
+            },
+            cols: 80,
+            num_rows: 24,
             title: None,
             scrollback_len: 100,
         });
@@ -566,7 +690,13 @@ mod tests {
     #[test]
     fn color_packing() {
         assert_eq!(unpack_color(COLOR_DEFAULT), ColorKind::Default);
-        assert_eq!(unpack_color(pack_color_indexed(200)), ColorKind::Indexed(200));
-        assert_eq!(unpack_color(pack_color_rgb(100, 150, 200)), ColorKind::Rgb(100, 150, 200));
+        assert_eq!(
+            unpack_color(pack_color_indexed(200)),
+            ColorKind::Indexed(200)
+        );
+        assert_eq!(
+            unpack_color(pack_color_rgb(100, 150, 200)),
+            ColorKind::Rgb(100, 150, 200)
+        );
     }
 }

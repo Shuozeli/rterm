@@ -1,8 +1,8 @@
 /// Screen differ: compares terminal screen state between frames
 /// and produces typed ScreenUpdate messages with only changed cells.
 use rterm_core::buffer::ScreenBuffer;
-use rterm_core::color::Color;
 use rterm_core::cell::CellAttributes;
+use rterm_core::color::Color;
 use rterm_proto::*;
 
 /// Convert an rterm Color to packed u32.
@@ -17,13 +17,27 @@ fn pack_color(color: &Color) -> u32 {
 /// Convert cell attributes to packed bitflags.
 fn pack_attrs(attrs: &CellAttributes) -> u8 {
     let mut flags = 0u8;
-    if attrs.bold { flags |= ATTR_BOLD; }
-    if attrs.italic { flags |= ATTR_ITALIC; }
-    if attrs.underline { flags |= ATTR_UNDERLINE; }
-    if attrs.strikethrough { flags |= ATTR_STRIKETHROUGH; }
-    if attrs.reverse { flags |= ATTR_REVERSE; }
-    if attrs.dim { flags |= ATTR_DIM; }
-    if attrs.hidden { flags |= ATTR_HIDDEN; }
+    if attrs.bold {
+        flags |= ATTR_BOLD;
+    }
+    if attrs.italic {
+        flags |= ATTR_ITALIC;
+    }
+    if attrs.underline {
+        flags |= ATTR_UNDERLINE;
+    }
+    if attrs.strikethrough {
+        flags |= ATTR_STRIKETHROUGH;
+    }
+    if attrs.reverse {
+        flags |= ATTR_REVERSE;
+    }
+    if attrs.dim {
+        flags |= ATTR_DIM;
+    }
+    if attrs.hidden {
+        flags |= ATTR_HIDDEN;
+    }
     flags
 }
 
@@ -46,7 +60,9 @@ pub fn snapshot(buffer: &ScreenBuffer) -> ScreenSnapshotData {
         .map(|row| CellRangeData {
             row: row as u16,
             col_start: 0,
-            cells: (0..cols).map(|col| cell_to_data(buffer.cell(row, col))).collect(),
+            cells: (0..cols)
+                .map(|col| cell_to_data(buffer.cell(row, col)))
+                .collect(),
         })
         .collect();
 
@@ -134,7 +150,12 @@ impl PrevScreen {
 
             for col in 0..cols {
                 let cell = buffer.cell(row, col);
-                let new = (cell.ch, pack_color(&cell.fg), pack_color(&cell.bg), pack_attrs(&cell.attrs));
+                let new = (
+                    cell.ch,
+                    pack_color(&cell.fg),
+                    pack_color(&cell.bg),
+                    pack_attrs(&cell.attrs),
+                );
                 let old = self.cells[row][col];
 
                 if new != old {
@@ -225,7 +246,10 @@ mod tests {
         let first_change = &update.changes[0];
         assert_eq!(first_change.row, 0);
         // "World" starts at col 6 (col 5 was already a space).
-        assert!(first_change.cells.iter().any(|c| c.ch == 'W'), "should contain 'W'");
+        assert!(
+            first_change.cells.iter().any(|c| c.ch == 'W'),
+            "should contain 'W'"
+        );
     }
 
     #[test]

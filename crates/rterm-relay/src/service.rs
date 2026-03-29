@@ -20,11 +20,15 @@ pub struct TerminalServer {
 
 impl TerminalServer {
     pub fn new() -> Self {
-        Self { shell: DEFAULT_SHELL.to_string() }
+        Self {
+            shell: DEFAULT_SHELL.to_string(),
+        }
     }
 
     pub fn with_shell(shell: impl Into<String>) -> Self {
-        Self { shell: shell.into() }
+        Self {
+            shell: shell.into(),
+        }
     }
 }
 
@@ -32,7 +36,8 @@ impl NamedService for TerminalServer {
     const NAME: &'static str = "rterm.protocol.TerminalService";
 }
 
-type SessionResponseStream = std::pin::Pin<Box<dyn Stream<Item = Result<ServerMsg, Status>> + Send>>;
+type SessionResponseStream =
+    std::pin::Pin<Box<dyn Stream<Item = Result<ServerMsg, Status>> + Send>>;
 
 impl StreamingService<ClientMsg> for TerminalSvc {
     type Response = ServerMsg;
@@ -61,9 +66,21 @@ impl StreamingService<ClientMsg> for TerminalSvc {
             tokio::spawn(async move {
                 while let Ok(Some(msg)) = input.message().await {
                     match msg {
-                        ClientMsg::KeyInput(k) => { if stdin_tx.send(k.data).await.is_err() { break; } }
-                        ClientMsg::PasteInput(p) => { if stdin_tx.send(p.text.into_bytes()).await.is_err() { break; } }
-                        ClientMsg::Resize(r) => { if resize_tx.send((r.cols, r.rows)).await.is_err() { break; } }
+                        ClientMsg::KeyInput(k) => {
+                            if stdin_tx.send(k.data).await.is_err() {
+                                break;
+                            }
+                        }
+                        ClientMsg::PasteInput(p) => {
+                            if stdin_tx.send(p.text.into_bytes()).await.is_err() {
+                                break;
+                            }
+                        }
+                        ClientMsg::Resize(r) => {
+                            if resize_tx.send((r.cols, r.rows)).await.is_err() {
+                                break;
+                            }
+                        }
                         ClientMsg::MouseEvent(_) => {}
                     }
                 }
@@ -82,9 +99,13 @@ impl StreamingService<ClientMsg> for TerminalSvc {
             tokio::spawn(async move {
                 while let Some(data) = stdout_rx.recv().await {
                     terminal.feed(&data);
-                    if terminal.is_sync_mode() { continue; }
+                    if terminal.is_sync_mode() {
+                        continue;
+                    }
                     if let Some(update) = prev.diff(terminal.screen()) {
-                        if tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err() { break; }
+                        if tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err() {
+                            break;
+                        }
                     }
                 }
                 let _ = tx.send(Ok(ServerMsg::Exit(Exit { code: 0 }))).await;
