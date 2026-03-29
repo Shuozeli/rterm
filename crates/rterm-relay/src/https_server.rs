@@ -103,3 +103,84 @@ async fn serve_static_hyper(
             .unwrap()),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http_body_util::BodyExt;
+
+    #[tokio::test]
+    async fn serve_existing_file() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("test.js"), b"console.log('hi')").unwrap();
+
+        let resp = serve_static_hyper(dir.path(), "/test.js", "hash123")
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "application/javascript"
+        );
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(body.as_ref(), b"console.log('hi')");
+    }
+
+    #[tokio::test]
+    async fn serve_missing_file_returns_404() {
+        let dir = tempfile::tempdir().unwrap();
+        let resp = serve_static_hyper(dir.path(), "/nonexistent.js", "hash")
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn serve_html_injects_cert_hash() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("index.html"),
+            b"<html><head></head><body></body></html>",
+        )
+        .unwrap();
+
+        let resp = serve_static_hyper(dir.path(), "/index.html", "TESTHASH")
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8_lossy(&body);
+        assert!(
+            html.contains("__RTERM_CERT_HASH__"),
+            "cert hash not injected"
+        );
+        assert!(html.contains("TESTHASH"), "hash value not found");
+    }
+
+    #[tokio::test]
+    async fn serve_non_html_no_injection() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("app.js"), b"var x = '</head>';").unwrap();
+
+        let resp = serve_static_hyper(dir.path(), "/app.js", "hash")
+            .await
+            .unwrap();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert!(!String::from_utf8_lossy(&body).contains("__RTERM_CERT_HASH__"));
+    }
+
+    #[tokio::test]
+    async fn serve_root_returns_index_html() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("index.html"), b"<html><head></head></html>").unwrap();
+
+        let resp = serve_static_hyper(dir.path(), "/", "hash").await.unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.headers().get("content-type").unwrap(),
+            "text/html; charset=utf-8"
+        );
+    }
+}

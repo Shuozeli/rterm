@@ -162,3 +162,84 @@ where
         .await
         .map_err(|e| format!("write: {}", e))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    #[tokio::test]
+    async fn read_write_message_roundtrip() {
+        let payload = b"hello world";
+        let mut buf = Vec::new();
+
+        // Write a message.
+        write_message(&mut buf, payload).await.unwrap();
+
+        // Read it back.
+        let mut reader = Cursor::new(buf);
+        let result = read_message(&mut reader).await.unwrap();
+        assert_eq!(result, Some(payload.to_vec()));
+    }
+
+    #[tokio::test]
+    async fn read_message_empty_stream() {
+        let mut reader = Cursor::new(Vec::<u8>::new());
+        let result = read_message(&mut reader).await.unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[tokio::test]
+    async fn read_write_multiple_messages() {
+        let mut buf = Vec::new();
+        write_message(&mut buf, b"msg1").await.unwrap();
+        write_message(&mut buf, b"msg2").await.unwrap();
+        write_message(&mut buf, b"msg3").await.unwrap();
+
+        let mut reader = Cursor::new(buf);
+        assert_eq!(
+            read_message(&mut reader).await.unwrap(),
+            Some(b"msg1".to_vec())
+        );
+        assert_eq!(
+            read_message(&mut reader).await.unwrap(),
+            Some(b"msg2".to_vec())
+        );
+        assert_eq!(
+            read_message(&mut reader).await.unwrap(),
+            Some(b"msg3".to_vec())
+        );
+        assert_eq!(read_message(&mut reader).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn write_message_length_prefix() {
+        let mut buf = Vec::new();
+        write_message(&mut buf, b"test").await.unwrap();
+        // First 4 bytes should be length (4) in big-endian.
+        assert_eq!(&buf[..4], &[0, 0, 0, 4]);
+        assert_eq!(&buf[4..], b"test");
+    }
+
+    #[tokio::test]
+    async fn read_write_empty_message() {
+        let mut buf = Vec::new();
+        write_message(&mut buf, b"").await.unwrap();
+
+        let mut reader = Cursor::new(buf);
+        let result = read_message(&mut reader).await.unwrap();
+        assert_eq!(result, Some(vec![]));
+    }
+
+    #[tokio::test]
+    async fn read_write_large_message() {
+        let payload = vec![0xABu8; 100_000];
+        let mut buf = Vec::new();
+        write_message(&mut buf, &payload).await.unwrap();
+
+        let mut reader = Cursor::new(buf);
+        let result = read_message(&mut reader).await.unwrap().unwrap();
+        assert_eq!(result.len(), 100_000);
+        assert!(result.iter().all(|&b| b == 0xAB));
+    }
+}

@@ -41,3 +41,4 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 
 [dev-dependencies]
 grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+tempfile = "3"

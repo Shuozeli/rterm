@@ -634,4 +634,122 @@ mod tests {
         assert_eq!(cell.fg, Color::Indexed(2)); // green
         assert!(cell.attrs.bold);
     }
+    #[test]
+    fn sync_mode() {
+        let mut t = term();
+        assert!(!t.is_sync_mode());
+        feed(&mut t, "\x1b[?2026h");
+        assert!(t.is_sync_mode());
+        feed(&mut t, "\x1b[?2026l");
+        assert!(!t.is_sync_mode());
+    }
+
+    #[test]
+    fn terminal_resize() {
+        let mut t = Terminal::new(80, 24);
+        feed(&mut t, "Hello");
+        t.resize(40, 10);
+        assert_eq!(t.screen().cols(), 40);
+        assert_eq!(t.screen().rows(), 10);
+        // Content may shift during resize — verify no panic and dimensions correct.
+    }
+
+    #[test]
+    fn sgr_all_attributes() {
+        let mut t = term();
+        feed(
+            &mut t,
+            "\x1b[2mD\x1b[3mI\x1b[4mU\x1b[7mR\x1b[8mH\x1b[9mS\x1b[0m",
+        );
+        assert!(t.screen().cell(0, 0).attrs.dim);
+        assert!(t.screen().cell(0, 1).attrs.italic);
+        assert!(t.screen().cell(0, 2).attrs.underline);
+        assert!(t.screen().cell(0, 3).attrs.reverse);
+        assert!(t.screen().cell(0, 4).attrs.hidden);
+        assert!(t.screen().cell(0, 5).attrs.strikethrough);
+    }
+
+    #[test]
+    fn sgr_reset_individual_attrs() {
+        let mut t = term();
+        feed(&mut t, "\x1b[1;2;3;4;7;8;9m");
+        feed(
+            &mut t,
+            "\x1b[21m\x1b[22m\x1b[23m\x1b[24m\x1b[27m\x1b[28m\x1b[29m",
+        );
+        feed(&mut t, "X");
+        let c = t.screen().cell(0, 0);
+        assert!(!c.attrs.bold);
+        assert!(!c.attrs.dim);
+        assert!(!c.attrs.italic);
+        assert!(!c.attrs.underline);
+        assert!(!c.attrs.reverse);
+        assert!(!c.attrs.hidden);
+        assert!(!c.attrs.strikethrough);
+    }
+
+    #[test]
+    fn sgr_default_fg_bg() {
+        let mut t = term();
+        feed(&mut t, "\x1b[31m\x1b[42m"); // red fg, green bg
+        feed(&mut t, "\x1b[39m"); // default fg
+        feed(&mut t, "A");
+        assert_eq!(t.screen().cell(0, 0).fg, Color::Default);
+        assert_eq!(t.screen().cell(0, 0).bg, Color::Indexed(2)); // green still
+        feed(&mut t, "\x1b[49m"); // default bg
+        feed(&mut t, "B");
+        assert_eq!(t.screen().cell(0, 1).bg, Color::Default);
+    }
+
+    #[test]
+    fn sgr_256_bg_color() {
+        let mut t = term();
+        feed(&mut t, "\x1b[48;5;100mX\x1b[0m");
+        assert_eq!(t.screen().cell(0, 0).bg, Color::Indexed(100));
+    }
+
+    #[test]
+    fn sgr_bright_bg() {
+        let mut t = term();
+        feed(&mut t, "\x1b[105mX\x1b[0m");
+        assert_eq!(t.screen().cell(0, 0).bg, Color::Indexed(13));
+    }
+
+    #[test]
+    fn dec_modes() {
+        let mut t = term();
+        feed(&mut t, "\x1b[?1h"); // DECCKM on
+        assert!(t.modes.application_cursor_keys);
+        feed(&mut t, "\x1b[?1l"); // DECCKM off
+        assert!(!t.modes.application_cursor_keys);
+
+        feed(&mut t, "\x1b[?4h"); // IRM on
+        assert!(t.modes.insert);
+        feed(&mut t, "\x1b[?4l");
+        assert!(!t.modes.insert);
+
+        feed(&mut t, "\x1b[?7l"); // DECAWM off
+        assert!(!t.modes.autowrap);
+        feed(&mut t, "\x1b[?7h");
+        assert!(t.modes.autowrap);
+    }
+
+    #[test]
+    fn bracketed_paste_mode_ignored() {
+        let mut t = term();
+        // Should not panic or change state.
+        feed(&mut t, "\x1b[?2004h");
+        feed(&mut t, "\x1b[?2004l");
+        feed(&mut t, "OK");
+        assert_eq!(t.screen().cell(0, 0).ch, 'O');
+    }
+
+    #[test]
+    fn extended_color_invalid() {
+        let mut t = term();
+        // SGR 38;9;... — invalid sub-command, should be ignored.
+        feed(&mut t, "\x1b[38;9;1;2;3mX\x1b[0m");
+        // Should not crash, X rendered with default color.
+        assert_eq!(t.screen().cell(0, 0).ch, 'X');
+    }
 }
