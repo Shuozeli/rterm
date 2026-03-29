@@ -12,7 +12,7 @@ use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::Request;
 use rterm_core::Terminal;
 use rterm_gui::{TerminalGridConfig, encode_char, encode_key, terminal_grid};
-use rterm_proto::{ClientMsg, DataIn, Resize, ServerMsg};
+use rterm_proto::{ClientMsg, KeyInput, Resize, ServerMsg};
 use std::sync::{Arc, Mutex};
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
@@ -96,8 +96,9 @@ impl eframe::App for TerminalApp {
                                 if let Some(tx) = &self.input_tx {
                                     for ch in text.chars() {
                                         let bytes = encode_char(ch);
-                                        let _ = tx
-                                            .try_send(ClientMsg::DataIn(DataIn { payload: bytes }));
+                                        let _ = tx.try_send(ClientMsg::KeyInput(KeyInput {
+                                            data: bytes,
+                                        }));
                                     }
                                 }
                             }
@@ -113,8 +114,9 @@ impl eframe::App for TerminalApp {
                                 };
                                 if let Some(bytes) = encode_key(*key, modifiers, app_cursor) {
                                     if let Some(tx) = &self.input_tx {
-                                        let _ = tx
-                                            .try_send(ClientMsg::DataIn(DataIn { payload: bytes }));
+                                        let _ = tx.try_send(ClientMsg::KeyInput(KeyInput {
+                                            data: bytes,
+                                        }));
                                     }
                                 }
                             }
@@ -186,9 +188,9 @@ async fn try_connect(
     // Read PTY output and feed to terminal.
     while let Some(msg) = stream.next().await {
         match msg {
-            Ok(ServerMsg::DataOut(d)) => {
+            Ok(ServerMsg::ScreenUpdate(d)) => {
                 let mut t = terminal.lock().unwrap();
-                t.feed(&d.payload);
+                t.feed(&format!("screen update").into_bytes());
                 ctx.request_repaint();
             }
             Ok(ServerMsg::Exit(e)) => {
