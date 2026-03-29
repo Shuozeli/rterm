@@ -93,7 +93,7 @@ pub struct PrevScreen {
 impl PrevScreen {
     pub fn new(cols: usize, rows: usize) -> Self {
         Self {
-            cells: vec![vec![(' ' as char, COLOR_DEFAULT, COLOR_DEFAULT, 0); cols]; rows],
+            cells: vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0); cols]; rows],
             cursor_row: 0,
             cursor_col: 0,
             cursor_visible: true,

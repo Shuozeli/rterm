@@ -102,10 +102,10 @@ impl StreamingService<ClientMsg> for TerminalSvc {
                     if terminal.is_sync_mode() {
                         continue;
                     }
-                    if let Some(update) = prev.diff(terminal.screen()) {
-                        if tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err() {
-                            break;
-                        }
+                    if let Some(update) = prev.diff(terminal.screen())
+                        && tx.send(Ok(ServerMsg::ScreenUpdate(update))).await.is_err()
+                    {
+                        break;
                     }
                 }
                 let _ = tx.send(Ok(ServerMsg::Exit(Exit { code: 0 }))).await;
