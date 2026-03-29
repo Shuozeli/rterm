@@ -1,0 +1,42 @@
+[package]
+name = "rterm-relay"
+description = "gRPC/HTTP/3 relay server: spawns PTY per connection, bridges FlatBuffers messages"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rterm-relay"
+path = "src/main.rs"
+
+[dependencies]
+rterm-proto = { path = "../rterm-proto" }
+grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+portable-pty = "0.9"
+flatbuffers = "25.12.19"
+h3 = "0.0.8"
+h3-quinn = { version = "0.0.10", features = ["datagram"] }
+h3-webtransport = "0.1.2"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rustls-pemfile = "2"
+sha2 = "0.10"
+base64 = "0.22"
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio", "http1", "server", "server-auto"] }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+tower-service = "0.3"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+bytes = "1"
+rcgen = "0.13"
+time = "0.3"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+
+[dev-dependencies]
+grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }

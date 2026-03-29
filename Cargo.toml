@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/rterm-proto",
+    "crates/rterm-core",
+    "crates/rterm-gui",
+    "crates/rterm-shell",
+    "crates/rterm-relay",
+]
+
+# rterm-wasm is WASM-only, excluded from default workspace.
+# Build with: cd crates/rterm-wasm && trunk build
+exclude = ["crates/rterm-wasm"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"

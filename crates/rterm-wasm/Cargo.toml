@@ -1,0 +1,42 @@
+[package]
+name = "rterm-wasm"
+description = "rterm WASM app: egui terminal in the browser via WebTransport"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+rterm-core = { path = "../rterm-core" }
+rterm-gui = { path = "../rterm-gui" }
+flatbuffers = "25.12.19"
+egui = "0.31"
+eframe = { version = "0.31", default-features = false, features = ["glow", "web_screen_reader"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3.92", features = [
+    "WebTransport",
+    "WebTransportOptions",
+    "WebTransportHash",
+    "WebTransportBidirectionalStream",
+    "WebTransportSendStream",
+    "WebTransportReceiveStream",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "WritableStream",
+    "WritableStreamDefaultWriter",
+    "HtmlCanvasElement",
+    "Document",
+    "Window",
+    "Clipboard",
+    "Navigator",
+    "console",
+] }
+js-sys = "0.3"
+log = "0.4"
+console_error_panic_hook = "0.1"
+
+[lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ['cfg(web_sys_unstable_apis)'] }

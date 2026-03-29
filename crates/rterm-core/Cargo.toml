@@ -1,0 +1,11 @@
+[package]
+name = "rterm-core"
+description = "Terminal emulation core: VT parsing, screen buffer, cell grid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+vte = "0.15"
+
+[dev-dependencies]

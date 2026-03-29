@@ -1,0 +1,66 @@
+// rterm protocol: FlatBuffers schema for terminal communication.
+//
+// Client sends ClientMessage (keyboard input, resize events).
+// Server sends ServerMessage (PTY output, exit status, errors).
+// Carried over gRPC bidi streaming on HTTP/3.
+
+namespace rterm.protocol;
+
+// --- Client to Server ---
+
+table DataIn {
+    /// Raw bytes from keyboard input (VT-encoded).
+    payload: [ubyte];
+}
+
+table Resize {
+    /// Terminal width in columns.
+    cols: uint16;
+    /// Terminal height in rows.
+    rows: uint16;
+}
+
+union ClientBody {
+    DataIn,
+    Resize,
+}
+
+table ClientMessage {
+    body: ClientBody;
+}
+
+// --- Server to Client ---
+
+table DataOut {
+    /// Raw bytes from PTY stdout.
+    payload: [ubyte];
+}
+
+table Exit {
+    /// Shell process exit code.
+    code: int32;
+}
+
+table Error {
+    /// Human-readable error message.
+    message: string;
+}
+
+union ServerBody {
+    DataOut,
+    Exit,
+    Error,
+}
+
+table ServerMessage {
+    body: ServerBody;
+}
+
+// --- gRPC Service ---
+
+rpc_service TerminalService {
+    /// Bidirectional streaming: client sends input/resize, server sends PTY output/exit/error.
+    Session(ClientMessage): ServerMessage (streaming: "bidi");
+}
+
+root_type ClientMessage;

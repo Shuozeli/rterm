@@ -1,0 +1,26 @@
+[package]
+name = "rterm-gui"
+description = "egui terminal widget: grid renderer, cursor, colors, input handling"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rterm-core = { path = "../rterm-core" }
+egui = "0.31"
+
+[dev-dependencies]
+eframe = "0.31"
+rterm-proto = { path = "../rterm-proto" }
+grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
+rcgen = "0.13"
+time = "0.3"
+http = "1"
+
+[[example]]
+name = "demo"
+path = "examples/demo.rs"

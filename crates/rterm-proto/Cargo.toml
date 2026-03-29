@@ -1,0 +1,14 @@
+[package]
+name = "rterm-proto"
+description = "FlatBuffers schema, generated code, and transport trait for rterm protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+flatbuffers = "25.12.19"
+bytes = "1"
+grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
