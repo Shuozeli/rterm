@@ -17,9 +17,7 @@ pub enum SessionState {
 
 /// A long-lived terminal session.
 pub struct ManagedSession {
-    pub id: String,
     pub name: String,
-    pub token_hash: [u8; 32],
     pub state: SessionState,
     pub created_at: Instant,
     pub last_activity: Instant,
@@ -48,9 +46,7 @@ impl ManagedSession {
     /// Returns (ManagedSession, stdout_rx) -- caller must start the output loop.
     #[allow(clippy::type_complexity)]
     pub fn new(
-        id: String,
         name: String,
-        token_hash: [u8; 32],
         shell: &str,
         cols: u16,
         rows: u16,
@@ -59,9 +55,7 @@ impl ManagedSession {
         let pty = spawner.spawn(shell, cols, rows)?;
 
         let session = Self {
-            id,
             name,
-            token_hash,
             state: SessionState::Detached, // starts detached, attach sets it
             created_at: Instant::now(),
             last_activity: Instant::now(),
@@ -89,7 +83,7 @@ impl ManagedSession {
         // Displace existing client if any.
         if let Some(old_tx) = self.client_tx.take() {
             let _ = old_tx.try_send(ServerMsg::SessionDetached(rterm_proto::SessionDetached {
-                session_id: self.id.clone(),
+                session_id: self.name.clone(),
                 reason: "displaced by new client".into(),
             }));
         }
@@ -179,17 +173,9 @@ mod tests {
     #[tokio::test]
     async fn create_session() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
         assert_eq!(session.name, "test");
         assert_eq!(session.state, SessionState::Detached);
         assert_eq!(session.cols, 80);
@@ -198,17 +184,9 @@ mod tests {
     #[tokio::test]
     async fn attach_returns_snapshot() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (mut session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let (client_tx, _client_rx) = mpsc::channel(64);
         let snapshot = session.attach(client_tx, 80, 24);
@@ -220,17 +198,9 @@ mod tests {
     #[tokio::test]
     async fn attach_displaces_old_client() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (mut session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let (tx1, mut rx1) = mpsc::channel(64);
         session.attach(tx1, 80, 24);
@@ -246,17 +216,9 @@ mod tests {
     #[tokio::test]
     async fn detach_clears_client() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (mut session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let (tx, _rx) = mpsc::channel(64);
         session.attach(tx, 80, 24);
@@ -270,17 +232,9 @@ mod tests {
     #[tokio::test]
     async fn mark_dead_sets_state() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (mut session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         session.mark_dead(42);
         assert_eq!(session.state, SessionState::Dead);
@@ -290,17 +244,9 @@ mod tests {
     #[tokio::test]
     async fn timeout_check() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         // Just created, should not be timed out.
         assert!(!session.is_timed_out(1800));
@@ -309,17 +255,9 @@ mod tests {
     #[tokio::test]
     async fn output_loop_feeds_terminal() {
         let spawner = FakePtySpawner::new().with_stdout(vec![b"Hello".to_vec()]);
-        let hash = [0u8; 32];
-        let (session, stdout_rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (session, stdout_rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let session = std::sync::Arc::new(tokio::sync::Mutex::new(session));
         session_output_loop(session.clone(), stdout_rx).await;
@@ -332,17 +270,9 @@ mod tests {
     #[tokio::test]
     async fn output_loop_sends_to_client() {
         let spawner = FakePtySpawner::new().with_stdout(vec![b"Hi".to_vec()]);
-        let hash = [0u8; 32];
-        let (mut session, stdout_rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, stdout_rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let (client_tx, mut client_rx) = mpsc::channel(64);
         session.attach(client_tx, 80, 24);
@@ -365,17 +295,9 @@ mod tests {
     #[tokio::test]
     async fn attach_with_resize() {
         let spawner = FakePtySpawner::new();
-        let hash = [0u8; 32];
-        let (mut session, _rx) = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        )
-        .unwrap();
+
+        let (mut session, _rx) =
+            ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner).unwrap();
 
         let (tx, _rx) = mpsc::channel(64);
         let snapshot = session.attach(tx, 120, 40);
@@ -388,16 +310,8 @@ mod tests {
     #[tokio::test]
     async fn spawn_failure() {
         let spawner = FakePtySpawner::new().failing();
-        let hash = [0u8; 32];
-        let result = ManagedSession::new(
-            "id1".into(),
-            "test".into(),
-            hash,
-            "/bin/bash",
-            80,
-            24,
-            &spawner,
-        );
+
+        let result = ManagedSession::new("test".into(), "/bin/bash", 80, 24, &spawner);
         assert!(result.is_err());
     }
 }

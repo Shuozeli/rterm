@@ -1,5 +1,5 @@
 use h3::ext::Protocol;
-use rterm_relay::session_manager::SessionManager;
+use rterm_relay::session_manager::{self, SessionManager};
 use rterm_relay::{https_server, wt_handler};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -115,11 +115,24 @@ async fn handle_connection(
                         .unwrap_or(false);
 
                 if is_wt {
-                    info!("WebTransport terminal session");
-                    let session =
+                    // Extract session name from URL path: /wt/session-name
+                    let path = req.uri().path().to_string();
+                    let session_name = path
+                        .strip_prefix("/wt/")
+                        .or_else(|| path.strip_prefix("/wt"))
+                        .unwrap_or("")
+                        .trim_matches('/');
+                    let session_name = if session_name.is_empty() {
+                        crate::session_manager::generate_session_name()
+                    } else {
+                        session_name.to_string()
+                    };
+
+                    info!("WebTransport session: {}", session_name);
+                    let wt_session =
                         h3_webtransport::server::WebTransportSession::accept(req, stream, h3_conn)
                             .await?;
-                    wt_handler::handle_wt_session(session, session_mgr).await?;
+                    wt_handler::handle_wt_session(wt_session, session_mgr, &session_name).await?;
                     return Ok(());
                 }
 
