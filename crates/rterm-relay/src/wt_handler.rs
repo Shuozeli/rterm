@@ -102,6 +102,14 @@ pub async fn handle_wt_session(
                     s.terminal.resize(r.cols as usize, r.rows as usize);
                     let _ = s.pty_resize_tx.send((r.cols, r.rows)).await;
                 }
+                Ok(ClientMsg::ScrollbackRequest(req)) => {
+                    let s = session.lock().await;
+                    if let Some(msg) = s.get_scrollback(req.offset, req.count) {
+                        if let Some(tx) = &s.client_tx {
+                            let _ = tx.try_send(msg);
+                        }
+                    }
+                }
                 Ok(_) => {}
                 Err(e) => debug!("decode error: {}", e),
             },

@@ -64,6 +64,14 @@ impl DisplayGrid {
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
         self.cursor_style = data.cursor_style;
+        // Track scrollback availability from snapshots.
+        if data.scrollback_len > 0 {
+            self.scrollback_total = data.scrollback_len;
+        }
+        // Also allow scrolling up to 10000 lines (server will clamp to actual).
+        if self.scrollback_total == 0 {
+            self.scrollback_total = 10000;
+        }
     }
 
     /// Apply a ScreenUpdate (diff — only changed cells).
@@ -175,10 +183,35 @@ pub fn paint_grid(
 
     painter.rect_filled(response.rect, 0.0, DEFAULT_BG);
 
+    let sb_count = grid.scrollback.len();
+    let sb_visible = grid.scroll_offset.min(grid.rows).min(sb_count);
+    let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
+
     for row in 0..grid.rows {
         let y = origin.y + row as f32 * cell_size.y;
         for col in 0..grid.cols {
-            let cell = &grid.cells[row][col];
+            let cell = if grid.scroll_offset > 0 && row < sb_visible {
+                // Show scrollback lines at top, most recent at bottom of scrollback area.
+                // scrollback[0] = oldest, scrollback[sb_count-1] = most recent.
+                // row 0 should show the oldest visible line,
+                // row sb_visible-1 should show the most recent (just above live screen).
+                let sb_idx = sb_count.saturating_sub(sb_visible) + row;
+                grid.scrollback.get(sb_idx)
+                    .and_then(|line| line.get(col))
+                    .unwrap_or(&default_cell)
+            } else {
+                // Show live screen (shifted down by scrollback lines).
+                let screen_row = if grid.scroll_offset > 0 {
+                    row - sb_visible
+                } else {
+                    row
+                };
+                if screen_row < grid.cells.len() && col < grid.cells[screen_row].len() {
+                    &grid.cells[screen_row][col]
+                } else {
+                    &default_cell
+                }
+            };
             let (mut fg, mut bg) = (unpack_color32(cell.fg, DEFAULT_FG), unpack_color32(cell.bg, DEFAULT_BG));
 
             if cell.attrs & ATTR_REVERSE != 0 { std::mem::swap(&mut fg, &mut bg); }
@@ -309,6 +342,18 @@ pub fn paint_grid(
                 );
             }
         }
+    }
+
+    // Scroll indicator.
+    if grid.scroll_offset > 0 {
+        let text = format!("scroll: {} lines up", grid.scroll_offset);
+        painter.text(
+            Pos2::new(origin.x + grid_size.x - 150.0, origin.y + 2.0),
+            egui::Align2::LEFT_TOP,
+            text,
+            font_id,
+            Color32::from_rgb(255, 200, 0),
+        );
     }
 
     (response, cell_size, fit_cols, fit_rows)

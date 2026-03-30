@@ -72,8 +72,17 @@ async fn serve_static_hyper(
 ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, std::convert::Infallible> {
     let file_path = resolve_path(uri_path, static_dir);
 
-    // SPA fallback: if the file doesn't exist but has no extension
-    // (e.g., /dev, /deploy), serve index.html instead.
+    // If root path "/" with no session name, redirect to an auto-generated session.
+    if uri_path == "/" || uri_path.is_empty() {
+        let name = crate::session_manager::generate_session_name();
+        return Ok(hyper::Response::builder()
+            .status(302)
+            .header("location", format!("/{}", name))
+            .body(http_body_util::Full::new(bytes::Bytes::new()))
+            .unwrap());
+    }
+
+    // SPA fallback: session name paths (e.g., /dev, /deploy) serve index.html.
     let file_path = if !file_path.exists()
         && file_path.extension().is_none()
         && static_dir.join("index.html").exists()

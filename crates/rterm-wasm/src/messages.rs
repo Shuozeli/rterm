@@ -63,6 +63,7 @@ pub struct ScreenData {
     pub cursor_style: u8,
     pub cols: u16,
     pub rows: u16,
+    pub scrollback_len: u32,
 }
 
 pub struct CellRange {
@@ -107,6 +108,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: ss.cols(),
                 rows: ss.num_rows(),
+                scrollback_len: ss.scrollback_len(),
             }))
         }
         fbs::ServerBody::ScreenUpdate => {
@@ -119,6 +121,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: su.cols(),
                 rows: su.rows(),
+                scrollback_len: 0, // Updates don't carry scrollback_len
             }))
         }
         fbs::ServerBody::ScrollbackData => {

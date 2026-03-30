@@ -141,6 +141,49 @@ impl ManagedSession {
         }
     }
 
+    /// Get scrollback data for the client.
+    pub fn get_scrollback(&self, offset: u32, count: u32) -> Option<ServerMsg> {
+        use crate::screen_diff::{pack_attrs, pack_color};
+
+        let screen = self.terminal.screen();
+        let sb_len = screen.scrollback_len();
+        if sb_len == 0 {
+            return None;
+        }
+
+        let offset_usize = offset as usize;
+        let count_usize = count as usize;
+        let start = sb_len.saturating_sub(offset_usize + count_usize);
+        let end = sb_len.saturating_sub(offset_usize);
+
+        let mut lines = Vec::new();
+        for i in start..end {
+            let cols = screen.scrollback_cols(i);
+            let cells: Vec<CellData> = (0..cols)
+                .map(|col| {
+                    let cell = screen.scrollback_cell(i, col);
+                    CellData {
+                        ch: cell.ch,
+                        fg: pack_color(&cell.fg),
+                        bg: pack_color(&cell.bg),
+                        attrs: pack_attrs(&cell.attrs),
+                    }
+                })
+                .collect();
+            lines.push(CellRangeData {
+                row: (i - start) as u16,
+                col_start: 0,
+                cells,
+            });
+        }
+
+        Some(ServerMsg::ScrollbackData(ScrollbackDataMsg {
+            lines,
+            offset,
+            total: sb_len as u32,
+        }))
+    }
+
     /// Check if the session has timed out (detached too long).
     pub fn is_timed_out(&self, max_detach_secs: u64) -> bool {
         self.state == SessionState::Detached

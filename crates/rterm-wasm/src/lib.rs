@@ -112,26 +112,39 @@ impl eframe::App for TerminalApp {
                     }
                 }
 
-                // Mouse wheel scrolling.
+                // Mouse wheel scrolling — try multiple egui scroll sources.
                 let scroll_delta = ui.input(|i| {
-                    i.events.iter().filter_map(|e| {
+                    // Method 1: MouseWheel events.
+                    let wheel: f32 = i.events.iter().filter_map(|e| {
                         if let egui::Event::MouseWheel { delta, .. } = e {
                             Some(delta.y)
                         } else { None }
-                    }).sum::<f32>()
+                    }).sum();
+                    if wheel != 0.0 { return wheel; }
+                    // Method 2: smooth_scroll_delta (trackpad, touch).
+                    i.smooth_scroll_delta.y
                 });
                 if scroll_delta != 0.0 && response.hovered() {
                     if let Ok(mut s) = self.shared.try_borrow_mut() {
                         let lines = (scroll_delta / 3.0).round() as isize;
-                        let new_offset = (s.grid.scroll_offset as isize - lines)
+                        // Positive delta = scroll up (show older content = increase offset).
+                        let new_offset = (s.grid.scroll_offset as isize + lines)
                             .max(0).min(s.grid.scrollback_total as isize) as usize;
                         if new_offset != s.grid.scroll_offset {
+                            web_sys::console::log_1(
+                                &format!("[scroll] delta={:.1} lines={} offset={}->{} sb_total={}",
+                                    scroll_delta, lines, s.grid.scroll_offset, new_offset, s.grid.scrollback_total
+                                ).into(),
+                            );
                             s.grid.scroll_offset = new_offset;
-                            // Request scrollback from server.
                             if new_offset > 0 && s.connected {
+                                // Request exactly `new_offset` lines of scrollback.
                                 let req = messages::encode_scrollback_request(
-                                    new_offset as u32, rows as u32);
+                                    0, new_offset as u32);
                                 s.send_queue.push_back(encode_message(&req));
+                            } else {
+                                // Back to live view — clear scrollback display.
+                                s.grid.scrollback.clear();
                             }
                         }
                     }
