@@ -27,13 +27,32 @@ pub fn encode_key_input(data: &[u8]) -> Vec<u8> {
     fbb.finished_data().to_vec()
 }
 
+/// Encode a ScrollbackRequest ClientMessage.
+pub fn encode_scrollback_request(offset: u32, count: u32) -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let sr = fbs::ScrollbackRequest::create(&mut fbb, &fbs::ScrollbackRequestArgs { offset, count });
+    let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+        body_type: fbs::ClientBody::ScrollbackRequest,
+        body: Some(sr.as_union_value()),
+    });
+    fbb.finish(msg, None);
+    fbb.finished_data().to_vec()
+}
+
 /// Decoded server message for the WASM renderer.
 pub enum ServerMsg {
     ScreenSnapshot(ScreenData),
     ScreenUpdate(ScreenData),
+    ScrollbackData(ScrollbackDataMsg),
     Exit(i32),
     Error(String),
     Bell,
+}
+
+pub struct ScrollbackDataMsg {
+    pub lines: Vec<CellRange>,
+    pub offset: u32,
+    pub total: u32,
 }
 
 pub struct ScreenData {
@@ -98,6 +117,14 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(),
                 cols: su.cols(),
                 rows: su.rows(),
+            }))
+        }
+        fbs::ServerBody::ScrollbackData => {
+            let sd = msg.body_as_scrollback_data().ok_or("missing ScrollbackData")?;
+            Ok(ServerMsg::ScrollbackData(ScrollbackDataMsg {
+                lines: decode_cell_ranges(sd.lines())?,
+                offset: sd.offset(),
+                total: sd.total(),
             }))
         }
         fbs::ServerBody::Exit => {

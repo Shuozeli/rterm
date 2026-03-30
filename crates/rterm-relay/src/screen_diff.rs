@@ -6,7 +6,7 @@ use rterm_core::color::Color;
 use rterm_proto::*;
 
 /// Convert an rterm Color to packed u32.
-fn pack_color(color: &Color) -> u32 {
+pub fn pack_color(color: &Color) -> u32 {
     match color {
         Color::Default => COLOR_DEFAULT,
         Color::Indexed(idx) => pack_color_indexed(*idx),
@@ -15,7 +15,7 @@ fn pack_color(color: &Color) -> u32 {
 }
 
 /// Convert cell attributes to packed bitflags.
-fn pack_attrs(attrs: &CellAttributes) -> u8 {
+pub fn pack_attrs(attrs: &CellAttributes) -> u8 {
     let mut flags = 0u8;
     if attrs.bold {
         flags |= ATTR_BOLD;

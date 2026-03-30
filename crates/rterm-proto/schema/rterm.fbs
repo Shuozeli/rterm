@@ -42,11 +42,20 @@ enum MouseEventKind : uint8 {
     ScrollDown = 4,
 }
 
+/// Request scrollback lines from the server.
+table ScrollbackRequest {
+    /// How many lines back from the bottom to start.
+    offset: uint32;
+    /// How many lines to fetch.
+    count: uint32;
+}
+
 union ClientBody {
     KeyInput,
     PasteInput,
     Resize,
     MouseEvent,
+    ScrollbackRequest,
 }
 
 table ClientMessage {

@@ -15,6 +15,15 @@ pub struct DisplayGrid {
     pub cursor_row: u16,
     pub cursor_col: u16,
     pub cursor_visible: bool,
+    /// Scrollback lines received from server (most recent first).
+    pub scrollback: Vec<Vec<CellData>>,
+    /// How many lines scrolled back (0 = live view).
+    pub scroll_offset: usize,
+    /// Total scrollback lines available on server.
+    pub scrollback_total: u32,
+    /// Selection state.
+    pub selection_start: Option<(usize, usize)>,
+    pub selection_end: Option<(usize, usize)>,
 }
 
 impl DisplayGrid {
@@ -24,6 +33,11 @@ impl DisplayGrid {
             cells: vec![vec![default_cell; cols]; rows],
             cols, rows,
             cursor_row: 0, cursor_col: 0, cursor_visible: true,
+            scrollback: Vec::new(),
+            scroll_offset: 0,
+            scrollback_total: 0,
+            selection_start: None,
+            selection_end: None,
         }
     }
 
@@ -75,6 +89,57 @@ impl DisplayGrid {
         self.cursor_row = data.cursor_row;
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
+    }
+
+    /// Apply scrollback data from server.
+    pub fn apply_scrollback(&mut self, lines: &[super::messages::CellRange], offset: u32, total: u32) {
+        self.scrollback_total = total;
+        self.scrollback.clear();
+        for line in lines {
+            self.scrollback.push(line.cells.clone());
+        }
+    }
+
+    /// Check if a cell is selected.
+    pub fn is_selected(&self, row: usize, col: usize) -> bool {
+        let Some((sr, sc)) = self.selection_start else { return false; };
+        let Some((er, ec)) = self.selection_end else { return false; };
+        let (sr, sc, er, ec) = if (sr, sc) <= (er, ec) {
+            (sr, sc, er, ec)
+        } else {
+            (er, ec, sr, sc)
+        };
+        if row < sr || row > er { return false; }
+        if row == sr && row == er { return col >= sc && col <= ec; }
+        if row == sr { return col >= sc; }
+        if row == er { return col <= ec; }
+        true
+    }
+
+    /// Get selected text.
+    pub fn selected_text(&self) -> String {
+        let Some((sr, sc)) = self.selection_start else { return String::new(); };
+        let Some((er, ec)) = self.selection_end else { return String::new(); };
+        let (sr, sc, er, ec) = if (sr, sc) <= (er, ec) {
+            (sr, sc, er, ec)
+        } else {
+            (er, ec, sr, sc)
+        };
+        let mut text = String::new();
+        for row in sr..=er {
+            if row >= self.rows { break; }
+            let col_start = if row == sr { sc } else { 0 };
+            let col_end = if row == er { ec.min(self.cols - 1) } else { self.cols - 1 };
+            for col in col_start..=col_end {
+                text.push(self.cells[row][col].ch);
+            }
+            if row < er {
+                let trimmed = text.trim_end().to_string();
+                text = trimmed;
+                text.push('\n');
+            }
+        }
+        text.trim_end().to_string()
     }
 }
 
@@ -131,6 +196,11 @@ pub fn paint_grid(
 
             if bg != DEFAULT_BG {
                 painter.rect_filled(cell_rect, 0.0, bg);
+            }
+
+            // Selection highlight.
+            if grid.is_selected(row, col) {
+                painter.rect_filled(cell_rect, 0.0, Color32::from_rgba_premultiplied(80, 120, 200, 100));
             }
 
             if cell.ch != ' ' || cell.attrs & (ATTR_UNDERLINE | ATTR_STRIKETHROUGH) != 0 {

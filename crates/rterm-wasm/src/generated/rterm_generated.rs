@@ -118,15 +118,17 @@ pub mod rterm {
       pub const PasteInput: Self = Self(2);
       pub const Resize: Self = Self(3);
       pub const MouseEvent: Self = Self(4);
+      pub const ScrollbackRequest: Self = Self(5);
 
       pub const ENUM_MIN: u8 = 0;
-      pub const ENUM_MAX: u8 = 4;
+      pub const ENUM_MAX: u8 = 5;
       pub const ENUM_VALUES: &'static [Self] = &[
         Self::NONE,
         Self::KeyInput,
         Self::PasteInput,
         Self::Resize,
         Self::MouseEvent,
+        Self::ScrollbackRequest,
       ];
       /// Returns the variant's name or "" if unknown.
       pub fn variant_name(self) -> Option<&'static str> {
@@ -136,6 +138,7 @@ pub mod rterm {
           Self::PasteInput => Some("PasteInput"),
           Self::Resize => Some("Resize"),
           Self::MouseEvent => Some("MouseEvent"),
+          Self::ScrollbackRequest => Some("ScrollbackRequest"),
           _ => None,
         }
       }
@@ -802,6 +805,131 @@ pub mod rterm {
       builder.finish()
     }
 
+    pub enum ScrollbackRequestOffset {}
+    #[derive(Copy, Clone, PartialEq)]
+
+    pub struct ScrollbackRequest<'a> {
+      pub _tab: ::flatbuffers::Table<'a>,
+    }
+
+    impl<'a> ::flatbuffers::Follow<'a> for ScrollbackRequest<'a> {
+      type Inner = ScrollbackRequest<'a>;
+      #[inline]
+      unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+        Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+      }
+    }
+
+    impl<'a> ScrollbackRequest<'a> {
+      pub const VT_OFFSET: ::flatbuffers::VOffsetT = 4;
+      pub const VT_COUNT: ::flatbuffers::VOffsetT = 6;
+
+      #[inline]
+      pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+        ScrollbackRequest { _tab: table }
+      }
+      #[allow(unused_mut)]
+      pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+        _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+        args: &'args ScrollbackRequestArgs
+      ) -> ::flatbuffers::WIPOffset<ScrollbackRequest<'bldr>> {
+        let mut builder = ScrollbackRequestBuilder::new(_fbb);
+        builder.add_count(args.count);
+        builder.add_offset(args.offset);
+        builder.finish()
+      }
+
+
+      #[inline]
+      pub fn offset(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScrollbackRequest::VT_OFFSET, Some(0)).unwrap()}
+      }
+      #[inline]
+      pub fn count(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScrollbackRequest::VT_COUNT, Some(0)).unwrap()}
+      }
+    }
+
+    impl ::flatbuffers::Verifiable for ScrollbackRequest<'_> {
+      #[inline]
+      fn run_verifier(
+        v: &mut ::flatbuffers::Verifier, pos: usize
+      ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+        v.visit_table(pos)?
+         .visit_field::<u32>("offset", Self::VT_OFFSET, false)?
+         .visit_field::<u32>("count", Self::VT_COUNT, false)?
+         .finish();
+        Ok(())
+      }
+    }
+    pub struct ScrollbackRequestArgs {
+        pub offset: u32,
+        pub count: u32,
+    }
+    impl<'a> Default for ScrollbackRequestArgs {
+      #[inline]
+      fn default() -> Self {
+        ScrollbackRequestArgs {
+          offset: 0,
+          count: 0,
+        }
+      }
+    }
+
+    pub struct ScrollbackRequestBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+      fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+      start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+    }
+    impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScrollbackRequestBuilder<'a, 'b, A> {
+      #[inline]
+      pub fn add_offset(&mut self, offset: u32) {
+        self.fbb_.push_slot::<u32>(ScrollbackRequest::VT_OFFSET, offset, 0);
+      }
+      #[inline]
+      pub fn add_count(&mut self, count: u32) {
+        self.fbb_.push_slot::<u32>(ScrollbackRequest::VT_COUNT, count, 0);
+      }
+      #[inline]
+      pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ScrollbackRequestBuilder<'a, 'b, A> {
+        let start = _fbb.start_table();
+        ScrollbackRequestBuilder {
+          fbb_: _fbb,
+          start_: start,
+        }
+      }
+      #[inline]
+      pub fn finish(self) -> ::flatbuffers::WIPOffset<ScrollbackRequest<'a>> {
+        let o = self.fbb_.end_table(self.start_);
+        ::flatbuffers::WIPOffset::new(o.value())
+      }
+    }
+
+    impl ::core::fmt::Debug for ScrollbackRequest<'_> {
+      fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        let mut ds = f.debug_struct("ScrollbackRequest");
+        ds.field("offset", &self.offset());
+        ds.field("count", &self.count());
+        ds.finish()
+      }
+    }
+
+    #[inline]
+    pub fn createScrollbackRequest<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+      fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+      args: &'args ScrollbackRequestArgs,
+    ) -> ::flatbuffers::WIPOffset<ScrollbackRequest<'bldr>> {
+      let mut builder = ScrollbackRequestBuilder::new(fbb);
+      builder.add_count(args.count);
+      builder.add_offset(args.offset);
+      builder.finish()
+    }
+
     pub enum ClientMessageOffset {}
     #[derive(Copy, Clone, PartialEq)]
 
@@ -880,6 +1008,15 @@ pub mod rterm {
       pub fn body_as_mouse_event(&self) -> Option<MouseEvent<'a>> {
         if self.body_type() == ClientBody::MouseEvent {
           self.body().map(|t| unsafe { MouseEvent::init_from_table(t) })
+        } else {
+          None
+        }
+      }
+
+      #[inline]
+      pub fn body_as_scrollback_request(&self) -> Option<ScrollbackRequest<'a>> {
+        if self.body_type() == ClientBody::ScrollbackRequest {
+          self.body().map(|t| unsafe { ScrollbackRequest::init_from_table(t) })
         } else {
           None
         }

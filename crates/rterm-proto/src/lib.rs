@@ -39,11 +39,18 @@ pub struct MouseEvent {
 }
 
 #[derive(Debug, Clone)]
+pub struct ScrollbackRequest {
+    pub offset: u32,
+    pub count: u32,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClientMsg {
     KeyInput(KeyInput),
     PasteInput(PasteInput),
     Resize(Resize),
     MouseEvent(MouseEvent),
+    ScrollbackRequest(ScrollbackRequest),
 }
 
 // ============================================================================
@@ -130,12 +137,6 @@ pub struct ScreenSnapshotData {
     pub num_rows: u16,
     pub title: Option<String>,
     pub scrollback_len: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScrollbackRequest {
-    pub offset: u32,
-    pub count: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -235,6 +236,23 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 );
                 fbb.finish(msg, None);
             }
+            ClientMsg::ScrollbackRequest(s) => {
+                let sr = fbs::ScrollbackRequest::create(
+                    &mut fbb,
+                    &fbs::ScrollbackRequestArgs {
+                        offset: s.offset,
+                        count: s.count,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::ScrollbackRequest,
+                        body: Some(sr.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
         }
         fbb.finished_data().to_vec()
     }
@@ -260,6 +278,15 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 Ok(ClientMsg::Resize(Resize {
                     cols: r.cols(),
                     rows: r.rows(),
+                }))
+            }
+            fbs::ClientBody::ScrollbackRequest => {
+                let s = msg
+                    .body_as_scrollback_request()
+                    .ok_or("missing ScrollbackRequest")?;
+                Ok(ClientMsg::ScrollbackRequest(ScrollbackRequest {
+                    offset: s.offset(),
+                    count: s.count(),
                 }))
             }
             fbs::ClientBody::MouseEvent => {

@@ -112,11 +112,85 @@ impl eframe::App for TerminalApp {
                     }
                 }
 
+                // Mouse wheel scrolling.
+                let scroll_delta = ui.input(|i| {
+                    i.events.iter().filter_map(|e| {
+                        if let egui::Event::MouseWheel { delta, .. } = e {
+                            Some(delta.y)
+                        } else { None }
+                    }).sum::<f32>()
+                });
+                if scroll_delta != 0.0 && response.hovered() {
+                    if let Ok(mut s) = self.shared.try_borrow_mut() {
+                        let lines = (scroll_delta / 3.0).round() as isize;
+                        let new_offset = (s.grid.scroll_offset as isize - lines)
+                            .max(0).min(s.grid.scrollback_total as isize) as usize;
+                        if new_offset != s.grid.scroll_offset {
+                            s.grid.scroll_offset = new_offset;
+                            // Request scrollback from server.
+                            if new_offset > 0 && s.connected {
+                                let req = messages::encode_scrollback_request(
+                                    new_offset as u32, rows as u32);
+                                s.send_queue.push_back(encode_message(&req));
+                            }
+                        }
+                    }
+                }
+
+                // Mouse selection.
+                let origin = response.rect.min;
+                if response.drag_started() {
+                    if let Some(pos) = response.interact_pointer_pos() {
+                        let col = ((pos.x - origin.x) / _cell_size.x) as usize;
+                        let row = ((pos.y - origin.y) / _cell_size.y) as usize;
+                        if let Ok(mut s) = self.shared.try_borrow_mut() {
+                            s.grid.selection_start = Some((row.min(rows - 1), col.min(cols - 1)));
+                            s.grid.selection_end = Some((row.min(rows - 1), col.min(cols - 1)));
+                        }
+                    }
+                }
+                if response.dragged() {
+                    if let Some(pos) = response.interact_pointer_pos() {
+                        let col = ((pos.x - origin.x) / _cell_size.x) as usize;
+                        let row = ((pos.y - origin.y) / _cell_size.y) as usize;
+                        if let Ok(mut s) = self.shared.try_borrow_mut() {
+                            s.grid.selection_end = Some((row.min(rows - 1), col.min(cols - 1)));
+                        }
+                    }
+                }
+                if response.drag_stopped() {
+                    // Copy to clipboard.
+                    if let Ok(s) = self.shared.try_borrow() {
+                        let text = s.grid.selected_text();
+                        if !text.is_empty() {
+                            if let Some(window) = web_sys::window() {
+                                if let Ok(clipboard) = js_sys::Reflect::get(
+                                    &window.navigator(), &"clipboard".into()) {
+                                    let cb: web_sys::Clipboard = clipboard.unchecked_into();
+                                    let _ = cb.write_text(&text);
+                                }
+                            }
+                        }
+                    }
+                }
+                if response.clicked() {
+                    if let Ok(mut s) = self.shared.try_borrow_mut() {
+                        s.grid.selection_start = None;
+                        s.grid.selection_end = None;
+                        s.grid.scroll_offset = 0; // click snaps to bottom
+                    }
+                }
+
                 // Keyboard input.
                 let events = ui.input(|i| i.events.clone());
                 for event in &events {
                     match event {
                         egui::Event::Text(text) => {
+                            if let Ok(mut s) = self.shared.try_borrow_mut() {
+                                s.grid.selection_start = None;
+                                s.grid.selection_end = None;
+                                s.grid.scroll_offset = 0;
+                            }
                             for ch in text.chars() {
                                 let mut buf = [0u8; 4];
                                 let s = ch.encode_utf8(&mut buf);
@@ -124,6 +198,29 @@ impl eframe::App for TerminalApp {
                             }
                         }
                         egui::Event::Key { key, pressed: true, modifiers, .. } => {
+                            // Ctrl+C with selection = copy, not interrupt
+                            if *key == egui::Key::C && modifiers.ctrl {
+                                if let Ok(s) = self.shared.try_borrow() {
+                                    if s.grid.selection_start.is_some() {
+                                        let text = s.grid.selected_text();
+                                        if !text.is_empty() {
+                                            if let Some(window) = web_sys::window() {
+                                                if let Ok(cb) = js_sys::Reflect::get(
+                                                    &window.navigator(), &"clipboard".into()) {
+                                                    let cb: web_sys::Clipboard = cb.unchecked_into();
+                                                    let _ = cb.write_text(&text);
+                                                }
+                                            }
+                                        }
+                                        drop(s);
+                                        if let Ok(mut s) = self.shared.try_borrow_mut() {
+                                            s.grid.selection_start = None;
+                                            s.grid.selection_end = None;
+                                        }
+                                        continue;
+                                    }
+                                }
+                            }
                             if let Some(bytes) = encode_vt_key(*key, modifiers) {
                                 self.send_key(&bytes);
                             }
@@ -131,8 +228,6 @@ impl eframe::App for TerminalApp {
                         _ => {}
                     }
                 }
-
-                let _ = response;
             });
     }
 }
@@ -254,6 +349,9 @@ async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
                     match decode_server_msg(&msg_bytes) {
                         Ok(ServerMsg::ScreenSnapshot(sd)) => { s.grid.apply_snapshot(&sd); }
                         Ok(ServerMsg::ScreenUpdate(sd)) => { s.grid.apply_update(&sd); }
+                        Ok(ServerMsg::ScrollbackData(sd)) => {
+                            s.grid.apply_scrollback(&sd.lines, sd.offset, sd.total);
+                        }
                         Ok(ServerMsg::Exit(_)) => {
                             s.connected = false;
                             ctx.request_repaint();

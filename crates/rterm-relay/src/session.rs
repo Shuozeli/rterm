@@ -3,7 +3,7 @@
 /// Shared logic between WebTransport and gRPC handlers:
 /// read Resize, spawn PTY, forward input, run VT emulator, send screen diffs.
 use crate::pty::PtySpawner;
-use crate::screen_diff::{self, PrevScreen};
+use crate::screen_diff::{self, PrevScreen, pack_attrs, pack_color};
 use rterm_core::Terminal;
 use rterm_proto::*;
 use tokio::sync::mpsc;
@@ -84,6 +84,9 @@ pub async fn run_session(
         .await
         .map_err(|e| SessionError::SendFailed(e.to_string()))?;
 
+    // Scrollback request channel.
+    let (scrollback_tx, mut scrollback_rx) = mpsc::channel::<ScrollbackRequest>(8);
+
     // 4. Forward client input to PTY in a background task.
     {
         let (relay_tx, relay_rx) = mpsc::channel(64);
@@ -107,6 +110,10 @@ pub async fn run_session(
                         }
                     }
                     ClientMsg::MouseEvent(_) => {}
+                    ClientMsg::ScrollbackRequest(s) => {
+                        // Forward scrollback requests via a dedicated channel.
+                        let _ = scrollback_tx.send(s).await;
+                    }
                 }
             }
             debug!("session: client input forwarding ended");
@@ -114,21 +121,57 @@ pub async fn run_session(
         drop(relay_tx);
     }
 
-    // 5. Main loop: read PTY stdout, run VT emulator, send screen diffs.
-    while let Some(data) = stdout_rx.recv().await {
-        terminal.feed(&data);
+    // 5. Main loop: handle PTY stdout and scrollback requests.
+    loop {
+        tokio::select! {
+            data = stdout_rx.recv() => {
+                let Some(data) = data else { break; };
+                terminal.feed(&data);
+                if terminal.is_sync_mode() {
+                    continue;
+                }
+                if let Some(update) = prev.diff(terminal.screen())
+                    && server_tx.send(ServerMsg::ScreenUpdate(update)).await.is_err()
+                {
+                    break;
+                }
+            }
+            req = scrollback_rx.recv() => {
+                let Some(req) = req else { continue; };
+                let screen = terminal.screen();
+                let sb_len = screen.scrollback_len();
+                let offset = req.offset as usize;
+                let count = req.count as usize;
 
-        if terminal.is_sync_mode() {
-            continue;
-        }
+                let mut lines = Vec::new();
+                let start = sb_len.saturating_sub(offset + count);
+                let end = sb_len.saturating_sub(offset);
+                for i in start..end {
+                    let cols = screen.scrollback_cols(i);
+                    let cells: Vec<CellData> = (0..cols)
+                        .map(|col| {
+                            let cell = screen.scrollback_cell(i, col);
+                            CellData {
+                                ch: cell.ch,
+                                fg: pack_color(&cell.fg),
+                                bg: pack_color(&cell.bg),
+                                attrs: pack_attrs(&cell.attrs),
+                            }
+                        })
+                        .collect();
+                    lines.push(CellRangeData {
+                        row: (i - start) as u16,
+                        col_start: 0,
+                        cells,
+                    });
+                }
 
-        if let Some(update) = prev.diff(terminal.screen())
-            && server_tx
-                .send(ServerMsg::ScreenUpdate(update))
-                .await
-                .is_err()
-        {
-            break;
+                let _ = server_tx.send(ServerMsg::ScrollbackData(ScrollbackDataMsg {
+                    lines,
+                    offset: req.offset,
+                    total: sb_len as u32,
+                })).await;
+            }
         }
     }
 
