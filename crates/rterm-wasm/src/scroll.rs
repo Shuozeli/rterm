@@ -31,13 +31,29 @@ pub fn handle_scroll(ui: &egui::Ui, response: &egui::Response, shared: &Rc<RefCe
     }
 
     if let Ok(mut s) = shared.try_borrow_mut() {
-        // Scale: each scroll unit = 3 lines. Positive = scroll up (more history).
-        let lines = (scroll_delta * 3.0 / 50.0).round() as isize;
+        // Scale scroll delta to lines.
+        // egui MouseWheel delta.y: typically 1.0-3.0 per notch.
+        // egui smooth_scroll_delta.y: pixels, typically 30-120 per scroll gesture.
+        // We want ~3 lines per mouse wheel notch.
+        let lines = if scroll_delta.abs() > 10.0 {
+            // Pixel-based (smooth_scroll_delta from trackpad): 1 line per 20px.
+            (scroll_delta / 20.0).round() as isize
+        } else {
+            // Notch-based (MouseWheel): 3 lines per notch.
+            (scroll_delta * 3.0).round() as isize
+        };
         if lines == 0 {
             return;
         }
 
-        let max_scroll = s.grid.scrollback_total as isize;
+        // Don't clamp to scrollback_total — let the server be authoritative.
+        // The server returns whatever scrollback it actually has.
+        // Use a generous max (100k) to avoid overflow, server will clamp.
+        let max_scroll = if s.grid.scrollback_total > 0 {
+            s.grid.scrollback_total as isize
+        } else {
+            100_000 // Before we know the actual count, allow scrolling.
+        };
         let new_offset = (s.grid.scroll_offset as isize + lines)
             .max(0)
             .min(max_scroll) as usize;

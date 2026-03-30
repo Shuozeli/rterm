@@ -127,6 +127,7 @@ table ScreenUpdate {
     cols: uint16;
     rows: uint16;
     title: string;
+    scrollback_len: uint32;
 }
 
 /// Full screen snapshot (sent on connect or resize).

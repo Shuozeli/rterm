@@ -572,6 +572,7 @@ fn encode_screen_update(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, su: &Scree
             cols: su.cols,
             rows: su.rows,
             title,
+            scrollback_len: su.scrollback_len,
         },
     );
     let msg = fbs::ServerMessage::create(
@@ -660,7 +661,7 @@ fn decode_screen_update(su: &fbs::ScreenUpdate<'_>) -> Result<ScreenUpdateData, 
         cols: su.cols(),
         rows: su.rows(),
         title: su.title().map(|t| t.to_string()),
-        scrollback_len: 0,
+        scrollback_len: su.scrollback_len(),
     })
 }
 

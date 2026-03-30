@@ -2284,6 +2284,7 @@ pub mod rterm {
       pub const VT_COLS: ::flatbuffers::VOffsetT = 8;
       pub const VT_ROWS: ::flatbuffers::VOffsetT = 10;
       pub const VT_TITLE: ::flatbuffers::VOffsetT = 12;
+      pub const VT_SCROLLBACK_LEN: ::flatbuffers::VOffsetT = 14;
 
       #[inline]
       pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -2298,6 +2299,7 @@ pub mod rterm {
         if let Some(x) = args.title { builder.add_title(x); }
         if let Some(x) = args.cursor { builder.add_cursor(x); }
         if let Some(x) = args.changes { builder.add_changes(x); }
+        builder.add_scrollback_len(args.scrollback_len);
         builder.add_rows(args.rows);
         builder.add_cols(args.cols);
         builder.finish()
@@ -2339,6 +2341,13 @@ pub mod rterm {
         // which contains a valid value in this slot
         unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(ScreenUpdate::VT_TITLE, None)}
       }
+      #[inline]
+      pub fn scrollback_len(&self) -> u32 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u32>(ScreenUpdate::VT_SCROLLBACK_LEN, Some(0)).unwrap()}
+      }
     }
 
     impl ::flatbuffers::Verifiable for ScreenUpdate<'_> {
@@ -2352,6 +2361,7 @@ pub mod rterm {
          .visit_field::<u16>("cols", Self::VT_COLS, false)?
          .visit_field::<u16>("rows", Self::VT_ROWS, false)?
          .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("title", Self::VT_TITLE, false)?
+         .visit_field::<u32>("scrollback_len", Self::VT_SCROLLBACK_LEN, false)?
          .finish();
         Ok(())
       }
@@ -2362,6 +2372,7 @@ pub mod rterm {
         pub cols: u16,
         pub rows: u16,
         pub title: Option<::flatbuffers::WIPOffset<&'a str>>,
+        pub scrollback_len: u32,
     }
     impl<'a> Default for ScreenUpdateArgs<'a> {
       #[inline]
@@ -2372,6 +2383,7 @@ pub mod rterm {
           cols: 0,
           rows: 0,
           title: None,
+          scrollback_len: 0,
         }
       }
     }
@@ -2402,6 +2414,10 @@ pub mod rterm {
         self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(ScreenUpdate::VT_TITLE, title);
       }
       #[inline]
+      pub fn add_scrollback_len(&mut self, scrollback_len: u32) {
+        self.fbb_.push_slot::<u32>(ScreenUpdate::VT_SCROLLBACK_LEN, scrollback_len, 0);
+      }
+      #[inline]
       pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> ScreenUpdateBuilder<'a, 'b, A> {
         let start = _fbb.start_table();
         ScreenUpdateBuilder {
@@ -2424,6 +2440,7 @@ pub mod rterm {
         ds.field("cols", &self.cols());
         ds.field("rows", &self.rows());
         ds.field("title", &self.title());
+        ds.field("scrollback_len", &self.scrollback_len());
         ds.finish()
       }
     }
@@ -2437,6 +2454,7 @@ pub mod rterm {
       if let Some(x) = args.title { builder.add_title(x); }
       if let Some(x) = args.cursor { builder.add_cursor(x); }
       if let Some(x) = args.changes { builder.add_changes(x); }
+      builder.add_scrollback_len(args.scrollback_len);
       builder.add_rows(args.rows);
       builder.add_cols(args.cols);
       builder.finish()

@@ -121,7 +121,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: su.cols(),
                 rows: su.rows(),
-                scrollback_len: 0, // Updates don't carry scrollback_len
+                scrollback_len: su.scrollback_len(),
             }))
         }
         fbs::ServerBody::ScrollbackData => {
