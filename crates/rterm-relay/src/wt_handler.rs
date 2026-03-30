@@ -104,10 +104,10 @@ pub async fn handle_wt_session(
                 }
                 Ok(ClientMsg::ScrollbackRequest(req)) => {
                     let s = session.lock().await;
-                    if let Some(msg) = s.get_scrollback(req.offset, req.count) {
-                        if let Some(tx) = &s.client_tx {
-                            let _ = tx.try_send(msg);
-                        }
+                    if let Some(msg) = s.get_scrollback(req.offset, req.count)
+                        && let Some(tx) = &s.client_tx
+                    {
+                        let _ = tx.try_send(msg);
                     }
                 }
                 Ok(_) => {}
