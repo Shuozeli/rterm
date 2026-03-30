@@ -100,10 +100,7 @@ impl PtySpawner for RealPtySpawner {
     }
 }
 
-/// Fake PTY spawner for tests. Uses in-memory channels.
-/// After `spawn()`, call `take_control()` to get handles for reading
-/// what was sent to stdin and resize.
-#[cfg(test)]
+/// Fake PTY for testing. Not gated by cfg(test) so integration tests can use it.
 pub mod fake {
     use super::*;
     use std::sync::{Arc, Mutex};
@@ -114,6 +111,7 @@ pub mod fake {
         pub resize_rx: mpsc::Receiver<(u16, u16)>,
     }
 
+    #[derive(Default)]
     pub struct FakePtySpawner {
         pub stdout_data: Vec<Vec<u8>>,
         pub fail: bool,
