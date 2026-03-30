@@ -72,6 +72,17 @@ async fn serve_static_hyper(
 ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, std::convert::Infallible> {
     let file_path = resolve_path(uri_path, static_dir);
 
+    // SPA fallback: if the file doesn't exist but has no extension
+    // (e.g., /dev, /deploy), serve index.html instead.
+    let file_path = if !file_path.exists()
+        && file_path.extension().is_none()
+        && static_dir.join("index.html").exists()
+    {
+        static_dir.join("index.html")
+    } else {
+        file_path
+    };
+
     match tokio::fs::read(&file_path).await {
         Ok(data) => {
             let content_type = guess_content_type(&file_path);

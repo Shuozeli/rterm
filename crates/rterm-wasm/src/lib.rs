@@ -281,38 +281,73 @@ fn encode_vt_key(key: egui::Key, modifiers: &egui::Modifiers) -> Option<Vec<u8>>
 
 async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
     let location = web_sys::window().and_then(|w| Some(w.location()));
-    let hostname = location.as_ref().and_then(|l| l.hostname().ok())
+    let hostname = location
+        .as_ref()
+        .and_then(|l| l.hostname().ok())
         .unwrap_or_else(|| "localhost".to_string());
-    let port = location.as_ref().and_then(|l| l.port().ok())
+    let port = location
+        .as_ref()
+        .and_then(|l| l.port().ok())
         .and_then(|p| if p.is_empty() { None } else { Some(p) })
         .unwrap_or_else(|| "4433".to_string());
-    let url = format!("https://{}:{}/wt", hostname, port);
+
+    // Extract session name from URL path: /dev -> "dev", / -> ""
+    let session_name = get_session_name_from_url();
+    let wt_path = if session_name.is_empty() {
+        "/wt".to_string()
+    } else {
+        format!("/wt/{}", session_name)
+    };
+    let url = format!("https://{}:{}{}", hostname, port, wt_path);
     let cert_hash = get_cert_hash_from_global().or_else(get_cert_hash_from_url);
 
-    web_sys::console::log_1(&format!("[rterm] connecting to {}", url).into());
+    web_sys::console::log_1(
+        &format!("[rterm] connecting to {} (session: {})",
+            url,
+            if session_name.is_empty() { "<auto>" } else { &session_name }
+        ).into(),
+    );
 
-    let (sender, receiver, _transport) =
-        match transport::connect(&url, cert_hash.as_deref()).await {
-            Ok(parts) => {
-                web_sys::console::log_1(&"[rterm] WebTransport connected!".into());
-                parts
+    // Reconnection loop with exponential backoff.
+    let mut backoff_ms = 1000u32;
+    loop {
+        match try_connect(&shared, &ctx, &url, cert_hash.as_deref()).await {
+            Ok(()) => {
+                // Session ended normally (PTY exited). Don't reconnect.
+                web_sys::console::log_1(&"[rterm] session ended".into());
+                break;
             }
             Err(e) => {
-                web_sys::console::error_1(&format!("[rterm] connection FAILED: {}", e).into());
-                return;
+                shared.borrow_mut().connected = false;
+                web_sys::console::warn_1(
+                    &format!("[rterm] disconnected: {}. Reconnecting in {}ms...", e, backoff_ms).into(),
+                );
+                ctx.request_repaint();
+                sleep_ms(backoff_ms as i32).await;
+                backoff_ms = (backoff_ms * 2).min(30000); // max 30s
             }
-        };
+        }
+    }
+}
+
+async fn try_connect(
+    shared: &Rc<RefCell<Shared>>,
+    ctx: &egui::Context,
+    url: &str,
+    cert_hash: Option<&[u8]>,
+) -> Result<(), String> {
+    let (sender, receiver, _transport) =
+        transport::connect(url, cert_hash).await?;
+
+    web_sys::console::log_1(&"[rterm] WebTransport connected!".into());
 
     let (init_cols, init_rows) = shared.borrow().initial_size.unwrap_or((80, 24));
-    web_sys::console::log_1(&format!("[rterm] sending Resize({}, {})", init_cols, init_rows).into());
     let resize = encode_resize(init_cols as u16, init_rows as u16);
-    if let Err(e) = sender.send(&encode_message(&resize)).await {
-        web_sys::console::error_1(&format!("[rterm] send failed: {}", e).into());
-        return;
-    }
+    sender.send(&encode_message(&resize)).await
+        .map_err(|e| format!("send resize: {}", e))?;
 
     shared.borrow_mut().connected = true;
-    web_sys::console::log_1(&"[rterm] session started".into());
+    web_sys::console::log_1(&"[rterm] session active".into());
     ctx.request_repaint();
 
     // Send loop.
@@ -355,12 +390,12 @@ async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
                         Ok(ServerMsg::Exit(_)) => {
                             s.connected = false;
                             ctx.request_repaint();
-                            return;
+                            return Ok(()); // Normal exit — don't reconnect.
                         }
                         Ok(ServerMsg::Error(msg)) => {
                             web_sys::console::error_1(&format!("[rterm] error: {}", msg).into());
                         }
-                        Ok(ServerMsg::Bell) => {} // TODO: visual/audio bell
+                        Ok(ServerMsg::Bell) => {}
                         Err(e) => {
                             web_sys::console::log_1(&format!("[rterm] decode error: {}", e).into());
                         }
@@ -371,13 +406,12 @@ async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
             Ok(None) => {
                 shared.borrow_mut().connected = false;
                 ctx.request_repaint();
-                return;
+                return Err("connection closed".into());
             }
             Err(e) => {
-                web_sys::console::error_1(&format!("[rterm] recv error: {}", e).into());
                 shared.borrow_mut().connected = false;
                 ctx.request_repaint();
-                return;
+                return Err(format!("recv error: {}", e));
             }
         }
     }
@@ -389,6 +423,19 @@ async fn sleep_ms(ms: i32) {
             .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms).unwrap();
     });
     let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+}
+
+/// Extract session name from URL path: "/dev" -> "dev", "/" -> ""
+fn get_session_name_from_url() -> String {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return String::new(),
+    };
+    let path = window.location().pathname().unwrap_or_default();
+    // Strip leading slash and "index.html" if present.
+    let name = path.trim_start_matches('/').trim_end_matches('/');
+    let name = name.strip_suffix("index.html").unwrap_or(name).trim_end_matches('/');
+    name.to_string()
 }
 
 fn get_cert_hash_from_global() -> Option<Vec<u8>> {
