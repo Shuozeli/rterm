@@ -298,9 +298,9 @@ fn unicode_characters() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "Hello 世界 🌍");
     assert_eq!(t.screen().cell(0, 0).ch, 'H');
-    assert_eq!(t.screen().cell(0, 6).ch, '世');    // wide char at col 6
+    assert_eq!(t.screen().cell(0, 6).ch, '世'); // wide char at col 6
     assert!(t.screen().cell(0, 7).wide_continuation); // col 7 is continuation
-    assert_eq!(t.screen().cell(0, 8).ch, '界');    // next wide char at col 8
+    assert_eq!(t.screen().cell(0, 8).ch, '界'); // next wide char at col 8
     assert!(t.screen().cell(0, 9).wide_continuation); // col 9 is continuation
 }
 
