@@ -1,4 +1,5 @@
 use h3::ext::Protocol;
+use rterm_relay::session_manager::SessionManager;
 use rterm_relay::{https_server, wt_handler};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -53,17 +54,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     }
     info!("Open the URL in Chrome, accept the certificate warning, and you're in.");
 
+    // Create the session manager.
+    let session_mgr = Arc::new(SessionManager::new("/bin/bash"));
+
+    // Start the timeout reaper (every 60 seconds, kill sessions detached > 30 min).
+    let reaper_mgr = Arc::clone(&session_mgr);
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(std::time::Duration::from_secs(60)).await;
+            reaper_mgr.reap(1800).await; // 30 min
+        }
+    });
+
     loop {
         let Some(incoming) = endpoint.accept().await else {
             break;
         };
 
+        let session_mgr = Arc::clone(&session_mgr);
         tokio::spawn(async move {
             match incoming.await {
                 Ok(conn) => {
                     let remote = conn.remote_address();
                     debug!("QUIC connection from {}", remote);
-                    if let Err(e) = handle_connection(conn).await {
+                    if let Err(e) = handle_connection(conn, &session_mgr).await {
                         error!("connection error from {}: {}", remote, e);
                     }
                 }
@@ -77,6 +91,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
 async fn handle_connection(
     conn: quinn::Connection,
+    session_mgr: &SessionManager,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut h3_conn = h3::server::builder()
         .enable_webtransport(true)
@@ -104,7 +119,7 @@ async fn handle_connection(
                     let session =
                         h3_webtransport::server::WebTransportSession::accept(req, stream, h3_conn)
                             .await?;
-                    wt_handler::handle_wt_session(session, "/bin/bash").await?;
+                    wt_handler::handle_wt_session(session, session_mgr).await?;
                     return Ok(());
                 }
 
