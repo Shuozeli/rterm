@@ -149,6 +149,7 @@ impl ScreenBuffer {
                 fg: Color::Default,
                 bg: Color::Default,
                 attrs: CellAttributes::NORMAL,
+                wide_continuation: false,
             };
             &DEFAULT
         }
@@ -184,24 +185,56 @@ impl ScreenBuffer {
     }
 
     /// Write a character at the current cursor position using the current pen,
-    /// then advance the cursor.
+    /// then advance the cursor. Wide (CJK) characters occupy 2 columns.
     pub fn write_char(&mut self, ch: char) {
+        let wide = crate::cell::is_wide_char(ch);
+
         if self.cursor.col >= self.cols {
-            // Autowrap: move to next line.
-            // TODO: autowrap mode flag. For now always wrap.
+            self.cursor.col = 0;
+            self.cursor_down_with_scroll();
+        }
+
+        // Wide chars need 2 columns. If at the last column, wrap first.
+        if wide && self.cursor.col + 1 >= self.cols {
+            // Clear the last cell and wrap.
+            self.grid[self.cursor.row][self.cursor.col].reset();
             self.cursor.col = 0;
             self.cursor_down_with_scroll();
         }
 
         let row = self.cursor.row;
         let col = self.cursor.col;
+
+        // If we're overwriting a wide char's continuation, clear the left half too.
+        if col > 0 && self.grid[row][col].wide_continuation {
+            self.grid[row][col - 1].reset();
+        }
+        // If we're overwriting the left half of a wide char, clear the continuation.
+        if col + 1 < self.cols && self.grid[row][col + 1].wide_continuation {
+            self.grid[row][col + 1].reset();
+        }
+
         self.grid[row][col] = Cell {
             ch,
             fg: self.pen.fg,
             bg: self.pen.bg,
             attrs: self.pen.attrs,
+            wide_continuation: false,
         };
-        self.cursor.col += 1;
+
+        if wide && col + 1 < self.cols {
+            // Mark the next cell as a wide continuation.
+            self.grid[row][col + 1] = Cell {
+                ch: ' ',
+                fg: self.pen.fg,
+                bg: self.pen.bg,
+                attrs: self.pen.attrs,
+                wide_continuation: true,
+            };
+            self.cursor.col += 2;
+        } else {
+            self.cursor.col += 1;
+        }
     }
 
     // --- Cursor Movement ---

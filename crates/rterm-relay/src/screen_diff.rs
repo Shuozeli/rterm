@@ -43,11 +43,15 @@ pub fn pack_attrs(attrs: &CellAttributes) -> u8 {
 
 /// Convert a screen buffer cell to a CellData.
 fn cell_to_data(cell: &rterm_core::Cell) -> CellData {
+    let mut attrs = pack_attrs(&cell.attrs);
+    if rterm_core::cell::is_wide_char(cell.ch) {
+        attrs |= ATTR_WIDE;
+    }
     CellData {
         ch: cell.ch,
         fg: pack_color(&cell.fg),
         bg: pack_color(&cell.bg),
-        attrs: pack_attrs(&cell.attrs),
+        attrs,
     }
 }
 

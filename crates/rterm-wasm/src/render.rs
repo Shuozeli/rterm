@@ -1,7 +1,7 @@
 /// Thin terminal renderer: maintains a cell grid from server ScreenUpdate messages
 /// and paints it using egui.
 use crate::messages::{CellData, ScreenData, ATTR_BOLD, ATTR_DIM, ATTR_HIDDEN,
-    ATTR_REVERSE, ATTR_STRIKETHROUGH, ATTR_UNDERLINE, COLOR_DEFAULT};
+    ATTR_REVERSE, ATTR_STRIKETHROUGH, ATTR_UNDERLINE, ATTR_WIDE, COLOR_DEFAULT};
 use egui::{Color32, FontFamily, FontId, Pos2, Rect, Sense, Ui, Vec2};
 
 const DEFAULT_FG: Color32 = Color32::from_rgb(229, 229, 229);
@@ -206,7 +206,37 @@ pub fn paint_grid(
                 painter.rect_filled(cell_rect, 0.0, Color32::from_rgba_premultiplied(80, 120, 200, 100));
             }
 
-            if cell.ch != ' ' || cell.attrs & (ATTR_UNDERLINE | ATTR_STRIKETHROUGH) != 0 {
+            // Skip wide continuation cells (right half of CJK char).
+            if cell.attrs & ATTR_WIDE != 0 {
+                // This is a wide char — draw it spanning 2 cells.
+                let wide_rect = Rect::from_min_size(
+                    cell_rect.min,
+                    Vec2::new(cell_size.x * 2.0, cell_size.y),
+                );
+                if bg != DEFAULT_BG {
+                    painter.rect_filled(wide_rect, 0.0, bg);
+                }
+                let clipped = painter.with_clip_rect(wide_rect.intersect(grid_clip));
+                clipped.text(
+                    cell_rect.min,
+                    egui::Align2::LEFT_TOP,
+                    cell.ch.to_string(),
+                    font_id.clone(),
+                    fg,
+                );
+                // Bold: draw again with 1px offset for faux bold.
+                if cell.attrs & ATTR_BOLD != 0 {
+                    clipped.text(
+                        Pos2::new(cell_rect.min.x + 0.5, cell_rect.min.y),
+                        egui::Align2::LEFT_TOP,
+                        cell.ch.to_string(),
+                        font_id.clone(),
+                        fg,
+                    );
+                }
+            } else if cell.ch == ' ' && cell.attrs & (ATTR_UNDERLINE | ATTR_STRIKETHROUGH) == 0 {
+                // Skip plain spaces.
+            } else {
                 let clipped = painter.with_clip_rect(cell_rect.intersect(grid_clip));
                 clipped.text(
                     cell_rect.min,
@@ -215,6 +245,16 @@ pub fn paint_grid(
                     font_id.clone(),
                     fg,
                 );
+                // Bold: faux bold by drawing twice with slight offset.
+                if cell.attrs & ATTR_BOLD != 0 {
+                    clipped.text(
+                        Pos2::new(cell_rect.min.x + 0.5, cell_rect.min.y),
+                        egui::Align2::LEFT_TOP,
+                        cell.ch.to_string(),
+                        font_id.clone(),
+                        fg,
+                    );
+                }
             }
 
             if cell.attrs & ATTR_UNDERLINE != 0 {

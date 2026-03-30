@@ -97,6 +97,7 @@ pub const ATTR_STRIKETHROUGH: u8 = 1 << 3;
 pub const ATTR_REVERSE: u8 = 1 << 4;
 pub const ATTR_DIM: u8 = 1 << 5;
 pub const ATTR_HIDDEN: u8 = 1 << 6;
+pub const ATTR_WIDE: u8 = 1 << 7;
 
 #[derive(Debug, Clone)]
 pub struct CellData {

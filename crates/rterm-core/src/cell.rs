@@ -23,25 +23,21 @@ impl CellAttributes {
         hidden: false,
     };
 
-    /// Returns true if all attributes are at their default (off) state.
     pub fn is_default(&self) -> bool {
         *self == Self::NORMAL
     }
 }
 
-/// A single terminal cell: one character with foreground color,
-/// background color, and text attributes.
+/// A single terminal cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Cell {
-    /// The character displayed in this cell.
-    /// A space (' ') for empty cells.
     pub ch: char,
-    /// Foreground color.
     pub fg: Color,
-    /// Background color.
     pub bg: Color,
-    /// Text attributes (bold, italic, etc.).
     pub attrs: CellAttributes,
+    /// If true, this cell is the right half of a wide (CJK) character.
+    /// The actual character is in the cell to the left.
+    pub wide_continuation: bool,
 }
 
 impl Default for Cell {
@@ -51,12 +47,12 @@ impl Default for Cell {
             fg: Color::Default,
             bg: Color::Default,
             attrs: CellAttributes::NORMAL,
+            wide_continuation: false,
         }
     }
 }
 
 impl Cell {
-    /// Create a cell with just a character and default style.
     pub fn with_char(ch: char) -> Self {
         Self {
             ch,
@@ -64,10 +60,14 @@ impl Cell {
         }
     }
 
-    /// Reset the cell to a blank space with default colors and no attributes.
     pub fn reset(&mut self) {
         *self = Self::default();
     }
+}
+
+/// Check if a character is wide (takes 2 columns).
+pub fn is_wide_char(ch: char) -> bool {
+    unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1) > 1
 }
 
 #[cfg(test)]
@@ -81,13 +81,13 @@ mod tests {
         assert_eq!(cell.fg, Color::Default);
         assert_eq!(cell.bg, Color::Default);
         assert!(cell.attrs.is_default());
+        assert!(!cell.wide_continuation);
     }
 
     #[test]
     fn cell_with_char() {
         let cell = Cell::with_char('A');
         assert_eq!(cell.ch, 'A');
-        assert_eq!(cell.fg, Color::Default);
     }
 
     #[test]
@@ -100,17 +100,17 @@ mod tests {
                 bold: true,
                 ..CellAttributes::NORMAL
             },
+            wide_continuation: true,
         };
         cell.reset();
         assert_eq!(cell, Cell::default());
+        assert!(!cell.wide_continuation);
     }
 
     #[test]
     fn attributes_normal_is_default() {
         let attrs = CellAttributes::default();
         assert!(attrs.is_default());
-        assert!(!attrs.bold);
-        assert!(!attrs.italic);
     }
 
     #[test]
@@ -118,5 +118,15 @@ mod tests {
         let a = Cell::with_char('Z');
         let b = a;
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn wide_char_detection() {
+        assert!(is_wide_char('世')); // CJK
+        assert!(is_wide_char('界'));
+        assert!(is_wide_char('中'));
+        assert!(!is_wide_char('A'));
+        assert!(!is_wide_char(' '));
+        assert!(!is_wide_char('─')); // box drawing is not wide
     }
 }

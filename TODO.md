@@ -4,12 +4,12 @@
 - [x] Persistent TLS cert (save to ~/.config/rterm/, survives restarts)
 - [x] Scrollback retrieval from server
 - [x] Text selection + clipboard copy in WASM thin renderer
-- [ ] Paste support (bracketed paste wrapping server-side)
+- [x] Paste support (bracketed paste wrapping server-side)
 
 ## Rendering
 - [ ] Wide character (CJK) support — double-width cells
 - [ ] Bold font variant
-- [ ] Cursor styles (bar, underline, blink)
+- [x] Cursor styles (bar, underline, block)
 
 ## Architecture
 - [x] Wire wt_handler and service to call session::run_session in production

@@ -82,6 +82,7 @@ struct Cell {
     ///   bit 4: reverse
     ///   bit 5: dim
     ///   bit 6: hidden
+    ///   bit 7: wide (CJK double-width character)
     attrs: uint8;
 }
 
