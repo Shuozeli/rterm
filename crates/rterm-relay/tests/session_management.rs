@@ -775,3 +775,112 @@ async fn scroll_e2e_with_serialization() {
     }
     println!("e2e: ScreenUpdate.scrollback_len = {} (correct!)", sb_len);
 }
+
+/// Test the scroll rendering logic that the WASM client uses.
+/// This verifies visible_cell() behavior without needing the WASM target.
+mod scroll_render {
+    /// Simulates the WASM DisplayGrid's visible_cell logic.
+    fn visible_text(
+        scrollback: &[Vec<char>],
+        screen: &[Vec<char>],
+        scroll_offset: usize,
+        row: usize,
+        cols: usize,
+    ) -> String {
+        if scroll_offset == 0 {
+            if row < screen.len() {
+                return screen[row]
+                    .iter()
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string();
+            }
+            return String::new();
+        }
+        let sb_count = scrollback.len();
+        if sb_count == 0 {
+            return String::new();
+        }
+        let sb_start = sb_count.saturating_sub(scroll_offset);
+        let sb_idx = sb_start + row;
+        if sb_idx < sb_count {
+            scrollback[sb_idx]
+                .iter()
+                .collect::<String>()
+                .trim_end()
+                .to_string()
+        } else {
+            let screen_row = sb_idx - sb_count;
+            if screen_row < screen.len() {
+                screen[screen_row]
+                    .iter()
+                    .collect::<String>()
+                    .trim_end()
+                    .to_string()
+            } else {
+                String::new()
+            }
+        }
+    }
+
+    fn make_line(text: &str, cols: usize) -> Vec<char> {
+        let mut line: Vec<char> = text.chars().collect();
+        line.resize(cols, ' ');
+        line
+    }
+
+    #[test]
+    fn live_view() {
+        let screen = vec![make_line("live1", 10), make_line("live2", 10)];
+        assert_eq!(visible_text(&[], &screen, 0, 0, 10), "live1");
+        assert_eq!(visible_text(&[], &screen, 0, 1, 10), "live2");
+    }
+
+    #[test]
+    fn scroll_shows_scrollback() {
+        let scrollback: Vec<Vec<char>> = (1..=100)
+            .map(|i| make_line(&format!("line{}", i), 10))
+            .collect();
+        let screen = vec![
+            make_line("vis1", 10),
+            make_line("vis2", 10),
+            make_line("vis3", 10),
+        ];
+
+        // Scroll to top.
+        assert_eq!(visible_text(&scrollback, &screen, 100, 0, 10), "line1");
+        assert_eq!(visible_text(&scrollback, &screen, 100, 1, 10), "line2");
+        assert_eq!(visible_text(&scrollback, &screen, 100, 2, 10), "line3");
+
+        // Scroll to middle.
+        assert_eq!(visible_text(&scrollback, &screen, 50, 0, 10), "line51");
+        assert_eq!(visible_text(&scrollback, &screen, 50, 1, 10), "line52");
+
+        // Scroll near bottom (3 lines back).
+        assert_eq!(visible_text(&scrollback, &screen, 3, 0, 10), "line98");
+        assert_eq!(visible_text(&scrollback, &screen, 3, 1, 10), "line99");
+        assert_eq!(visible_text(&scrollback, &screen, 3, 2, 10), "line100");
+
+        // Scroll 1 line back (mix of scrollback + screen).
+        assert_eq!(visible_text(&scrollback, &screen, 1, 0, 10), "line100");
+        assert_eq!(visible_text(&scrollback, &screen, 1, 1, 10), "vis1");
+        assert_eq!(visible_text(&scrollback, &screen, 1, 2, 10), "vis2");
+    }
+
+    #[test]
+    fn scroll_no_data() {
+        let screen = vec![make_line("live", 10)];
+        // Scrolled but no scrollback data.
+        assert_eq!(visible_text(&[], &screen, 5, 0, 10), "");
+    }
+
+    #[test]
+    fn scroll_beyond_scrollback() {
+        let scrollback = vec![make_line("only1", 10)];
+        let screen = vec![make_line("vis1", 10), make_line("vis2", 10)];
+
+        // Scroll offset > scrollback count: should show scrollback[0] then screen.
+        assert_eq!(visible_text(&scrollback, &screen, 5, 0, 10), "only1");
+        assert_eq!(visible_text(&scrollback, &screen, 5, 1, 10), "vis1");
+    }
+}
