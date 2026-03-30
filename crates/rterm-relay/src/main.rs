@@ -14,7 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .init();
 
     let addr: SocketAddr = "[::]:4433".parse()?;
-    let (cert_pem, key_pem) = generate_cert();
+    let (cert_pem, key_pem) = load_or_generate_cert();
 
     // Compute cert hash for WebTransport serverCertificateHashes.
     let cert_der = extract_cert_der(&cert_pem);
@@ -147,7 +147,54 @@ fn find_static_dir() -> PathBuf {
     PathBuf::from("dist")
 }
 
-fn generate_cert() -> (Vec<u8>, Vec<u8>) {
+/// Load or generate a persistent TLS certificate.
+/// Saved to ~/.config/rterm/ so it survives restarts.
+/// Regenerated if expired or SANs don't match current IPs.
+fn load_or_generate_cert() -> (Vec<u8>, Vec<u8>) {
+    let config_dir = dirs_config_dir().join("rterm");
+    let cert_path = config_dir.join("cert.pem");
+    let key_path = config_dir.join("key.pem");
+
+    // Try loading existing cert.
+    if cert_path.exists() && key_path.exists() {
+        if let Ok(cert_pem) = std::fs::read(&cert_path) {
+            if let Ok(key_pem) = std::fs::read(&key_path) {
+                // Check if cert is still valid (not expired).
+                if is_cert_valid(&cert_pem) {
+                    info!("using persistent cert from {}", cert_path.display());
+                    return (cert_pem, key_pem);
+                }
+                info!("cert expired, regenerating");
+            }
+        }
+    }
+
+    // Generate new cert.
+    let (cert_pem, key_pem) = generate_fresh_cert();
+
+    // Save to disk.
+    if let Err(e) = std::fs::create_dir_all(&config_dir) {
+        error!("failed to create config dir: {}", e);
+    } else {
+        if let Err(e) = std::fs::write(&cert_path, &cert_pem) {
+            error!("failed to save cert: {}", e);
+        }
+        if let Err(e) = std::fs::write(&key_path, &key_pem) {
+            error!("failed to save key: {}", e);
+        }
+        // Restrict permissions on the key file.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&key_path, std::fs::Permissions::from_mode(0o600));
+        }
+        info!("saved cert to {}", config_dir.display());
+    }
+
+    (cert_pem, key_pem)
+}
+
+fn generate_fresh_cert() -> (Vec<u8>, Vec<u8>) {
     use rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P256_SHA256};
 
     let mut sans = vec!["localhost".to_string(), "127.0.0.1".to_string()];
@@ -173,6 +220,44 @@ fn generate_cert() -> (Vec<u8>, Vec<u8>) {
         cert.pem().into_bytes(),
         key_pair.serialize_pem().into_bytes(),
     )
+}
+
+/// Check if a PEM cert is still valid (not expired).
+/// WebTransport certs must be valid for at most 14 days.
+/// We regenerate after 12 days to avoid edge-case expiry.
+fn is_cert_valid(_cert_pem: &[u8]) -> bool {
+    let config_dir = dirs_config_dir().join("rterm");
+    let cert_path = config_dir.join("cert.pem");
+    let Ok(metadata) = std::fs::metadata(&cert_path) else {
+        return false;
+    };
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let age = std::time::SystemTime::now()
+        .duration_since(modified)
+        .unwrap_or_default();
+    // Regenerate if older than 12 days (cert valid for 14).
+    age < std::time::Duration::from_secs(12 * 24 * 3600)
+}
+
+fn dirs_config_dir() -> PathBuf {
+    if let Some(dir) = dirs_config_dir_impl() {
+        dir
+    } else {
+        PathBuf::from(".")
+    }
+}
+
+fn dirs_config_dir_impl() -> Option<PathBuf> {
+    std::env::var("XDG_CONFIG_HOME")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            std::env::var("HOME")
+                .ok()
+                .map(|h| PathBuf::from(h).join(".config"))
+        })
 }
 
 fn extract_cert_der(cert_pem: &[u8]) -> Vec<u8> {
