@@ -1,0 +1,54 @@
+/// Keyboard input encoding: egui keys to VT terminal sequences.
+use eframe::egui;
+
+/// Encode an egui key press into a VT escape sequence.
+pub fn encode_vt_key(key: egui::Key, modifiers: &egui::Modifiers) -> Option<Vec<u8>> {
+    if modifiers.ctrl {
+        let ctrl_byte = match key {
+            egui::Key::A => 1,
+            egui::Key::B => 2,
+            egui::Key::C => 3,
+            egui::Key::D => 4,
+            egui::Key::E => 5,
+            egui::Key::F => 6,
+            egui::Key::G => 7,
+            egui::Key::H => 8,
+            egui::Key::I => 9,
+            egui::Key::J => 10,
+            egui::Key::K => 11,
+            egui::Key::L => 12,
+            egui::Key::M => 13,
+            egui::Key::N => 14,
+            egui::Key::O => 15,
+            egui::Key::P => 16,
+            egui::Key::Q => 17,
+            egui::Key::R => 18,
+            egui::Key::S => 19,
+            egui::Key::T => 20,
+            egui::Key::U => 21,
+            egui::Key::V => 22,
+            egui::Key::W => 23,
+            egui::Key::X => 24,
+            egui::Key::Y => 25,
+            egui::Key::Z => 26,
+            _ => return None,
+        };
+        return Some(vec![ctrl_byte]);
+    }
+    match key {
+        egui::Key::Enter => Some(b"\r".to_vec()),
+        egui::Key::Backspace => Some(vec![0x7f]),
+        egui::Key::Tab => Some(b"\t".to_vec()),
+        egui::Key::Escape => Some(vec![0x1b]),
+        egui::Key::Delete => Some(b"\x1b[3~".to_vec()),
+        egui::Key::ArrowUp => Some(b"\x1b[A".to_vec()),
+        egui::Key::ArrowDown => Some(b"\x1b[B".to_vec()),
+        egui::Key::ArrowRight => Some(b"\x1b[C".to_vec()),
+        egui::Key::ArrowLeft => Some(b"\x1b[D".to_vec()),
+        egui::Key::Home => Some(b"\x1b[H".to_vec()),
+        egui::Key::End => Some(b"\x1b[F".to_vec()),
+        egui::Key::PageUp => Some(b"\x1b[5~".to_vec()),
+        egui::Key::PageDown => Some(b"\x1b[6~".to_vec()),
+        _ => None,
+    }
+}

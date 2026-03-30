@@ -192,15 +192,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn serve_root_returns_index_html() {
+    async fn serve_root_redirects_to_session() {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("index.html"), b"<html><head></head></html>").unwrap();
 
         let resp = serve_static_hyper(dir.path(), "/", "hash").await.unwrap();
-        assert_eq!(resp.status(), 200);
-        assert_eq!(
-            resp.headers().get("content-type").unwrap(),
-            "text/html; charset=utf-8"
-        );
+        assert_eq!(resp.status(), 302);
+        assert!(resp.headers().get("location").is_some());
     }
 }
