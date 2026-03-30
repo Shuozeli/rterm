@@ -97,6 +97,9 @@ table CursorState {
     row: uint16;
     col: uint16;
     visible: bool;
+    /// Cursor style (DECSCUSR): 0=default, 1=blinking block, 2=steady block,
+    /// 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar.
+    style: uint8;
 }
 
 /// A screen update: changed cells + cursor.

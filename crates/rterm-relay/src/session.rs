@@ -100,7 +100,14 @@ pub async fn run_session(
                         }
                     }
                     ClientMsg::PasteInput(p) => {
-                        if stdin_tx.send(p.text.into_bytes()).await.is_err() {
+                        // Wrap in bracketed paste markers if the shell requested it.
+                        // Note: we can't easily read terminal.bracketed_paste here
+                        // since it's in the main loop. For safety, always bracket.
+                        let mut data = Vec::new();
+                        data.extend_from_slice(b"\x1b[200~");
+                        data.extend_from_slice(p.text.as_bytes());
+                        data.extend_from_slice(b"\x1b[201~");
+                        if stdin_tx.send(data).await.is_err() {
                             break;
                         }
                     }

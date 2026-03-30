@@ -2,8 +2,8 @@
 
 ## Polish & UX
 - [x] Persistent TLS cert (save to ~/.config/rterm/, survives restarts)
-- [ ] Scrollback retrieval from server (protocol defined, wire it up)
-- [ ] Text selection + clipboard copy in WASM thin renderer
+- [x] Scrollback retrieval from server
+- [x] Text selection + clipboard copy in WASM thin renderer
 - [ ] Paste support (bracketed paste wrapping server-side)
 
 ## Rendering

@@ -118,6 +118,7 @@ pub struct CursorData {
     pub row: u16,
     pub col: u16,
     pub visible: bool,
+    pub style: u8,
 }
 
 #[derive(Debug, Clone)]
@@ -455,6 +456,7 @@ fn encode_screen_update(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, su: &Scree
             row: su.cursor.row,
             col: su.cursor.col,
             visible: su.cursor.visible,
+            style: su.cursor.style,
         },
     );
     let title = su.title.as_ref().map(|t| fbb.create_string(t));
@@ -487,6 +489,7 @@ fn encode_screen_snapshot(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, ss: &Scr
             row: ss.cursor.row,
             col: ss.cursor.col,
             visible: ss.cursor.visible,
+            style: ss.cursor.style,
         },
     );
     let title = ss.title.as_ref().map(|t| fbb.create_string(t));
@@ -548,6 +551,7 @@ fn decode_screen_update(su: &fbs::ScreenUpdate<'_>) -> Result<ScreenUpdateData, 
             row: cursor_fb.row(),
             col: cursor_fb.col(),
             visible: cursor_fb.visible(),
+            style: cursor_fb.style(),
         },
         cols: su.cols(),
         rows: su.rows(),
@@ -563,6 +567,7 @@ fn decode_screen_snapshot(ss: &fbs::ScreenSnapshot<'_>) -> Result<ScreenSnapshot
             row: cursor_fb.row(),
             col: cursor_fb.col(),
             visible: cursor_fb.visible(),
+            style: cursor_fb.style(),
         },
         cols: ss.cols(),
         num_rows: ss.num_rows(),
@@ -643,6 +648,7 @@ mod tests {
                 row: 0,
                 col: 2,
                 visible: true,
+                style: 0,
             },
             cols: 80,
             rows: 24,
@@ -681,6 +687,7 @@ mod tests {
                 row: 0,
                 col: 1,
                 visible: true,
+                style: 0,
             },
             cols: 80,
             num_rows: 24,
@@ -829,6 +836,7 @@ mod tests {
                 row: 0,
                 col: 0,
                 visible: true,
+                style: 0,
             },
             cols: 80,
             rows: 24,
@@ -852,6 +860,7 @@ mod tests {
                 row: 5,
                 col: 10,
                 visible: false,
+                style: 0,
             },
             cols: 120,
             num_rows: 40,

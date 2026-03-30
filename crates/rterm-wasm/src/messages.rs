@@ -60,6 +60,7 @@ pub struct ScreenData {
     pub cursor_row: u16,
     pub cursor_col: u16,
     pub cursor_visible: bool,
+    pub cursor_style: u8,
     pub cols: u16,
     pub rows: u16,
 }
@@ -102,7 +103,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 changes: decode_cell_ranges(ss.rows())?,
                 cursor_row: cursor.row(),
                 cursor_col: cursor.col(),
-                cursor_visible: cursor.visible(),
+                cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: ss.cols(),
                 rows: ss.num_rows(),
             }))
@@ -114,7 +115,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 changes: decode_cell_ranges(su.changes())?,
                 cursor_row: cursor.row(),
                 cursor_col: cursor.col(),
-                cursor_visible: cursor.visible(),
+                cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: su.cols(),
                 rows: su.rows(),
             }))

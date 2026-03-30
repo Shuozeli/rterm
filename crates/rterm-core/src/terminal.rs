@@ -43,9 +43,12 @@ pub struct Terminal {
     /// Persistent VT parser (retains state between feed() calls).
     parser: vte::Parser,
     /// Synchronized output mode (CSI ?2026 h/l).
-    /// When true, screen updates are being batched — the renderer should
-    /// wait until this goes false before repainting.
     sync_mode: bool,
+    /// Bracketed paste mode (CSI ?2004 h/l).
+    pub bracketed_paste: bool,
+    /// Cursor style (DECSCUSR): 0=default, 1=blinking block, 2=steady block,
+    /// 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar.
+    pub cursor_style: u8,
 }
 
 impl Terminal {
@@ -59,6 +62,8 @@ impl Terminal {
             response_buf: Vec::new(),
             parser: vte::Parser::new(),
             sync_mode: false,
+            bracketed_paste: false,
+            cursor_style: 0,
         }
     }
 
@@ -232,7 +237,7 @@ impl Terminal {
                         self.restore_cursor();
                     }
                 }
-                2004 => {} // Bracketed paste mode — ignored (handled by PTY layer).
+                2004 => self.bracketed_paste = set,
                 2026 => {
                     // Synchronized output: buffer screen updates.
                     self.sync_mode = set;
@@ -363,6 +368,11 @@ impl vte::Perform for Terminal {
             'p' if intermediates == [b'!'] => {
                 self.screen_mut().reset();
                 self.modes = TerminalModes::default();
+            }
+
+            // DECSCUSR: set cursor style.
+            'q' if intermediates == [b' '] => {
+                self.cursor_style = first as u8;
             }
 
             _ => {} // Ignore unknown CSI sequences.

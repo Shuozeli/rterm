@@ -72,6 +72,7 @@ pub fn snapshot(buffer: &ScreenBuffer) -> ScreenSnapshotData {
             row: buffer.cursor.row as u16,
             col: buffer.cursor.col as u16,
             visible: buffer.cursor.visible,
+            style: 0,
         },
         cols: cols as u16,
         num_rows: rows as u16,
@@ -142,6 +143,7 @@ impl PrevScreen {
             row: buffer.cursor.row as u16,
             col: buffer.cursor.col as u16,
             visible: buffer.cursor.visible,
+            style: 0,
         };
 
         for row in 0..rows {

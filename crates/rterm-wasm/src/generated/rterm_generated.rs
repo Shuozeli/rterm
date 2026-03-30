@@ -1421,6 +1421,7 @@ pub mod rterm {
       pub const VT_ROW: ::flatbuffers::VOffsetT = 4;
       pub const VT_COL: ::flatbuffers::VOffsetT = 6;
       pub const VT_VISIBLE: ::flatbuffers::VOffsetT = 8;
+      pub const VT_STYLE: ::flatbuffers::VOffsetT = 10;
 
       #[inline]
       pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -1434,6 +1435,7 @@ pub mod rterm {
         let mut builder = CursorStateBuilder::new(_fbb);
         builder.add_col(args.col);
         builder.add_row(args.row);
+        builder.add_style(args.style);
         builder.add_visible(args.visible);
         builder.finish()
       }
@@ -1460,6 +1462,13 @@ pub mod rterm {
         // which contains a valid value in this slot
         unsafe { self._tab.get::<bool>(CursorState::VT_VISIBLE, Some(false)).unwrap()}
       }
+      #[inline]
+      pub fn style(&self) -> u8 {
+        // Safety:
+        // Created from valid Table for this object
+        // which contains a valid value in this slot
+        unsafe { self._tab.get::<u8>(CursorState::VT_STYLE, Some(0)).unwrap()}
+      }
     }
 
     impl ::flatbuffers::Verifiable for CursorState<'_> {
@@ -1471,6 +1480,7 @@ pub mod rterm {
          .visit_field::<u16>("row", Self::VT_ROW, false)?
          .visit_field::<u16>("col", Self::VT_COL, false)?
          .visit_field::<bool>("visible", Self::VT_VISIBLE, false)?
+         .visit_field::<u8>("style", Self::VT_STYLE, false)?
          .finish();
         Ok(())
       }
@@ -1479,6 +1489,7 @@ pub mod rterm {
         pub row: u16,
         pub col: u16,
         pub visible: bool,
+        pub style: u8,
     }
     impl<'a> Default for CursorStateArgs {
       #[inline]
@@ -1487,6 +1498,7 @@ pub mod rterm {
           row: 0,
           col: 0,
           visible: false,
+          style: 0,
         }
       }
     }
@@ -1509,6 +1521,10 @@ pub mod rterm {
         self.fbb_.push_slot::<bool>(CursorState::VT_VISIBLE, visible, false);
       }
       #[inline]
+      pub fn add_style(&mut self, style: u8) {
+        self.fbb_.push_slot::<u8>(CursorState::VT_STYLE, style, 0);
+      }
+      #[inline]
       pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> CursorStateBuilder<'a, 'b, A> {
         let start = _fbb.start_table();
         CursorStateBuilder {
@@ -1529,6 +1545,7 @@ pub mod rterm {
         ds.field("row", &self.row());
         ds.field("col", &self.col());
         ds.field("visible", &self.visible());
+        ds.field("style", &self.style());
         ds.finish()
       }
     }
@@ -1541,6 +1558,7 @@ pub mod rterm {
       let mut builder = CursorStateBuilder::new(fbb);
       builder.add_col(args.col);
       builder.add_row(args.row);
+      builder.add_style(args.style);
       builder.add_visible(args.visible);
       builder.finish()
     }

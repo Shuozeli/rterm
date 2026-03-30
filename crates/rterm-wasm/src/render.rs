@@ -15,6 +15,7 @@ pub struct DisplayGrid {
     pub cursor_row: u16,
     pub cursor_col: u16,
     pub cursor_visible: bool,
+    pub cursor_style: u8,
     /// Scrollback lines received from server (most recent first).
     pub scrollback: Vec<Vec<CellData>>,
     /// How many lines scrolled back (0 = live view).
@@ -32,7 +33,7 @@ impl DisplayGrid {
         Self {
             cells: vec![vec![default_cell; cols]; rows],
             cols, rows,
-            cursor_row: 0, cursor_col: 0, cursor_visible: true,
+            cursor_row: 0, cursor_col: 0, cursor_visible: true, cursor_style: 0,
             scrollback: Vec::new(),
             scroll_offset: 0,
             scrollback_total: 0,
@@ -62,6 +63,7 @@ impl DisplayGrid {
         self.cursor_row = data.cursor_row;
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
+        self.cursor_style = data.cursor_style;
     }
 
     /// Apply a ScreenUpdate (diff — only changed cells).
@@ -89,6 +91,7 @@ impl DisplayGrid {
         self.cursor_row = data.cursor_row;
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
+        self.cursor_style = data.cursor_style;
     }
 
     /// Apply scrollback data from server.
@@ -231,19 +234,41 @@ pub fn paint_grid(
         }
     }
 
-    // Cursor.
+    // Cursor — different shapes based on cursor_style.
     if grid.cursor_visible
         && (grid.cursor_row as usize) < grid.rows
         && (grid.cursor_col as usize) < grid.cols
     {
-        let cursor_rect = Rect::from_min_size(
-            Pos2::new(
-                origin.x + grid.cursor_col as f32 * cell_size.x,
-                origin.y + grid.cursor_row as f32 * cell_size.y,
-            ),
-            cell_size,
-        );
-        painter.rect_filled(cursor_rect, 0.0, Color32::from_rgba_premultiplied(200, 200, 200, 160));
+        let cx = origin.x + grid.cursor_col as f32 * cell_size.x;
+        let cy = origin.y + grid.cursor_row as f32 * cell_size.y;
+        let cursor_color = Color32::from_rgba_premultiplied(200, 200, 200, 180);
+
+        match grid.cursor_style {
+            5 | 6 => {
+                // Bar cursor (thin vertical line).
+                painter.rect_filled(
+                    Rect::from_min_size(Pos2::new(cx, cy), Vec2::new(2.0, cell_size.y)),
+                    0.0, cursor_color,
+                );
+            }
+            3 | 4 => {
+                // Underline cursor.
+                painter.rect_filled(
+                    Rect::from_min_size(
+                        Pos2::new(cx, cy + cell_size.y - 3.0),
+                        Vec2::new(cell_size.x, 3.0),
+                    ),
+                    0.0, cursor_color,
+                );
+            }
+            _ => {
+                // Block cursor (default, 0, 1, 2).
+                painter.rect_filled(
+                    Rect::from_min_size(Pos2::new(cx, cy), cell_size),
+                    0.0, cursor_color,
+                );
+            }
+        }
     }
 
     (response, cell_size, fit_cols, fit_rows)
