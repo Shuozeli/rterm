@@ -117,6 +117,13 @@ pub async fn run_session(
                         }
                     }
                     ClientMsg::MouseEvent(_) => {}
+                    // Session management messages are handled by the transport
+                    // adapter before reaching the session loop.
+                    ClientMsg::CreateSession(_)
+                    | ClientMsg::AttachSession(_)
+                    | ClientMsg::DetachSession
+                    | ClientMsg::DestroySession(_)
+                    | ClientMsg::ListSessions(_) => {}
                     ClientMsg::ScrollbackRequest(s) => {
                         // Forward scrollback requests via a dedicated channel.
                         let _ = scrollback_tx.send(s).await;

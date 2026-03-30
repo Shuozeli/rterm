@@ -129,9 +129,14 @@ pub mod rterm {
             pub const Resize: Self = Self(3);
             pub const MouseEvent: Self = Self(4);
             pub const ScrollbackRequest: Self = Self(5);
+            pub const CreateSession: Self = Self(6);
+            pub const AttachSession: Self = Self(7);
+            pub const DetachSession: Self = Self(8);
+            pub const DestroySession: Self = Self(9);
+            pub const ListSessions: Self = Self(10);
 
             pub const ENUM_MIN: u8 = 0;
-            pub const ENUM_MAX: u8 = 5;
+            pub const ENUM_MAX: u8 = 10;
             pub const ENUM_VALUES: &'static [Self] = &[
                 Self::NONE,
                 Self::KeyInput,
@@ -139,6 +144,11 @@ pub mod rterm {
                 Self::Resize,
                 Self::MouseEvent,
                 Self::ScrollbackRequest,
+                Self::CreateSession,
+                Self::AttachSession,
+                Self::DetachSession,
+                Self::DestroySession,
+                Self::ListSessions,
             ];
             /// Returns the variant's name or "" if unknown.
             pub fn variant_name(self) -> Option<&'static str> {
@@ -149,6 +159,11 @@ pub mod rterm {
                     Self::Resize => Some("Resize"),
                     Self::MouseEvent => Some("MouseEvent"),
                     Self::ScrollbackRequest => Some("ScrollbackRequest"),
+                    Self::CreateSession => Some("CreateSession"),
+                    Self::AttachSession => Some("AttachSession"),
+                    Self::DetachSession => Some("DetachSession"),
+                    Self::DestroySession => Some("DestroySession"),
+                    Self::ListSessions => Some("ListSessions"),
                     _ => None,
                 }
             }
@@ -219,9 +234,14 @@ pub mod rterm {
             pub const Exit: Self = Self(4);
             pub const Error: Self = Self(5);
             pub const Bell: Self = Self(6);
+            pub const SessionCreated: Self = Self(7);
+            pub const SessionAttached: Self = Self(8);
+            pub const SessionDetached: Self = Self(9);
+            pub const SessionDestroyed: Self = Self(10);
+            pub const SessionList: Self = Self(11);
 
             pub const ENUM_MIN: u8 = 0;
-            pub const ENUM_MAX: u8 = 6;
+            pub const ENUM_MAX: u8 = 11;
             pub const ENUM_VALUES: &'static [Self] = &[
                 Self::NONE,
                 Self::ScreenUpdate,
@@ -230,6 +250,11 @@ pub mod rterm {
                 Self::Exit,
                 Self::Error,
                 Self::Bell,
+                Self::SessionCreated,
+                Self::SessionAttached,
+                Self::SessionDetached,
+                Self::SessionDestroyed,
+                Self::SessionList,
             ];
             /// Returns the variant's name or "" if unknown.
             pub fn variant_name(self) -> Option<&'static str> {
@@ -241,6 +266,11 @@ pub mod rterm {
                     Self::Exit => Some("Exit"),
                     Self::Error => Some("Error"),
                     Self::Bell => Some("Bell"),
+                    Self::SessionCreated => Some("SessionCreated"),
+                    Self::SessionAttached => Some("SessionAttached"),
+                    Self::SessionDetached => Some("SessionDetached"),
+                    Self::SessionDestroyed => Some("SessionDestroyed"),
+                    Self::SessionList => Some("SessionList"),
                     _ => None,
                 }
             }
@@ -1055,6 +1085,805 @@ pub mod rterm {
             builder.finish()
         }
 
+        pub enum CreateSessionOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct CreateSession<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for CreateSession<'a> {
+            type Inner = CreateSession<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> CreateSession<'a> {
+            pub const VT_NAME: ::flatbuffers::VOffsetT = 4;
+            pub const VT_SHELL: ::flatbuffers::VOffsetT = 6;
+            pub const VT_COLS: ::flatbuffers::VOffsetT = 8;
+            pub const VT_ROWS: ::flatbuffers::VOffsetT = 10;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                CreateSession { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args CreateSessionArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<CreateSession<'bldr>> {
+                let mut builder = CreateSessionBuilder::new(_fbb);
+                if let Some(x) = args.shell {
+                    builder.add_shell(x);
+                }
+                if let Some(x) = args.name {
+                    builder.add_name(x);
+                }
+                builder.add_rows(args.rows);
+                builder.add_cols(args.cols);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn name(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(CreateSession::VT_NAME, None)
+                }
+            }
+            #[inline]
+            pub fn shell(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(CreateSession::VT_SHELL, None)
+                }
+            }
+            #[inline]
+            pub fn cols(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u16>(CreateSession::VT_COLS, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn rows(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u16>(CreateSession::VT_ROWS, Some(0))
+                        .unwrap()
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for CreateSession<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "name",
+                        Self::VT_NAME,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "shell",
+                        Self::VT_SHELL,
+                        false,
+                    )?
+                    .visit_field::<u16>("cols", Self::VT_COLS, false)?
+                    .visit_field::<u16>("rows", Self::VT_ROWS, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct CreateSessionArgs<'a> {
+            pub name: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub shell: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub cols: u16,
+            pub rows: u16,
+        }
+        impl<'a> Default for CreateSessionArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                CreateSessionArgs {
+                    name: None,
+                    shell: None,
+                    cols: 0,
+                    rows: 0,
+                }
+            }
+        }
+
+        pub struct CreateSessionBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> CreateSessionBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_name(&mut self, name: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(CreateSession::VT_NAME, name);
+            }
+            #[inline]
+            pub fn add_shell(&mut self, shell: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    CreateSession::VT_SHELL,
+                    shell,
+                );
+            }
+            #[inline]
+            pub fn add_cols(&mut self, cols: u16) {
+                self.fbb_.push_slot::<u16>(CreateSession::VT_COLS, cols, 0);
+            }
+            #[inline]
+            pub fn add_rows(&mut self, rows: u16) {
+                self.fbb_.push_slot::<u16>(CreateSession::VT_ROWS, rows, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> CreateSessionBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                CreateSessionBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<CreateSession<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for CreateSession<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("CreateSession");
+                ds.field("name", &self.name());
+                ds.field("shell", &self.shell());
+                ds.field("cols", &self.cols());
+                ds.field("rows", &self.rows());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createCreateSession<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args CreateSessionArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<CreateSession<'bldr>> {
+            let mut builder = CreateSessionBuilder::new(fbb);
+            if let Some(x) = args.shell {
+                builder.add_shell(x);
+            }
+            if let Some(x) = args.name {
+                builder.add_name(x);
+            }
+            builder.add_rows(args.rows);
+            builder.add_cols(args.cols);
+            builder.finish()
+        }
+
+        pub enum AttachSessionOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct AttachSession<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for AttachSession<'a> {
+            type Inner = AttachSession<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> AttachSession<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+            pub const VT_TOKEN: ::flatbuffers::VOffsetT = 6;
+            pub const VT_COLS: ::flatbuffers::VOffsetT = 8;
+            pub const VT_ROWS: ::flatbuffers::VOffsetT = 10;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                AttachSession { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args AttachSessionArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<AttachSession<'bldr>> {
+                let mut builder = AttachSessionBuilder::new(_fbb);
+                if let Some(x) = args.token {
+                    builder.add_token(x);
+                }
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.add_rows(args.rows);
+                builder.add_cols(args.cols);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        AttachSession::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+            #[inline]
+            pub fn token(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(AttachSession::VT_TOKEN, None)
+                }
+            }
+            #[inline]
+            pub fn cols(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u16>(AttachSession::VT_COLS, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn rows(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u16>(AttachSession::VT_ROWS, Some(0))
+                        .unwrap()
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for AttachSession<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "token",
+                        Self::VT_TOKEN,
+                        false,
+                    )?
+                    .visit_field::<u16>("cols", Self::VT_COLS, false)?
+                    .visit_field::<u16>("rows", Self::VT_ROWS, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct AttachSessionArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub token: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub cols: u16,
+            pub rows: u16,
+        }
+        impl<'a> Default for AttachSessionArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                AttachSessionArgs {
+                    session_id: None,
+                    token: None,
+                    cols: 0,
+                    rows: 0,
+                }
+            }
+        }
+
+        pub struct AttachSessionBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> AttachSessionBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    AttachSession::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn add_token(&mut self, token: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    AttachSession::VT_TOKEN,
+                    token,
+                );
+            }
+            #[inline]
+            pub fn add_cols(&mut self, cols: u16) {
+                self.fbb_.push_slot::<u16>(AttachSession::VT_COLS, cols, 0);
+            }
+            #[inline]
+            pub fn add_rows(&mut self, rows: u16) {
+                self.fbb_.push_slot::<u16>(AttachSession::VT_ROWS, rows, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> AttachSessionBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                AttachSessionBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<AttachSession<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for AttachSession<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("AttachSession");
+                ds.field("session_id", &self.session_id());
+                ds.field("token", &self.token());
+                ds.field("cols", &self.cols());
+                ds.field("rows", &self.rows());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createAttachSession<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args AttachSessionArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<AttachSession<'bldr>> {
+            let mut builder = AttachSessionBuilder::new(fbb);
+            if let Some(x) = args.token {
+                builder.add_token(x);
+            }
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.add_rows(args.rows);
+            builder.add_cols(args.cols);
+            builder.finish()
+        }
+
+        pub enum DetachSessionOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct DetachSession<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for DetachSession<'a> {
+            type Inner = DetachSession<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> DetachSession<'a> {
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                DetachSession { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args DetachSessionArgs,
+            ) -> ::flatbuffers::WIPOffset<DetachSession<'bldr>> {
+                let mut builder = DetachSessionBuilder::new(_fbb);
+                builder.finish()
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for DetachSession<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?.finish();
+                Ok(())
+            }
+        }
+        pub struct DetachSessionArgs {}
+        impl<'a> Default for DetachSessionArgs {
+            #[inline]
+            fn default() -> Self {
+                DetachSessionArgs {}
+            }
+        }
+
+        pub struct DetachSessionBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DetachSessionBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> DetachSessionBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                DetachSessionBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<DetachSession<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for DetachSession<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("DetachSession");
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createDetachSession<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args DetachSessionArgs,
+        ) -> ::flatbuffers::WIPOffset<DetachSession<'bldr>> {
+            let mut builder = DetachSessionBuilder::new(fbb);
+            builder.finish()
+        }
+
+        pub enum DestroySessionOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct DestroySession<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for DestroySession<'a> {
+            type Inner = DestroySession<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> DestroySession<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                DestroySession { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args DestroySessionArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<DestroySession<'bldr>> {
+                let mut builder = DestroySessionBuilder::new(_fbb);
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        DestroySession::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for DestroySession<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct DestroySessionArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for DestroySessionArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                DestroySessionArgs { session_id: None }
+            }
+        }
+
+        pub struct DestroySessionBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> DestroySessionBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    DestroySession::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> DestroySessionBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                DestroySessionBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<DestroySession<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for DestroySession<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("DestroySession");
+                ds.field("session_id", &self.session_id());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createDestroySession<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args DestroySessionArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<DestroySession<'bldr>> {
+            let mut builder = DestroySessionBuilder::new(fbb);
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.finish()
+        }
+
+        pub enum ListSessionsOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct ListSessions<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ListSessions<'a> {
+            type Inner = ListSessions<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ListSessions<'a> {
+            pub const VT_TOKENS: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ListSessions { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ListSessionsArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<ListSessions<'bldr>> {
+                let mut builder = ListSessionsBuilder::new(_fbb);
+                if let Some(x) = args.tokens {
+                    builder.add_tokens(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn tokens(
+                &self,
+            ) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<&'a str>>>
+            {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<&'a str>>,
+                    >>(ListSessions::VT_TOKENS, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ListSessions<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<&'_ str>>,
+                    >>("tokens", Self::VT_TOKENS, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ListSessionsArgs<'a> {
+            pub tokens: Option<
+                ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<&'a str>>,
+                >,
+            >,
+        }
+        impl<'a> Default for ListSessionsArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                ListSessionsArgs { tokens: None }
+            }
+        }
+
+        pub struct ListSessionsBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ListSessionsBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_tokens(
+                &mut self,
+                tokens: ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'b, ::flatbuffers::ForwardsUOffset<&'b str>>,
+                >,
+            ) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    ListSessions::VT_TOKENS,
+                    tokens,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ListSessionsBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ListSessionsBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ListSessions<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ListSessions<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ListSessions");
+                ds.field("tokens", &self.tokens());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createListSessions<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args ListSessionsArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<ListSessions<'bldr>> {
+            let mut builder = ListSessionsBuilder::new(fbb);
+            if let Some(x) = args.tokens {
+                builder.add_tokens(x);
+            }
+            builder.finish()
+        }
+
         pub enum ClientMessageOffset {}
         #[derive(Copy, Clone, PartialEq)]
 
@@ -1163,6 +1992,56 @@ pub mod rterm {
                 if self.body_type() == ClientBody::ScrollbackRequest {
                     self.body()
                         .map(|t| unsafe { ScrollbackRequest::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_create_session(&self) -> Option<CreateSession<'a>> {
+                if self.body_type() == ClientBody::CreateSession {
+                    self.body()
+                        .map(|t| unsafe { CreateSession::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_attach_session(&self) -> Option<AttachSession<'a>> {
+                if self.body_type() == ClientBody::AttachSession {
+                    self.body()
+                        .map(|t| unsafe { AttachSession::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_detach_session(&self) -> Option<DetachSession<'a>> {
+                if self.body_type() == ClientBody::DetachSession {
+                    self.body()
+                        .map(|t| unsafe { DetachSession::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_destroy_session(&self) -> Option<DestroySession<'a>> {
+                if self.body_type() == ClientBody::DestroySession {
+                    self.body()
+                        .map(|t| unsafe { DestroySession::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_list_sessions(&self) -> Option<ListSessions<'a>> {
+                if self.body_type() == ClientBody::ListSessions {
+                    self.body()
+                        .map(|t| unsafe { ListSessions::init_from_table(t) })
                 } else {
                     None
                 }
@@ -2874,6 +3753,1156 @@ pub mod rterm {
             builder.finish()
         }
 
+        pub enum SessionCreatedOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionCreated<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionCreated<'a> {
+            type Inner = SessionCreated<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionCreated<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+            pub const VT_NAME: ::flatbuffers::VOffsetT = 6;
+            pub const VT_TOKEN: ::flatbuffers::VOffsetT = 8;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionCreated { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionCreatedArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionCreated<'bldr>> {
+                let mut builder = SessionCreatedBuilder::new(_fbb);
+                if let Some(x) = args.token {
+                    builder.add_token(x);
+                }
+                if let Some(x) = args.name {
+                    builder.add_name(x);
+                }
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionCreated::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+            #[inline]
+            pub fn name(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionCreated::VT_NAME, None)
+                }
+            }
+            #[inline]
+            pub fn token(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionCreated::VT_TOKEN, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionCreated<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "name",
+                        Self::VT_NAME,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "token",
+                        Self::VT_TOKEN,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionCreatedArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub name: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub token: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for SessionCreatedArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionCreatedArgs {
+                    session_id: None,
+                    name: None,
+                    token: None,
+                }
+            }
+        }
+
+        pub struct SessionCreatedBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionCreatedBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionCreated::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn add_name(&mut self, name: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(SessionCreated::VT_NAME, name);
+            }
+            #[inline]
+            pub fn add_token(&mut self, token: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionCreated::VT_TOKEN,
+                    token,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionCreatedBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionCreatedBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionCreated<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionCreated<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionCreated");
+                ds.field("session_id", &self.session_id());
+                ds.field("name", &self.name());
+                ds.field("token", &self.token());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionCreated<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionCreatedArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionCreated<'bldr>> {
+            let mut builder = SessionCreatedBuilder::new(fbb);
+            if let Some(x) = args.token {
+                builder.add_token(x);
+            }
+            if let Some(x) = args.name {
+                builder.add_name(x);
+            }
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.finish()
+        }
+
+        pub enum SessionAttachedOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionAttached<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionAttached<'a> {
+            type Inner = SessionAttached<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionAttached<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+            pub const VT_NAME: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionAttached { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionAttachedArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionAttached<'bldr>> {
+                let mut builder = SessionAttachedBuilder::new(_fbb);
+                if let Some(x) = args.name {
+                    builder.add_name(x);
+                }
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionAttached::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+            #[inline]
+            pub fn name(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionAttached::VT_NAME, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionAttached<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "name",
+                        Self::VT_NAME,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionAttachedArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub name: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for SessionAttachedArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionAttachedArgs {
+                    session_id: None,
+                    name: None,
+                }
+            }
+        }
+
+        pub struct SessionAttachedBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionAttachedBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionAttached::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn add_name(&mut self, name: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionAttached::VT_NAME,
+                    name,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionAttachedBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionAttachedBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionAttached<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionAttached<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionAttached");
+                ds.field("session_id", &self.session_id());
+                ds.field("name", &self.name());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionAttached<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionAttachedArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionAttached<'bldr>> {
+            let mut builder = SessionAttachedBuilder::new(fbb);
+            if let Some(x) = args.name {
+                builder.add_name(x);
+            }
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.finish()
+        }
+
+        pub enum SessionDetachedOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionDetached<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionDetached<'a> {
+            type Inner = SessionDetached<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionDetached<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+            pub const VT_REASON: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionDetached { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionDetachedArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionDetached<'bldr>> {
+                let mut builder = SessionDetachedBuilder::new(_fbb);
+                if let Some(x) = args.reason {
+                    builder.add_reason(x);
+                }
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionDetached::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+            #[inline]
+            pub fn reason(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionDetached::VT_REASON,
+                        None,
+                    )
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionDetached<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "reason",
+                        Self::VT_REASON,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionDetachedArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub reason: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for SessionDetachedArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionDetachedArgs {
+                    session_id: None,
+                    reason: None,
+                }
+            }
+        }
+
+        pub struct SessionDetachedBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionDetachedBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionDetached::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn add_reason(&mut self, reason: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionDetached::VT_REASON,
+                    reason,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionDetachedBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionDetachedBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionDetached<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionDetached<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionDetached");
+                ds.field("session_id", &self.session_id());
+                ds.field("reason", &self.reason());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionDetached<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionDetachedArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionDetached<'bldr>> {
+            let mut builder = SessionDetachedBuilder::new(fbb);
+            if let Some(x) = args.reason {
+                builder.add_reason(x);
+            }
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.finish()
+        }
+
+        pub enum SessionDestroyedOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionDestroyed<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionDestroyed<'a> {
+            type Inner = SessionDestroyed<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionDestroyed<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionDestroyed { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionDestroyedArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionDestroyed<'bldr>> {
+                let mut builder = SessionDestroyedBuilder::new(_fbb);
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionDestroyed::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionDestroyed<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionDestroyedArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for SessionDestroyedArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionDestroyedArgs { session_id: None }
+            }
+        }
+
+        pub struct SessionDestroyedBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionDestroyedBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionDestroyed::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionDestroyedBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionDestroyedBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionDestroyed<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionDestroyed<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionDestroyed");
+                ds.field("session_id", &self.session_id());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionDestroyed<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionDestroyedArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionDestroyed<'bldr>> {
+            let mut builder = SessionDestroyedBuilder::new(fbb);
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.finish()
+        }
+
+        pub enum SessionInfoOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionInfo<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionInfo<'a> {
+            type Inner = SessionInfo<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionInfo<'a> {
+            pub const VT_SESSION_ID: ::flatbuffers::VOffsetT = 4;
+            pub const VT_NAME: ::flatbuffers::VOffsetT = 6;
+            pub const VT_SHELL: ::flatbuffers::VOffsetT = 8;
+            pub const VT_CREATED_AT: ::flatbuffers::VOffsetT = 10;
+            pub const VT_LAST_ACTIVITY: ::flatbuffers::VOffsetT = 12;
+            pub const VT_ATTACHED: ::flatbuffers::VOffsetT = 14;
+            pub const VT_COLS: ::flatbuffers::VOffsetT = 16;
+            pub const VT_ROWS: ::flatbuffers::VOffsetT = 18;
+            pub const VT_TITLE: ::flatbuffers::VOffsetT = 20;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionInfo { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionInfoArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionInfo<'bldr>> {
+                let mut builder = SessionInfoBuilder::new(_fbb);
+                if let Some(x) = args.title {
+                    builder.add_title(x);
+                }
+                if let Some(x) = args.shell {
+                    builder.add_shell(x);
+                }
+                if let Some(x) = args.name {
+                    builder.add_name(x);
+                }
+                if let Some(x) = args.session_id {
+                    builder.add_session_id(x);
+                }
+                builder.add_last_activity(args.last_activity);
+                builder.add_created_at(args.created_at);
+                builder.add_rows(args.rows);
+                builder.add_cols(args.cols);
+                builder.add_attached(args.attached);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn session_id(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(
+                        SessionInfo::VT_SESSION_ID,
+                        None,
+                    )
+                }
+            }
+            #[inline]
+            pub fn name(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionInfo::VT_NAME, None)
+                }
+            }
+            #[inline]
+            pub fn shell(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionInfo::VT_SHELL, None)
+                }
+            }
+            #[inline]
+            pub fn created_at(&self) -> u64 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u64>(SessionInfo::VT_CREATED_AT, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn last_activity(&self) -> u64 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u64>(SessionInfo::VT_LAST_ACTIVITY, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn attached(&self) -> bool {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<bool>(SessionInfo::VT_ATTACHED, Some(false))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn cols(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<u16>(SessionInfo::VT_COLS, Some(0)).unwrap() }
+            }
+            #[inline]
+            pub fn rows(&self) -> u16 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<u16>(SessionInfo::VT_ROWS, Some(0)).unwrap() }
+            }
+            #[inline]
+            pub fn title(&self) -> Option<&'a str> {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<::flatbuffers::ForwardsUOffset<&str>>(SessionInfo::VT_TITLE, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionInfo<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "session_id",
+                        Self::VT_SESSION_ID,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "name",
+                        Self::VT_NAME,
+                        false,
+                    )?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "shell",
+                        Self::VT_SHELL,
+                        false,
+                    )?
+                    .visit_field::<u64>("created_at", Self::VT_CREATED_AT, false)?
+                    .visit_field::<u64>("last_activity", Self::VT_LAST_ACTIVITY, false)?
+                    .visit_field::<bool>("attached", Self::VT_ATTACHED, false)?
+                    .visit_field::<u16>("cols", Self::VT_COLS, false)?
+                    .visit_field::<u16>("rows", Self::VT_ROWS, false)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<&str>>(
+                        "title",
+                        Self::VT_TITLE,
+                        false,
+                    )?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionInfoArgs<'a> {
+            pub session_id: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub name: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub shell: Option<::flatbuffers::WIPOffset<&'a str>>,
+            pub created_at: u64,
+            pub last_activity: u64,
+            pub attached: bool,
+            pub cols: u16,
+            pub rows: u16,
+            pub title: Option<::flatbuffers::WIPOffset<&'a str>>,
+        }
+        impl<'a> Default for SessionInfoArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionInfoArgs {
+                    session_id: None,
+                    name: None,
+                    shell: None,
+                    created_at: 0,
+                    last_activity: 0,
+                    attached: false,
+                    cols: 0,
+                    rows: 0,
+                    title: None,
+                }
+            }
+        }
+
+        pub struct SessionInfoBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionInfoBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_session_id(&mut self, session_id: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionInfo::VT_SESSION_ID,
+                    session_id,
+                );
+            }
+            #[inline]
+            pub fn add_name(&mut self, name: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(SessionInfo::VT_NAME, name);
+            }
+            #[inline]
+            pub fn add_shell(&mut self, shell: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(SessionInfo::VT_SHELL, shell);
+            }
+            #[inline]
+            pub fn add_created_at(&mut self, created_at: u64) {
+                self.fbb_
+                    .push_slot::<u64>(SessionInfo::VT_CREATED_AT, created_at, 0);
+            }
+            #[inline]
+            pub fn add_last_activity(&mut self, last_activity: u64) {
+                self.fbb_
+                    .push_slot::<u64>(SessionInfo::VT_LAST_ACTIVITY, last_activity, 0);
+            }
+            #[inline]
+            pub fn add_attached(&mut self, attached: bool) {
+                self.fbb_
+                    .push_slot::<bool>(SessionInfo::VT_ATTACHED, attached, false);
+            }
+            #[inline]
+            pub fn add_cols(&mut self, cols: u16) {
+                self.fbb_.push_slot::<u16>(SessionInfo::VT_COLS, cols, 0);
+            }
+            #[inline]
+            pub fn add_rows(&mut self, rows: u16) {
+                self.fbb_.push_slot::<u16>(SessionInfo::VT_ROWS, rows, 0);
+            }
+            #[inline]
+            pub fn add_title(&mut self, title: ::flatbuffers::WIPOffset<&'b str>) {
+                self.fbb_
+                    .push_slot_always::<::flatbuffers::WIPOffset<_>>(SessionInfo::VT_TITLE, title);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionInfoBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionInfoBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionInfo<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionInfo<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionInfo");
+                ds.field("session_id", &self.session_id());
+                ds.field("name", &self.name());
+                ds.field("shell", &self.shell());
+                ds.field("created_at", &self.created_at());
+                ds.field("last_activity", &self.last_activity());
+                ds.field("attached", &self.attached());
+                ds.field("cols", &self.cols());
+                ds.field("rows", &self.rows());
+                ds.field("title", &self.title());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionInfo<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionInfoArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionInfo<'bldr>> {
+            let mut builder = SessionInfoBuilder::new(fbb);
+            if let Some(x) = args.title {
+                builder.add_title(x);
+            }
+            if let Some(x) = args.shell {
+                builder.add_shell(x);
+            }
+            if let Some(x) = args.name {
+                builder.add_name(x);
+            }
+            if let Some(x) = args.session_id {
+                builder.add_session_id(x);
+            }
+            builder.add_last_activity(args.last_activity);
+            builder.add_created_at(args.created_at);
+            builder.add_rows(args.rows);
+            builder.add_cols(args.cols);
+            builder.add_attached(args.attached);
+            builder.finish()
+        }
+
+        pub enum SessionListOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        pub struct SessionList<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for SessionList<'a> {
+            type Inner = SessionList<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> SessionList<'a> {
+            pub const VT_SESSIONS: ::flatbuffers::VOffsetT = 4;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                SessionList { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args SessionListArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<SessionList<'bldr>> {
+                let mut builder = SessionListBuilder::new(_fbb);
+                if let Some(x) = args.sessions {
+                    builder.add_sessions(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn sessions(
+                &self,
+            ) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo<'a>>>>
+            {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo<'a>>>,
+                    >>(SessionList::VT_SESSIONS, None)
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for SessionList<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<SessionInfo<'_>>>,
+                    >>("sessions", Self::VT_SESSIONS, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct SessionListArgs<'a> {
+            pub sessions: Option<
+                ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo<'a>>>,
+                >,
+            >,
+        }
+        impl<'a> Default for SessionListArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                SessionListArgs { sessions: None }
+            }
+        }
+
+        pub struct SessionListBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> SessionListBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_sessions(
+                &mut self,
+                sessions: ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'b, ::flatbuffers::ForwardsUOffset<SessionInfo<'b>>>,
+                >,
+            ) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    SessionList::VT_SESSIONS,
+                    sessions,
+                );
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> SessionListBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                SessionListBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<SessionList<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for SessionList<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("SessionList");
+                ds.field("sessions", &self.sessions());
+                ds.finish()
+            }
+        }
+
+        #[inline]
+        pub fn createSessionList<
+            'bldr: 'args,
+            'args: 'mut_bldr,
+            'mut_bldr,
+            A: ::flatbuffers::Allocator + 'bldr,
+        >(
+            fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+            args: &'args SessionListArgs<'args>,
+        ) -> ::flatbuffers::WIPOffset<SessionList<'bldr>> {
+            let mut builder = SessionListBuilder::new(fbb);
+            if let Some(x) = args.sessions {
+                builder.add_sessions(x);
+            }
+            builder.finish()
+        }
+
         pub enum ServerMessageOffset {}
         #[derive(Copy, Clone, PartialEq)]
 
@@ -2991,6 +5020,56 @@ pub mod rterm {
             pub fn body_as_bell(&self) -> Option<Bell<'a>> {
                 if self.body_type() == ServerBody::Bell {
                     self.body().map(|t| unsafe { Bell::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_session_created(&self) -> Option<SessionCreated<'a>> {
+                if self.body_type() == ServerBody::SessionCreated {
+                    self.body()
+                        .map(|t| unsafe { SessionCreated::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_session_attached(&self) -> Option<SessionAttached<'a>> {
+                if self.body_type() == ServerBody::SessionAttached {
+                    self.body()
+                        .map(|t| unsafe { SessionAttached::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_session_detached(&self) -> Option<SessionDetached<'a>> {
+                if self.body_type() == ServerBody::SessionDetached {
+                    self.body()
+                        .map(|t| unsafe { SessionDetached::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_session_destroyed(&self) -> Option<SessionDestroyed<'a>> {
+                if self.body_type() == ServerBody::SessionDestroyed {
+                    self.body()
+                        .map(|t| unsafe { SessionDestroyed::init_from_table(t) })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            pub fn body_as_session_list(&self) -> Option<SessionList<'a>> {
+                if self.body_type() == ServerBody::SessionList {
+                    self.body()
+                        .map(|t| unsafe { SessionList::init_from_table(t) })
                 } else {
                     None
                 }

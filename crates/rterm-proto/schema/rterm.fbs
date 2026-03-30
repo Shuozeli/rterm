@@ -1,12 +1,9 @@
-// rterm protocol v2: typed screen updates.
-//
-// The server runs VT emulation and sends structured screen diffs.
-// The client is a thin renderer — it just paints what the server tells it.
+// rterm protocol v3: typed screen updates + session management.
 
 namespace rterm.protocol;
 
 // ============================================================================
-// Client → Server
+// Client -> Server
 // ============================================================================
 
 /// Keyboard input (VT-encoded bytes for the PTY).
@@ -29,8 +26,8 @@ table Resize {
 table MouseEvent {
     row: uint16;
     col: uint16;
-    button: uint8;     // 0=left, 1=middle, 2=right, 3=release
-    modifiers: uint8;  // bitflags: 1=shift, 2=alt, 4=ctrl
+    button: uint8;
+    modifiers: uint8;
     kind: MouseEventKind;
 }
 
@@ -44,10 +41,37 @@ enum MouseEventKind : uint8 {
 
 /// Request scrollback lines from the server.
 table ScrollbackRequest {
-    /// How many lines back from the bottom to start.
     offset: uint32;
-    /// How many lines to fetch.
     count: uint32;
+}
+
+/// Create a new named session.
+table CreateSession {
+    name: string;       // human-readable name (optional, auto-generated if empty)
+    shell: string;      // shell command (optional, server default if empty)
+    cols: uint16;
+    rows: uint16;
+}
+
+/// Attach to an existing session (reconnection).
+table AttachSession {
+    session_id: string; // UUID
+    token: string;      // session token (bearer credential)
+    cols: uint16;
+    rows: uint16;
+}
+
+/// Explicit detach (keep session alive).
+table DetachSession {}
+
+/// Destroy a session (kill PTY).
+table DestroySession {
+    session_id: string;
+}
+
+/// List sessions the client has access to.
+table ListSessions {
+    tokens: [string];   // tokens the client holds (server matches by hash)
 }
 
 union ClientBody {
@@ -56,6 +80,11 @@ union ClientBody {
     Resize,
     MouseEvent,
     ScrollbackRequest,
+    CreateSession,
+    AttachSession,
+    DetachSession,
+    DestroySession,
+    ListSessions,
 }
 
 table ClientMessage {
@@ -63,26 +92,16 @@ table ClientMessage {
 }
 
 // ============================================================================
-// Server → Client
+// Server -> Client
 // ============================================================================
 
 /// A single terminal cell with character and style.
 struct Cell {
-    /// Unicode codepoint.
     ch: uint32;
-    /// Foreground color: 0x00RRGGBB for RGB, 0xFF0000II for indexed, 0xFFFFFFFF for default.
     fg: uint32;
-    /// Background color: same encoding as fg.
     bg: uint32;
-    /// Attribute flags (bitfield):
-    ///   bit 0: bold
-    ///   bit 1: italic
-    ///   bit 2: underline
-    ///   bit 3: strikethrough
-    ///   bit 4: reverse
-    ///   bit 5: dim
-    ///   bit 6: hidden
-    ///   bit 7: wide (CJK double-width character)
+    /// bit 0-6: bold,italic,underline,strikethrough,reverse,dim,hidden
+    /// bit 7: wide (CJK double-width)
     attrs: uint8;
 }
 
@@ -98,46 +117,32 @@ table CursorState {
     row: uint16;
     col: uint16;
     visible: bool;
-    /// Cursor style (DECSCUSR): 0=default, 1=blinking block, 2=steady block,
-    /// 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar.
     style: uint8;
 }
 
 /// A screen update: changed cells + cursor.
 table ScreenUpdate {
-    /// Changed cell ranges (only cells that differ from last frame).
     changes: [CellRange];
-    /// Current cursor state.
     cursor: CursorState;
-    /// Terminal dimensions (cols x rows).
     cols: uint16;
     rows: uint16;
-    /// Window title (from OSC 0/2), null if unchanged.
     title: string;
 }
 
-/// Full screen snapshot (sent on initial connect or after resize).
+/// Full screen snapshot (sent on connect or resize).
 table ScreenSnapshot {
-    /// All rows, in order.
     rows: [CellRange];
-    /// Current cursor state.
     cursor: CursorState;
-    /// Terminal dimensions.
     cols: uint16;
     num_rows: uint16;
-    /// Window title.
     title: string;
-    /// Number of scrollback lines available.
     scrollback_len: uint32;
 }
 
-/// Scrollback data (sent when client requests scroll).
+/// Scrollback data.
 table ScrollbackData {
-    /// Lines from scrollback buffer.
     lines: [CellRange];
-    /// Offset from bottom (0 = most recent scrollback line).
     offset: uint32;
-    /// Total scrollback lines available.
     total: uint32;
 }
 
@@ -151,8 +156,50 @@ table Error {
     message: string;
 }
 
-/// Bell (BEL character received).
+/// Bell.
 table Bell {}
+
+/// Session created (response to CreateSession). Token sent once.
+table SessionCreated {
+    session_id: string;
+    name: string;
+    token: string;
+}
+
+/// Confirm attach to session.
+table SessionAttached {
+    session_id: string;
+    name: string;
+}
+
+/// Client was detached (displaced by another client, or explicit).
+table SessionDetached {
+    session_id: string;
+    reason: string;
+}
+
+/// Session was destroyed.
+table SessionDestroyed {
+    session_id: string;
+}
+
+/// Info about one session (used in SessionList).
+table SessionInfo {
+    session_id: string;
+    name: string;
+    shell: string;
+    created_at: uint64;     // unix timestamp ms
+    last_activity: uint64;  // unix timestamp ms
+    attached: bool;
+    cols: uint16;
+    rows: uint16;
+    title: string;
+}
+
+/// List of sessions the client can access.
+table SessionList {
+    sessions: [SessionInfo];
+}
 
 union ServerBody {
     ScreenUpdate,
@@ -161,6 +208,11 @@ union ServerBody {
     Exit,
     Error,
     Bell,
+    SessionCreated,
+    SessionAttached,
+    SessionDetached,
+    SessionDestroyed,
+    SessionList,
 }
 
 table ServerMessage {
@@ -168,7 +220,7 @@ table ServerMessage {
 }
 
 // ============================================================================
-// gRPC Service (for native clients)
+// gRPC Service
 // ============================================================================
 
 rpc_service TerminalService {

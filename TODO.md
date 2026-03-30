@@ -7,8 +7,8 @@
 - [x] Paste support (bracketed paste wrapping server-side)
 
 ## Rendering
-- [ ] Wide character (CJK) support — double-width cells
-- [ ] Bold font variant
+- [x] Wide character (CJK) support — double-width cells
+- [x] Bold font variant (faux bold via double-draw)
 - [x] Cursor styles (bar, underline, block)
 
 ## Architecture

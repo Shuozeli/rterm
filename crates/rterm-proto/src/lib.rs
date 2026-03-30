@@ -45,12 +45,43 @@ pub struct ScrollbackRequest {
 }
 
 #[derive(Debug, Clone)]
+pub struct CreateSession {
+    pub name: Option<String>,
+    pub shell: Option<String>,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct AttachSession {
+    pub session_id: String,
+    pub token: String,
+    pub cols: u16,
+    pub rows: u16,
+}
+
+#[derive(Debug, Clone)]
+pub struct DestroySession {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct ListSessions {
+    pub tokens: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClientMsg {
     KeyInput(KeyInput),
     PasteInput(PasteInput),
     Resize(Resize),
     MouseEvent(MouseEvent),
     ScrollbackRequest(ScrollbackRequest),
+    CreateSession(CreateSession),
+    AttachSession(AttachSession),
+    DetachSession,
+    DestroySession(DestroySession),
+    ListSessions(ListSessions),
 }
 
 // ============================================================================
@@ -159,6 +190,48 @@ pub struct ServerError {
 }
 
 #[derive(Debug, Clone)]
+pub struct SessionCreated {
+    pub session_id: String,
+    pub name: String,
+    pub token: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionAttached {
+    pub session_id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionDetached {
+    pub session_id: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionDestroyed {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionInfo {
+    pub session_id: String,
+    pub name: String,
+    pub shell: String,
+    pub created_at: u64,
+    pub last_activity: u64,
+    pub attached: bool,
+    pub cols: u16,
+    pub rows: u16,
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SessionListData {
+    pub sessions: Vec<SessionInfo>,
+}
+
+#[derive(Debug, Clone)]
 pub enum ServerMsg {
     ScreenUpdate(ScreenUpdateData),
     ScreenSnapshot(ScreenSnapshotData),
@@ -166,6 +239,11 @@ pub enum ServerMsg {
     Exit(Exit),
     Error(ServerError),
     Bell,
+    SessionCreated(SessionCreated),
+    SessionAttached(SessionAttached),
+    SessionDetached(SessionDetached),
+    SessionDestroyed(SessionDestroyed),
+    SessionList(SessionListData),
 }
 
 // ============================================================================
@@ -251,6 +329,18 @@ impl FlatBufferGrpcMessage for ClientMsg {
                     &fbs::ClientMessageArgs {
                         body_type: fbs::ClientBody::ScrollbackRequest,
                         body: Some(sr.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            _ => {
+                // Session management messages — encode as needed.
+                // For now, create an empty message.
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::NONE,
+                        body: None,
                     },
                 );
                 fbb.finish(msg, None);
@@ -371,6 +461,17 @@ impl FlatBufferGrpcMessage for ServerMsg {
                     &fbs::ServerMessageArgs {
                         body_type: fbs::ServerBody::Bell,
                         body: Some(bell.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            _ => {
+                // Session management messages — TODO: full encode.
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::NONE,
+                        body: None,
                     },
                 );
                 fbb.finish(msg, None);
