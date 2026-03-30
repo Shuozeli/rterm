@@ -160,6 +160,8 @@ pub struct ScreenUpdateData {
     pub cols: u16,
     pub rows: u16,
     pub title: Option<String>,
+    /// Current scrollback line count (not in FBS schema, set by server for client tracking).
+    pub scrollback_len: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -658,6 +660,7 @@ fn decode_screen_update(su: &fbs::ScreenUpdate<'_>) -> Result<ScreenUpdateData, 
         cols: su.cols(),
         rows: su.rows(),
         title: su.title().map(|t| t.to_string()),
+        scrollback_len: 0,
     })
 }
 
@@ -755,6 +758,7 @@ mod tests {
             cols: 80,
             rows: 24,
             title: Some("test".into()),
+            scrollback_len: 0,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
@@ -943,6 +947,7 @@ mod tests {
             cols: 80,
             rows: 24,
             title: None,
+            scrollback_len: 0,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {

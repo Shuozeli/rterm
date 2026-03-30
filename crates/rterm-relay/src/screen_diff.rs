@@ -210,6 +210,7 @@ impl PrevScreen {
             cols: cols as u16,
             rows: rows as u16,
             title: None,
+            scrollback_len: 0, // Set by caller after diff.
         })
     }
 }

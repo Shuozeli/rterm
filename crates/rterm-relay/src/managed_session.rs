@@ -134,10 +134,11 @@ impl ManagedSession {
             return;
         }
 
-        if let Some(update) = self.prev_screen.diff(self.terminal.screen())
-            && let Some(tx) = &self.client_tx
-        {
-            let _ = tx.try_send(ServerMsg::ScreenUpdate(update));
+        if let Some(mut update) = self.prev_screen.diff(self.terminal.screen()) {
+            update.scrollback_len = self.terminal.screen().scrollback_len() as u32;
+            if let Some(tx) = &self.client_tx {
+                let _ = tx.try_send(ServerMsg::ScreenUpdate(update));
+            }
         }
     }
 

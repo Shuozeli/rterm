@@ -64,14 +64,7 @@ impl DisplayGrid {
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
         self.cursor_style = data.cursor_style;
-        // Track scrollback availability from snapshots.
-        if data.scrollback_len > 0 {
-            self.scrollback_total = data.scrollback_len;
-        }
-        // Also allow scrolling up to 10000 lines (server will clamp to actual).
-        if self.scrollback_total == 0 {
-            self.scrollback_total = 10000;
-        }
+        self.scrollback_total = data.scrollback_len;
     }
 
     /// Apply a ScreenUpdate (diff — only changed cells).
@@ -100,6 +93,10 @@ impl DisplayGrid {
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
         self.cursor_style = data.cursor_style;
+        // Update scrollback count from server.
+        if data.scrollback_len > 0 {
+            self.scrollback_total = data.scrollback_len;
+        }
     }
 
     /// Apply scrollback data from server.
@@ -344,14 +341,26 @@ pub fn paint_grid(
         }
     }
 
-    // Scroll indicator.
+    // Scroll indicator (zellij style: SCROLL: position/total).
     if grid.scroll_offset > 0 {
-        let text = format!("scroll: {} lines up", grid.scroll_offset);
+        let text = format!(" SCROLL: {}/{} ", grid.scroll_offset, grid.scrollback_total);
+        let text_width = text.len() as f32 * cell_size.x * 0.6;
+        let indicator_x = origin.x + grid_size.x - text_width - 4.0;
+        let indicator_y = origin.y + 2.0;
+        // Background for readability.
+        painter.rect_filled(
+            Rect::from_min_size(
+                Pos2::new(indicator_x - 2.0, indicator_y),
+                Vec2::new(text_width + 4.0, cell_size.y),
+            ),
+            2.0,
+            Color32::from_rgba_premultiplied(40, 40, 40, 220),
+        );
         painter.text(
-            Pos2::new(origin.x + grid_size.x - 150.0, origin.y + 2.0),
+            Pos2::new(indicator_x, indicator_y),
             egui::Align2::LEFT_TOP,
             text,
-            font_id,
+            font_id.clone(),
             Color32::from_rgb(255, 200, 0),
         );
     }
