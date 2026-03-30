@@ -1,7 +1,7 @@
 # rterm TODO
 
 ## Polish & UX
-- [ ] Persistent TLS cert (save to ~/.config/rterm/, survives restarts)
+- [x] Persistent TLS cert (save to ~/.config/rterm/, survives restarts)
 - [ ] Scrollback retrieval from server (protocol defined, wire it up)
 - [ ] Text selection + clipboard copy in WASM thin renderer
 - [ ] Paste support (bracketed paste wrapping server-side)
@@ -12,7 +12,7 @@
 - [ ] Cursor styles (bar, underline, blink)
 
 ## Architecture
-- [ ] Wire wt_handler and service to call session::run_session in production
+- [x] Wire wt_handler and service to call session::run_session in production
 - [ ] rterm-shell (native WebView wrapper — Phase 4)
 - [ ] Reconnection on disconnect
 - [ ] Multiple concurrent sessions on one relay

@@ -156,17 +156,16 @@ fn load_or_generate_cert() -> (Vec<u8>, Vec<u8>) {
     let key_path = config_dir.join("key.pem");
 
     // Try loading existing cert.
-    if cert_path.exists() && key_path.exists() {
-        if let Ok(cert_pem) = std::fs::read(&cert_path) {
-            if let Ok(key_pem) = std::fs::read(&key_path) {
-                // Check if cert is still valid (not expired).
-                if is_cert_valid(&cert_pem) {
-                    info!("using persistent cert from {}", cert_path.display());
-                    return (cert_pem, key_pem);
-                }
-                info!("cert expired, regenerating");
-            }
+    if cert_path.exists()
+        && key_path.exists()
+        && let Ok(cert_pem) = std::fs::read(&cert_path)
+        && let Ok(key_pem) = std::fs::read(&key_path)
+    {
+        if is_cert_valid(&cert_pem) {
+            info!("using persistent cert from {}", cert_path.display());
+            return (cert_pem, key_pem);
         }
+        info!("cert expired, regenerating");
     }
 
     // Generate new cert.
