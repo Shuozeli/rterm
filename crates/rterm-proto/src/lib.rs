@@ -39,12 +39,6 @@ pub struct MouseEvent {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScrollbackRequest {
-    pub offset: u32,
-    pub count: u32,
-}
-
-#[derive(Debug, Clone)]
 pub struct CreateSession {
     pub name: Option<String>,
     pub shell: Option<String>,
@@ -76,7 +70,6 @@ pub enum ClientMsg {
     PasteInput(PasteInput),
     Resize(Resize),
     MouseEvent(MouseEvent),
-    ScrollbackRequest(ScrollbackRequest),
     CreateSession(CreateSession),
     AttachSession(AttachSession),
     DetachSession,
@@ -160,8 +153,9 @@ pub struct ScreenUpdateData {
     pub cols: u16,
     pub rows: u16,
     pub title: Option<String>,
-    /// Current scrollback line count (not in FBS schema, set by server for client tracking).
-    pub scrollback_len: u32,
+    pub mouse_tracking_mode: u8,
+    pub alt_screen_active: bool,
+    pub application_cursor_keys: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -171,14 +165,9 @@ pub struct ScreenSnapshotData {
     pub cols: u16,
     pub num_rows: u16,
     pub title: Option<String>,
-    pub scrollback_len: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct ScrollbackDataMsg {
-    pub lines: Vec<CellRangeData>,
-    pub offset: u32,
-    pub total: u32,
+    pub mouse_tracking_mode: u8,
+    pub alt_screen_active: bool,
+    pub application_cursor_keys: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -237,7 +226,6 @@ pub struct SessionListData {
 pub enum ServerMsg {
     ScreenUpdate(ScreenUpdateData),
     ScreenSnapshot(ScreenSnapshotData),
-    ScrollbackData(ScrollbackDataMsg),
     Exit(Exit),
     Error(ServerError),
     Bell,
@@ -318,23 +306,7 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 );
                 fbb.finish(msg, None);
             }
-            ClientMsg::ScrollbackRequest(s) => {
-                let sr = fbs::ScrollbackRequest::create(
-                    &mut fbb,
-                    &fbs::ScrollbackRequestArgs {
-                        offset: s.offset,
-                        count: s.count,
-                    },
-                );
-                let msg = fbs::ClientMessage::create(
-                    &mut fbb,
-                    &fbs::ClientMessageArgs {
-                        body_type: fbs::ClientBody::ScrollbackRequest,
-                        body: Some(sr.as_union_value()),
-                    },
-                );
-                fbb.finish(msg, None);
-            }
+
             _ => {
                 // Session management messages — encode as needed.
                 // For now, create an empty message.
@@ -374,15 +346,7 @@ impl FlatBufferGrpcMessage for ClientMsg {
                     rows: r.rows(),
                 }))
             }
-            fbs::ClientBody::ScrollbackRequest => {
-                let s = msg
-                    .body_as_scrollback_request()
-                    .ok_or("missing ScrollbackRequest")?;
-                Ok(ClientMsg::ScrollbackRequest(ScrollbackRequest {
-                    offset: s.offset(),
-                    count: s.count(),
-                }))
-            }
+
             fbs::ClientBody::MouseEvent => {
                 let m = msg.body_as_mouse_event().ok_or("missing MouseEvent")?;
                 Ok(ClientMsg::MouseEvent(MouseEvent {
@@ -408,26 +372,7 @@ impl FlatBufferGrpcMessage for ServerMsg {
             ServerMsg::ScreenSnapshot(ss) => {
                 encode_screen_snapshot(&mut fbb, ss);
             }
-            ServerMsg::ScrollbackData(sd) => {
-                let lines = encode_cell_ranges(&mut fbb, &sd.lines);
-                let lines_vec = fbb.create_vector(&lines);
-                let sbd = fbs::ScrollbackData::create(
-                    &mut fbb,
-                    &fbs::ScrollbackDataArgs {
-                        lines: Some(lines_vec),
-                        offset: sd.offset,
-                        total: sd.total,
-                    },
-                );
-                let msg = fbs::ServerMessage::create(
-                    &mut fbb,
-                    &fbs::ServerMessageArgs {
-                        body_type: fbs::ServerBody::ScrollbackData,
-                        body: Some(sbd.as_union_value()),
-                    },
-                );
-                fbb.finish(msg, None);
-            }
+
             ServerMsg::Exit(e) => {
                 let exit = fbs::Exit::create(&mut fbb, &fbs::ExitArgs { code: e.code });
                 let msg = fbs::ServerMessage::create(
@@ -496,16 +441,7 @@ impl FlatBufferGrpcMessage for ServerMsg {
                     .ok_or("missing ScreenSnapshot")?;
                 Ok(ServerMsg::ScreenSnapshot(decode_screen_snapshot(&ss)?))
             }
-            fbs::ServerBody::ScrollbackData => {
-                let sd = msg
-                    .body_as_scrollback_data()
-                    .ok_or("missing ScrollbackData")?;
-                Ok(ServerMsg::ScrollbackData(ScrollbackDataMsg {
-                    lines: decode_cell_ranges(sd.lines())?,
-                    offset: sd.offset(),
-                    total: sd.total(),
-                }))
-            }
+
             fbs::ServerBody::Exit => {
                 let e = msg.body_as_exit().ok_or("missing Exit")?;
                 Ok(ServerMsg::Exit(Exit { code: e.code() }))
@@ -572,7 +508,9 @@ fn encode_screen_update(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, su: &Scree
             cols: su.cols,
             rows: su.rows,
             title,
-            scrollback_len: su.scrollback_len,
+            mouse_tracking_mode: su.mouse_tracking_mode,
+            alt_screen_active: su.alt_screen_active,
+            application_cursor_keys: su.application_cursor_keys,
         },
     );
     let msg = fbs::ServerMessage::create(
@@ -606,7 +544,9 @@ fn encode_screen_snapshot(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, ss: &Scr
             cols: ss.cols,
             num_rows: ss.num_rows,
             title,
-            scrollback_len: ss.scrollback_len,
+            mouse_tracking_mode: ss.mouse_tracking_mode,
+            alt_screen_active: ss.alt_screen_active,
+            application_cursor_keys: ss.application_cursor_keys,
         },
     );
     let msg = fbs::ServerMessage::create(
@@ -661,7 +601,9 @@ fn decode_screen_update(su: &fbs::ScreenUpdate<'_>) -> Result<ScreenUpdateData, 
         cols: su.cols(),
         rows: su.rows(),
         title: su.title().map(|t| t.to_string()),
-        scrollback_len: su.scrollback_len(),
+        mouse_tracking_mode: su.mouse_tracking_mode(),
+        alt_screen_active: su.alt_screen_active(),
+        application_cursor_keys: su.application_cursor_keys(),
     })
 }
 
@@ -678,7 +620,9 @@ fn decode_screen_snapshot(ss: &fbs::ScreenSnapshot<'_>) -> Result<ScreenSnapshot
         cols: ss.cols(),
         num_rows: ss.num_rows(),
         title: ss.title().map(|t| t.to_string()),
-        scrollback_len: ss.scrollback_len(),
+        mouse_tracking_mode: ss.mouse_tracking_mode(),
+        alt_screen_active: ss.alt_screen_active(),
+        application_cursor_keys: ss.application_cursor_keys(),
     })
 }
 
@@ -759,7 +703,9 @@ mod tests {
             cols: 80,
             rows: 24,
             title: Some("test".into()),
-            scrollback_len: 0,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
@@ -799,12 +745,13 @@ mod tests {
             cols: 80,
             num_rows: 24,
             title: None,
-            scrollback_len: 100,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
             ServerMsg::ScreenSnapshot(ss) => {
-                assert_eq!(ss.scrollback_len, 100);
                 assert_eq!(ss.rows[0].cells[0].ch, 'A');
             }
             _ => panic!("expected ScreenSnapshot"),
@@ -885,45 +832,6 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_scrollback_data() {
-        let msg = ServerMsg::ScrollbackData(ScrollbackDataMsg {
-            lines: vec![CellRangeData {
-                row: 5,
-                col_start: 0,
-                cells: vec![
-                    CellData {
-                        ch: 'A',
-                        fg: COLOR_DEFAULT,
-                        bg: COLOR_DEFAULT,
-                        attrs: 0,
-                    },
-                    CellData {
-                        ch: 'B',
-                        fg: pack_color_rgb(255, 0, 0),
-                        bg: COLOR_DEFAULT,
-                        attrs: ATTR_BOLD,
-                    },
-                ],
-            }],
-            offset: 10,
-            total: 100,
-        });
-        let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
-        match decoded {
-            ServerMsg::ScrollbackData(sd) => {
-                assert_eq!(sd.offset, 10);
-                assert_eq!(sd.total, 100);
-                assert_eq!(sd.lines.len(), 1);
-                assert_eq!(sd.lines[0].row, 5);
-                assert_eq!(sd.lines[0].cells[0].ch, 'A');
-                assert_eq!(sd.lines[0].cells[1].fg, pack_color_rgb(255, 0, 0));
-                assert_eq!(sd.lines[0].cells[1].attrs, ATTR_BOLD);
-            }
-            _ => panic!("expected ScrollbackData"),
-        }
-    }
-
-    #[test]
     fn round_trip_error_msg() {
         let msg = ServerMsg::Error(ServerError {
             message: "something broke".into(),
@@ -948,7 +856,9 @@ mod tests {
             cols: 80,
             rows: 24,
             title: None,
-            scrollback_len: 0,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
@@ -973,13 +883,14 @@ mod tests {
             cols: 120,
             num_rows: 40,
             title: Some("my terminal".into()),
-            scrollback_len: 500,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
             ServerMsg::ScreenSnapshot(ss) => {
                 assert_eq!(ss.title.as_deref(), Some("my terminal"));
-                assert_eq!(ss.scrollback_len, 500);
                 assert!(!ss.cursor.visible);
             }
             _ => panic!("expected ScreenSnapshot"),

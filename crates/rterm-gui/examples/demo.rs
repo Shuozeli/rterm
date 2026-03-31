@@ -84,8 +84,7 @@ impl eframe::App for TerminalApp {
             .show(ctx, |ui| {
                 let terminal = self.terminal.lock().unwrap();
                 let sel = rterm_gui::Selection::default();
-                let mut scroll = rterm_gui::grid::ScrollState::default();
-                let _grid = terminal_grid(ui, terminal.screen(), &self.config, &sel, &mut scroll);
+                let _grid = terminal_grid(ui, terminal.screen(), &self.config, &sel);
 
                 // Handle keyboard input.
                 {

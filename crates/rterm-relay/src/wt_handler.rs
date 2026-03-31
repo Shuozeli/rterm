@@ -90,9 +90,13 @@ pub async fn handle_wt_session(
                 Ok(ClientMsg::PasteInput(p)) => {
                     let s = session.lock().await;
                     let mut data = Vec::new();
-                    data.extend_from_slice(b"\x1b[200~");
+                    if s.terminal.bracketed_paste {
+                        data.extend_from_slice(b"\x1b[200~");
+                    }
                     data.extend_from_slice(p.text.as_bytes());
-                    data.extend_from_slice(b"\x1b[201~");
+                    if s.terminal.bracketed_paste {
+                        data.extend_from_slice(b"\x1b[201~");
+                    }
                     let _ = s.pty_stdin_tx.send(data).await;
                 }
                 Ok(ClientMsg::Resize(r)) => {
@@ -102,14 +106,7 @@ pub async fn handle_wt_session(
                     s.terminal.resize(r.cols as usize, r.rows as usize);
                     let _ = s.pty_resize_tx.send((r.cols, r.rows)).await;
                 }
-                Ok(ClientMsg::ScrollbackRequest(req)) => {
-                    let s = session.lock().await;
-                    if let Some(msg) = s.get_scrollback(req.offset, req.count)
-                        && let Some(tx) = &s.client_tx
-                    {
-                        let _ = tx.try_send(msg);
-                    }
-                }
+
                 Ok(_) => {}
                 Err(e) => debug!("decode error: {}", e),
             },

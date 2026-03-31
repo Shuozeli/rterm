@@ -81,7 +81,9 @@ pub fn snapshot(buffer: &ScreenBuffer) -> ScreenSnapshotData {
         cols: cols as u16,
         num_rows: rows as u16,
         title: None,
-        scrollback_len: buffer.scrollback_len() as u32,
+        mouse_tracking_mode: 0,
+        alt_screen_active: false,
+        application_cursor_keys: false,
     }
 }
 
@@ -210,7 +212,9 @@ impl PrevScreen {
             cols: cols as u16,
             rows: rows as u16,
             title: None,
-            scrollback_len: 0, // Set by caller after diff.
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         })
     }
 }

@@ -22,6 +22,14 @@ table Resize {
     rows: uint16;
 }
 
+enum MouseEventKind : uint8 {
+    Press = 0,
+    Release = 1,
+    Drag = 2,
+    ScrollUp = 3,
+    ScrollDown = 4,
+}
+
 /// Mouse event.
 table MouseEvent {
     row: uint16;
@@ -31,19 +39,7 @@ table MouseEvent {
     kind: MouseEventKind;
 }
 
-enum MouseEventKind : uint8 {
-    Press = 0,
-    Release = 1,
-    Drag = 2,
-    ScrollUp = 3,
-    ScrollDown = 4,
-}
 
-/// Request scrollback lines from the server.
-table ScrollbackRequest {
-    offset: uint32;
-    count: uint32;
-}
 
 /// Create a new named session.
 table CreateSession {
@@ -79,7 +75,6 @@ union ClientBody {
     PasteInput,
     Resize,
     MouseEvent,
-    ScrollbackRequest,
     CreateSession,
     AttachSession,
     DetachSession,
@@ -127,7 +122,9 @@ table ScreenUpdate {
     cols: uint16;
     rows: uint16;
     title: string;
-    scrollback_len: uint32;
+    mouse_tracking_mode: uint8;
+    alt_screen_active: bool;
+    application_cursor_keys: bool;
 }
 
 /// Full screen snapshot (sent on connect or resize).
@@ -137,15 +134,12 @@ table ScreenSnapshot {
     cols: uint16;
     num_rows: uint16;
     title: string;
-    scrollback_len: uint32;
+    mouse_tracking_mode: uint8;
+    alt_screen_active: bool;
+    application_cursor_keys: bool;
 }
 
-/// Scrollback data.
-table ScrollbackData {
-    lines: [CellRange];
-    offset: uint32;
-    total: uint32;
-}
+
 
 /// Shell exited.
 table Exit {
@@ -205,7 +199,6 @@ table SessionList {
 union ServerBody {
     ScreenUpdate,
     ScreenSnapshot,
-    ScrollbackData,
     Exit,
     Error,
     Bell,

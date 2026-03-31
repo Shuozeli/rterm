@@ -13,6 +13,10 @@ pub struct TerminalModes {
     pub insert: bool,
     /// Origin mode (DECOM): cursor addressing relative to scroll region.
     pub origin: bool,
+    /// Mouse tracking mode: 0=Off, 1=Normal (1000), 2=ButtonEvent (1002), 3=AnyEvent (1003)
+    pub mouse_tracking_mode: u8,
+    /// SGR Mouse mode (1006): use `<button;x;yM` format instead of legacy 223 max.
+    pub mouse_sgr_mode: bool,
 }
 
 impl Default for TerminalModes {
@@ -22,6 +26,8 @@ impl Default for TerminalModes {
             application_cursor_keys: false,
             insert: false,
             origin: false,
+            mouse_tracking_mode: 0,
+            mouse_sgr_mode: false,
         }
     }
 }
@@ -74,6 +80,11 @@ impl Terminal {
         } else {
             &self.primary
         }
+    }
+
+    /// Whether the terminal is currently showing the alternate screen.
+    pub fn is_alt_screen_active(&self) -> bool {
+        self.alt_active
     }
 
     /// Get a mutable reference to the active screen buffer.
@@ -227,6 +238,28 @@ impl Terminal {
                 6 => self.modes.origin = set,                  // DECOM
                 7 => self.modes.autowrap = set,                // DECAWM
                 25 => self.screen_mut().cursor.visible = set,  // DECTCEM
+                1000 => {
+                    if set {
+                        self.modes.mouse_tracking_mode = 1;
+                    } else if self.modes.mouse_tracking_mode == 1 {
+                        self.modes.mouse_tracking_mode = 0;
+                    }
+                }
+                1002 => {
+                    if set {
+                        self.modes.mouse_tracking_mode = 2;
+                    } else if self.modes.mouse_tracking_mode == 2 {
+                        self.modes.mouse_tracking_mode = 0;
+                    }
+                }
+                1003 => {
+                    if set {
+                        self.modes.mouse_tracking_mode = 3;
+                    } else if self.modes.mouse_tracking_mode == 3 {
+                        self.modes.mouse_tracking_mode = 0;
+                    }
+                }
+                1006 => self.modes.mouse_sgr_mode = set,
                 1049 => {
                     // Alternate screen buffer with save/restore cursor.
                     if set {

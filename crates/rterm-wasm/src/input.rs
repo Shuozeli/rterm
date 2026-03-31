@@ -2,7 +2,9 @@
 use eframe::egui;
 
 /// Encode an egui key press into a VT escape sequence.
-pub fn encode_vt_key(key: egui::Key, modifiers: &egui::Modifiers) -> Option<Vec<u8>> {
+/// When `app_cursor_keys` is true (DECCKM mode), arrow/Home/End use SS3 (`\x1bO`)
+/// instead of CSI (`\x1b[`).
+pub fn encode_vt_key(key: egui::Key, modifiers: &egui::Modifiers, app_cursor_keys: bool) -> Option<Vec<u8>> {
     if modifiers.ctrl {
         let ctrl_byte = match key {
             egui::Key::A => 1,
@@ -35,18 +37,21 @@ pub fn encode_vt_key(key: egui::Key, modifiers: &egui::Modifiers) -> Option<Vec<
         };
         return Some(vec![ctrl_byte]);
     }
+
+    // Application cursor keys: arrow keys use SS3 prefix.
+    let arrow_prefix: &[u8] = if app_cursor_keys { b"\x1bO" } else { b"\x1b[" };
     match key {
         egui::Key::Enter => Some(b"\r".to_vec()),
         egui::Key::Backspace => Some(vec![0x7f]),
         egui::Key::Tab => Some(b"\t".to_vec()),
         egui::Key::Escape => Some(vec![0x1b]),
         egui::Key::Delete => Some(b"\x1b[3~".to_vec()),
-        egui::Key::ArrowUp => Some(b"\x1b[A".to_vec()),
-        egui::Key::ArrowDown => Some(b"\x1b[B".to_vec()),
-        egui::Key::ArrowRight => Some(b"\x1b[C".to_vec()),
-        egui::Key::ArrowLeft => Some(b"\x1b[D".to_vec()),
-        egui::Key::Home => Some(b"\x1b[H".to_vec()),
-        egui::Key::End => Some(b"\x1b[F".to_vec()),
+        egui::Key::ArrowUp => Some([arrow_prefix, b"A"].concat()),
+        egui::Key::ArrowDown => Some([arrow_prefix, b"B"].concat()),
+        egui::Key::ArrowRight => Some([arrow_prefix, b"C"].concat()),
+        egui::Key::ArrowLeft => Some([arrow_prefix, b"D"].concat()),
+        egui::Key::Home => Some([arrow_prefix, b"H"].concat()),
+        egui::Key::End => Some([arrow_prefix, b"F"].concat()),
         egui::Key::PageUp => Some(b"\x1b[5~".to_vec()),
         egui::Key::PageDown => Some(b"\x1b[6~".to_vec()),
         _ => None,

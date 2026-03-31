@@ -1,6 +1,5 @@
 use crate::cell::{Cell, CellAttributes};
 use crate::color::Color;
-use std::collections::VecDeque;
 
 /// Cursor position and state.
 #[derive(Debug, Clone)]
@@ -40,10 +39,7 @@ pub struct ScreenBuffer {
     rows: usize,
     /// The active viewport grid: rows x cols.
     grid: Vec<Vec<Cell>>,
-    /// Scrollback buffer (lines that scrolled off the top).
-    scrollback: VecDeque<Vec<Cell>>,
-    /// Maximum scrollback lines.
-    max_scrollback: usize,
+
     /// Cursor position and visibility.
     pub cursor: Cursor,
     /// The current pen style for new characters.
@@ -63,8 +59,7 @@ impl ScreenBuffer {
             cols,
             rows,
             grid,
-            scrollback: VecDeque::new(),
-            max_scrollback: 10_000,
+
             cursor: Cursor::default(),
             pen: Pen::default(),
             scroll_top: 0,
@@ -88,19 +83,6 @@ impl ScreenBuffer {
                 self.grid.push(vec![Cell::default(); new_cols]);
             }
         } else if new_rows < self.rows {
-            // Push excess rows to scrollback before removing.
-            let excess = self.rows - new_rows;
-            for i in 0..excess {
-                if i < self.grid.len() {
-                    // Only push non-empty rows to scrollback.
-                    let is_empty = self.grid[0].iter().all(|c| c.ch == ' ');
-                    if !is_empty {
-                        self.scrollback.push_back(self.grid.remove(0));
-                    } else {
-                        self.grid.remove(0);
-                    }
-                }
-            }
             self.grid.truncate(new_rows);
         }
 
@@ -114,8 +96,6 @@ impl ScreenBuffer {
         // Reset scroll region to full screen.
         self.scroll_top = 0;
         self.scroll_bottom = new_rows - 1;
-
-        self.trim_scrollback();
     }
 
     pub fn cols(&self) -> usize {
@@ -124,54 +104,6 @@ impl ScreenBuffer {
 
     pub fn rows(&self) -> usize {
         self.rows
-    }
-
-    /// Set the maximum scrollback line count.
-    pub fn set_max_scrollback(&mut self, max: usize) {
-        self.max_scrollback = max;
-        self.trim_scrollback();
-    }
-
-    pub fn scrollback_len(&self) -> usize {
-        self.scrollback.len()
-    }
-
-    /// Get a cell from the scrollback buffer.
-    /// `line` is 0-indexed from the top of scrollback (oldest line).
-    pub fn scrollback_cell(&self, line: usize, col: usize) -> &Cell {
-        if line < self.scrollback.len() && col < self.scrollback[line].len() {
-            &self.scrollback[line][col]
-        } else {
-            // Return a default cell for out-of-bounds.
-            // Using a static default since we return a reference.
-            static DEFAULT: Cell = Cell {
-                ch: ' ',
-                fg: Color::Default,
-                bg: Color::Default,
-                attrs: CellAttributes::NORMAL,
-                wide_continuation: false,
-            };
-            &DEFAULT
-        }
-    }
-
-    /// Get the width of a scrollback line.
-    pub fn scrollback_cols(&self, line: usize) -> usize {
-        if line < self.scrollback.len() {
-            self.scrollback[line].len()
-        } else {
-            0
-        }
-    }
-
-    /// Get text content of a scrollback line.
-    pub fn scrollback_text(&self, line: usize) -> String {
-        if line < self.scrollback.len() {
-            let text: String = self.scrollback[line].iter().map(|c| c.ch).collect();
-            text.trim_end().to_string()
-        } else {
-            String::new()
-        }
     }
 
     /// Get a reference to a cell at (row, col).
@@ -311,20 +243,10 @@ impl ScreenBuffer {
     }
 
     /// Scroll the scroll region up by `n` lines.
-    /// Top lines are pushed to scrollback, bottom lines become blank.
     pub fn scroll_up(&mut self, n: usize) {
         let top = self.scroll_top;
         let bottom = self.scroll_bottom;
         let n = n.min(bottom - top + 1);
-
-        for i in 0..n {
-            // Push the line going off the top to scrollback (only if scroll region is full screen).
-            if top == 0 {
-                let line = self.grid[top + i].clone();
-                self.scrollback.push_back(line);
-            }
-        }
-        self.trim_scrollback();
 
         // Shift lines up within the scroll region.
         for row in top..=bottom {
@@ -350,12 +272,6 @@ impl ScreenBuffer {
             } else {
                 self.grid[row] = vec![Cell::default(); self.cols];
             }
-        }
-    }
-
-    fn trim_scrollback(&mut self) {
-        while self.scrollback.len() > self.max_scrollback {
-            self.scrollback.pop_front();
         }
     }
 
@@ -640,7 +556,6 @@ mod tests {
         assert_eq!(buf.row_text(0), "B");
         assert_eq!(buf.row_text(1), "C");
         assert_eq!(buf.row_text(2), ""); // blank
-        assert_eq!(buf.scrollback_len(), 1);
     }
 
     #[test]
@@ -760,21 +675,6 @@ mod tests {
     }
 
     #[test]
-    fn scrollback_accumulates() {
-        let mut buf = ScreenBuffer::new(5, 2);
-        buf.set_max_scrollback(3);
-        // Write lines and scroll them off. Cursor starts at row 0.
-        for i in 0..5 {
-            buf.write_char((b'A' + i) as char);
-            buf.carriage_return();
-            buf.line_feed(); // moves down, scrolls when at bottom
-        }
-        // 2-row buffer, 5 line feeds: first LF goes to row 1.
-        // LFs 2-5 scroll up (4 scrolls), but only 3 kept due to max_scrollback.
-        assert_eq!(buf.scrollback_len(), 3);
-    }
-
-    #[test]
     fn reset_clears_everything() {
         let mut buf = ScreenBuffer::new(10, 5);
         buf.write_char('X');
@@ -812,64 +712,6 @@ mod tests {
         assert_eq!(buf.cell(1, 0).ch, ' '); // blank (scrolled in)
         assert_eq!(buf.cell(2, 0).ch, 'B'); // was row 1
         assert_eq!(buf.cell(3, 0).ch, 'C'); // was row 2, D fell off
-    }
-
-    #[test]
-    fn scrollback_cell_valid() {
-        let mut buf = ScreenBuffer::new(5, 2);
-        buf.set_max_scrollback(10);
-        for ch in "Hello".chars() {
-            buf.write_char(ch);
-        }
-        buf.carriage_return();
-        buf.line_feed();
-        for ch in "World".chars() {
-            buf.write_char(ch);
-        }
-        buf.carriage_return();
-        buf.line_feed(); // scrolls "Hello" into scrollback
-        assert_eq!(buf.scrollback_len(), 1);
-        assert_eq!(buf.scrollback_cell(0, 0).ch, 'H');
-        assert_eq!(buf.scrollback_cell(0, 4).ch, 'o');
-    }
-
-    #[test]
-    fn scrollback_cell_out_of_bounds() {
-        let buf = ScreenBuffer::new(5, 2);
-        let cell = buf.scrollback_cell(99, 99);
-        assert_eq!(cell.ch, ' '); // default
-    }
-
-    #[test]
-    fn scrollback_cols_valid() {
-        let mut buf = ScreenBuffer::new(10, 2);
-        buf.write_char('A');
-        buf.line_feed();
-        buf.line_feed(); // scroll
-        assert_eq!(buf.scrollback_cols(0), 10);
-    }
-
-    #[test]
-    fn scrollback_cols_out_of_bounds() {
-        let buf = ScreenBuffer::new(10, 2);
-        assert_eq!(buf.scrollback_cols(99), 0);
-    }
-
-    #[test]
-    fn scrollback_text_valid() {
-        let mut buf = ScreenBuffer::new(10, 2);
-        for ch in "Hello".chars() {
-            buf.write_char(ch);
-        }
-        buf.line_feed();
-        buf.line_feed(); // scroll
-        assert_eq!(buf.scrollback_text(0), "Hello");
-    }
-
-    #[test]
-    fn scrollback_text_out_of_bounds() {
-        let buf = ScreenBuffer::new(10, 2);
-        assert_eq!(buf.scrollback_text(99), "");
     }
 
     #[test]
@@ -927,26 +769,6 @@ mod tests {
         buf.resize(40, 10);
         assert!(buf.cursor.row < 10);
         assert!(buf.cursor.col < 40);
-    }
-
-    #[test]
-    fn scroll_up_with_scrollback() {
-        let mut buf = ScreenBuffer::new(5, 3);
-        buf.set_max_scrollback(5);
-        for ch in "Line0".chars() {
-            buf.write_char(ch);
-        }
-        buf.set_cursor_pos(2, 1);
-        for ch in "Line1".chars() {
-            buf.write_char(ch);
-        }
-        buf.set_cursor_pos(3, 1);
-        for ch in "Line2".chars() {
-            buf.write_char(ch);
-        }
-        buf.scroll_up(1);
-        assert_eq!(buf.scrollback_len(), 1);
-        assert_eq!(buf.scrollback_text(0), "Line0");
     }
 
     #[test]

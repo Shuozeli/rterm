@@ -107,14 +107,6 @@ pub struct GridResult {
     pub fit_rows: usize,
 }
 
-/// Scroll state for the terminal grid.
-#[derive(Debug, Clone, Default)]
-pub struct ScrollState {
-    /// How many lines scrolled back from the bottom.
-    /// 0 = at bottom (showing live terminal), >0 = viewing scrollback.
-    pub offset: usize,
-}
-
 /// Paint a terminal ScreenBuffer into an egui Ui.
 /// Fills the available space and returns the fitted dimensions.
 pub fn terminal_grid(
@@ -122,7 +114,6 @@ pub fn terminal_grid(
     buffer: &ScreenBuffer,
     config: &TerminalGridConfig,
     selection: &Selection,
-    scroll: &mut ScrollState,
 ) -> GridResult {
     let font_id = FontId::new(config.font_size, FontFamily::Monospace);
     let cell_size = measure_cell_size(ui, &font_id);
@@ -145,51 +136,11 @@ pub fn terminal_grid(
     // Clip to grid bounds — prevents character overflow.
     let grid_clip = Rect::from_min_size(origin, grid_size);
 
-    // Handle mouse wheel scrolling.
-    let scroll_delta = ui.input(|i| {
-        i.events
-            .iter()
-            .filter_map(|e| {
-                if let egui::Event::MouseWheel { delta, .. } = e {
-                    Some(delta.y)
-                } else {
-                    None
-                }
-            })
-            .sum::<f32>()
-    });
-    if scroll_delta != 0.0 && response.hovered() {
-        let scroll_lines = (scroll_delta / 3.0).round() as isize;
-        let max_scroll = buffer.scrollback_len();
-        let new_offset = (scroll.offset as isize - scroll_lines)
-            .max(0)
-            .min(max_scroll as isize) as usize;
-        scroll.offset = new_offset;
-    }
-
-    // When new output arrives (scrollback grows), auto-scroll to bottom.
-    // Only if we're already at the bottom.
-    // (The caller should reset scroll.offset = 0 when new data arrives and offset == 0.)
-
-    let scrollback_len = buffer.scrollback_len();
-    let scroll_offset = scroll.offset.min(scrollback_len);
-
-    // Paint row by row. When scroll_offset > 0, show scrollback lines at top.
-    let sb_visible = scroll_offset.min(rows);
-
     for view_row in 0..rows {
         let y = origin.y + view_row as f32 * cell_size.y;
 
         for col in 0..cols {
-            let cell = if view_row < sb_visible {
-                // Scrollback line.
-                let sb_line = scrollback_len - scroll_offset + view_row;
-                buffer.scrollback_cell(sb_line, col)
-            } else {
-                // Screen line.
-                let screen_row = view_row - sb_visible;
-                buffer.cell(screen_row, col)
-            };
+            let cell = buffer.cell(view_row, col);
             let (fg, bg) = resolve_colors(cell.fg, cell.bg, cell.attrs.reverse, config);
             let fg = apply_dim_hidden(fg, bg, &cell.attrs);
 
@@ -245,12 +196,8 @@ pub fn terminal_grid(
         }
     }
 
-    // Paint cursor — only when not scrolled up (viewing live terminal).
-    if scroll_offset == 0
-        && buffer.cursor.visible
-        && buffer.cursor.row < rows
-        && buffer.cursor.col < cols
-    {
+    // Paint cursor
+    if buffer.cursor.visible && buffer.cursor.row < rows && buffer.cursor.col < cols {
         let cursor_rect = Rect::from_min_size(
             Pos2::new(
                 origin.x + buffer.cursor.col as f32 * cell_size.x,
@@ -262,18 +209,6 @@ pub fn terminal_grid(
             cursor_rect,
             0.0,
             Color32::from_rgba_premultiplied(200, 200, 200, 160),
-        );
-    }
-
-    // Show scroll indicator when scrolled up.
-    if scroll_offset > 0 {
-        let indicator = format!("↑ {} lines", scroll_offset);
-        painter.text(
-            Pos2::new(origin.x + grid_size.x - 120.0, origin.y + 2.0),
-            egui::Align2::LEFT_TOP,
-            indicator,
-            font_id.clone(),
-            Color32::from_rgb(255, 200, 0),
         );
     }
 

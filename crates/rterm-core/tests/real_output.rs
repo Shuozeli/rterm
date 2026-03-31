@@ -552,5 +552,5 @@ fn full_screen_of_text() {
         }
     }
     // Should have scrolled. No panic.
-    assert!(t.screen().scrollback_len() > 0 || t.screen().cursor.row == 23);
+    assert_eq!(t.screen().cursor.row, 23);
 }

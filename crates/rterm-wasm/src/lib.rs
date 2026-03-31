@@ -7,7 +7,6 @@ mod input;
 mod messages;
 mod protocol;
 mod render;
-mod scroll;
 mod selection;
 mod session;
 mod transport;

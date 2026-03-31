@@ -3,7 +3,7 @@
 /// Shared logic between WebTransport and gRPC handlers:
 /// read Resize, spawn PTY, forward input, run VT emulator, send screen diffs.
 use crate::pty::PtySpawner;
-use crate::screen_diff::{self, PrevScreen, pack_attrs, pack_color};
+use crate::screen_diff::{self, PrevScreen};
 use rterm_core::Terminal;
 use rterm_proto::*;
 use tokio::sync::mpsc;
@@ -84,9 +84,6 @@ pub async fn run_session(
         .await
         .map_err(|e| SessionError::SendFailed(e.to_string()))?;
 
-    // Scrollback request channel.
-    let (scrollback_tx, mut scrollback_rx) = mpsc::channel::<ScrollbackRequest>(8);
-
     // 4. Forward client input to PTY in a background task.
     {
         let (relay_tx, relay_rx) = mpsc::channel(64);
@@ -100,14 +97,9 @@ pub async fn run_session(
                         }
                     }
                     ClientMsg::PasteInput(p) => {
-                        // Wrap in bracketed paste markers if the shell requested it.
-                        // Note: we can't easily read terminal.bracketed_paste here
-                        // since it's in the main loop. For safety, always bracket.
-                        let mut data = Vec::new();
-                        data.extend_from_slice(b"\x1b[200~");
-                        data.extend_from_slice(p.text.as_bytes());
-                        data.extend_from_slice(b"\x1b[201~");
-                        if stdin_tx.send(data).await.is_err() {
+                        // Send raw text — the managed session path handles
+                        // conditional bracketed paste wrapping.
+                        if stdin_tx.send(p.text.into_bytes()).await.is_err() {
                             break;
                         }
                     }
@@ -124,10 +116,6 @@ pub async fn run_session(
                     | ClientMsg::DetachSession
                     | ClientMsg::DestroySession(_)
                     | ClientMsg::ListSessions(_) => {}
-                    ClientMsg::ScrollbackRequest(s) => {
-                        // Forward scrollback requests via a dedicated channel.
-                        let _ = scrollback_tx.send(s).await;
-                    }
                 }
             }
             debug!("session: client input forwarding ended");
@@ -150,42 +138,7 @@ pub async fn run_session(
                     break;
                 }
             }
-            req = scrollback_rx.recv() => {
-                let Some(req) = req else { continue; };
-                let screen = terminal.screen();
-                let sb_len = screen.scrollback_len();
-                let offset = req.offset as usize;
-                let count = req.count as usize;
 
-                let mut lines = Vec::new();
-                let start = sb_len.saturating_sub(offset + count);
-                let end = sb_len.saturating_sub(offset);
-                for i in start..end {
-                    let cols = screen.scrollback_cols(i);
-                    let cells: Vec<CellData> = (0..cols)
-                        .map(|col| {
-                            let cell = screen.scrollback_cell(i, col);
-                            CellData {
-                                ch: cell.ch,
-                                fg: pack_color(&cell.fg),
-                                bg: pack_color(&cell.bg),
-                                attrs: pack_attrs(&cell.attrs),
-                            }
-                        })
-                        .collect();
-                    lines.push(CellRangeData {
-                        row: (i - start) as u16,
-                        col_start: 0,
-                        cells,
-                    });
-                }
-
-                let _ = server_tx.send(ServerMsg::ScrollbackData(ScrollbackDataMsg {
-                    lines,
-                    offset: req.offset,
-                    total: sb_len as u32,
-                })).await;
-            }
         }
     }
 

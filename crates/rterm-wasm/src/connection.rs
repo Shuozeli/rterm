@@ -135,9 +135,7 @@ async fn try_connect(
                         Ok(ServerMsg::ScreenUpdate(sd)) => {
                             s.grid.apply_update(&sd);
                         }
-                        Ok(ServerMsg::ScrollbackData(sd)) => {
-                            s.grid.apply_scrollback(&sd.lines, sd.offset, sd.total);
-                        }
+
                         Ok(ServerMsg::Exit(_)) => {
                             s.connected = false;
                             ctx.request_repaint();

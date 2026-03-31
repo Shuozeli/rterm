@@ -16,15 +16,12 @@ pub struct DisplayGrid {
     pub cursor_col: u16,
     pub cursor_visible: bool,
     pub cursor_style: u8,
-    /// Scrollback lines received from server (most recent first).
-    pub scrollback: Vec<Vec<CellData>>,
-    /// How many lines scrolled back (0 = live view).
-    pub scroll_offset: usize,
-    /// Total scrollback lines available on server.
-    pub scrollback_total: u32,
-    /// Selection state.
+
     pub selection_start: Option<(usize, usize)>,
     pub selection_end: Option<(usize, usize)>,
+    pub mouse_tracking_mode: u8,
+    pub alt_screen_active: bool,
+    pub application_cursor_keys: bool,
 }
 
 impl DisplayGrid {
@@ -34,11 +31,12 @@ impl DisplayGrid {
             cells: vec![vec![default_cell; cols]; rows],
             cols, rows,
             cursor_row: 0, cursor_col: 0, cursor_visible: true, cursor_style: 0,
-            scrollback: Vec::new(),
-            scroll_offset: 0,
-            scrollback_total: 0,
+
             selection_start: None,
             selection_end: None,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         }
     }
 
@@ -64,7 +62,10 @@ impl DisplayGrid {
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
         self.cursor_style = data.cursor_style;
-        self.scrollback_total = data.scrollback_len;
+
+        self.mouse_tracking_mode = data.mouse_tracking_mode;
+        self.alt_screen_active = data.alt_screen_active;
+        self.application_cursor_keys = data.application_cursor_keys;
     }
 
     /// Apply a ScreenUpdate (diff — only changed cells).
@@ -80,6 +81,9 @@ impl DisplayGrid {
             }
         }
 
+
+
+        // Apply cell changes.
         for cr in &data.changes {
             let row = cr.row as usize;
             for (i, cell) in cr.cells.iter().enumerate() {
@@ -93,10 +97,9 @@ impl DisplayGrid {
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
         self.cursor_style = data.cursor_style;
-        // Update scrollback count from server.
-        if data.scrollback_len > 0 {
-            self.scrollback_total = data.scrollback_len;
-        }
+        self.mouse_tracking_mode = data.mouse_tracking_mode;
+        self.alt_screen_active = data.alt_screen_active;
+        self.application_cursor_keys = data.application_cursor_keys;
     }
 
     /// Get the cell that should be visible at (row, col) accounting for scroll offset.
@@ -109,39 +112,10 @@ impl DisplayGrid {
             attrs: 0,
         };
 
-        if self.scroll_offset == 0 {
-            // Live view.
-            if row < self.cells.len() && col < self.cols {
-                return &self.cells[row][col];
-            }
-            return &DEFAULT;
-        }
-
-        let sb_count = self.scrollback.len();
-        if sb_count == 0 {
-            return &DEFAULT;
-        }
-
-        // Scrolled back: show a window into scrollback + live screen.
-        // scroll_offset = how many lines back from bottom.
-        // View row 0 = scrollback[sb_count - scroll_offset]
-        let sb_start = sb_count.saturating_sub(self.scroll_offset);
-        let sb_idx = sb_start + row;
-
-        if sb_idx < sb_count {
-            // This row is in scrollback.
-            self.scrollback
-                .get(sb_idx)
-                .and_then(|line| line.get(col))
-                .unwrap_or(&DEFAULT)
+        if row < self.cells.len() && col < self.cols {
+            &self.cells[row][col]
         } else {
-            // Past scrollback — show live screen.
-            let screen_row = sb_idx - sb_count;
-            if screen_row < self.cells.len() && col < self.cols {
-                &self.cells[screen_row][col]
-            } else {
-                &DEFAULT
-            }
+            &DEFAULT
         }
     }
 
@@ -154,14 +128,7 @@ impl DisplayGrid {
             .to_string()
     }
 
-    /// Apply scrollback data from server.
-    pub fn apply_scrollback(&mut self, lines: &[super::messages::CellRange], offset: u32, total: u32) {
-        self.scrollback_total = total;
-        self.scrollback.clear();
-        for line in lines {
-            self.scrollback.push(line.cells.clone());
-        }
-    }
+
 
     /// Check if a cell is selected.
     pub fn is_selected(&self, row: usize, col: usize) -> bool {
@@ -371,29 +338,7 @@ pub fn paint_grid(
         }
     }
 
-    // Scroll indicator (zellij style: SCROLL: position/total).
-    if grid.scroll_offset > 0 {
-        let text = format!(" SCROLL: {}/{} ", grid.scroll_offset, grid.scrollback_total);
-        let text_width = text.len() as f32 * cell_size.x * 0.6;
-        let indicator_x = origin.x + grid_size.x - text_width - 4.0;
-        let indicator_y = origin.y + 2.0;
-        // Background for readability.
-        painter.rect_filled(
-            Rect::from_min_size(
-                Pos2::new(indicator_x - 2.0, indicator_y),
-                Vec2::new(text_width + 4.0, cell_size.y),
-            ),
-            2.0,
-            Color32::from_rgba_premultiplied(40, 40, 40, 220),
-        );
-        painter.text(
-            Pos2::new(indicator_x, indicator_y),
-            egui::Align2::LEFT_TOP,
-            text,
-            font_id.clone(),
-            Color32::from_rgb(255, 200, 0),
-        );
-    }
+
 
     (response, cell_size, fit_cols, fit_rows)
 }
@@ -483,7 +428,9 @@ mod tests {
             cursor_style: 0,
             cols,
             rows,
-            scrollback_len: 0,
+            mouse_tracking_mode: 0,
+            alt_screen_active: false,
+            application_cursor_keys: false,
         }
     }
 
@@ -492,146 +439,10 @@ mod tests {
         let mut grid = DisplayGrid::new(10, 3);
         let data = make_screen_data(&["Hello", "World", "Test"], 10, 3);
         grid.apply_snapshot(&data);
-
-        assert_eq!(grid.scroll_offset, 0);
         assert_eq!(grid.visible_row_text(0), "Hello");
         assert_eq!(grid.visible_row_text(1), "World");
         assert_eq!(grid.visible_row_text(2), "Test");
     }
 
-    #[test]
-    fn scrollback_shows_old_lines() {
-        let mut grid = DisplayGrid::new(10, 3);
-        let data = make_screen_data(&["visible1", "visible2", "visible3"], 10, 3);
-        grid.apply_snapshot(&data);
 
-        // Simulate scrollback: 5 old lines received.
-        grid.scrollback = vec![
-            make_line("old1", 10),
-            make_line("old2", 10),
-            make_line("old3", 10),
-            make_line("old4", 10),
-            make_line("old5", 10),
-        ];
-        grid.scrollback_total = 5;
-
-        // Scroll up 3 lines (show 3 rows of scrollback).
-        grid.scroll_offset = 3;
-        // sb_start = 5 - 3 = 2
-        // row 0 = scrollback[2] = "old3"
-        // row 1 = scrollback[3] = "old4"
-        // row 2 = scrollback[4] = "old5"
-        assert_eq!(grid.visible_row_text(0), "old3");
-        assert_eq!(grid.visible_row_text(1), "old4");
-        assert_eq!(grid.visible_row_text(2), "old5");
-    }
-
-    #[test]
-    fn scroll_to_top() {
-        let mut grid = DisplayGrid::new(10, 3);
-        let data = make_screen_data(&["vis1", "vis2", "vis3"], 10, 3);
-        grid.apply_snapshot(&data);
-
-        grid.scrollback = vec![
-            make_line("old1", 10),
-            make_line("old2", 10),
-            make_line("old3", 10),
-            make_line("old4", 10),
-            make_line("old5", 10),
-        ];
-        grid.scrollback_total = 5;
-
-        // Scroll all the way up.
-        grid.scroll_offset = 5;
-        // sb_start = 5 - 5 = 0
-        // row 0 = scrollback[0] = "old1"
-        // row 1 = scrollback[1] = "old2"
-        // row 2 = scrollback[2] = "old3"
-        assert_eq!(grid.visible_row_text(0), "old1");
-        assert_eq!(grid.visible_row_text(1), "old2");
-        assert_eq!(grid.visible_row_text(2), "old3");
-    }
-
-    #[test]
-    fn scroll_partial_shows_mix() {
-        let mut grid = DisplayGrid::new(10, 4);
-        let data = make_screen_data(&["scr1", "scr2", "scr3", "scr4"], 10, 4);
-        grid.apply_snapshot(&data);
-
-        grid.scrollback = vec![
-            make_line("old1", 10),
-            make_line("old2", 10),
-        ];
-        grid.scrollback_total = 2;
-
-        // Scroll up 1 line.
-        grid.scroll_offset = 1;
-        // sb_start = 2 - 1 = 1
-        // row 0 = scrollback[1] = "old2"
-        // row 1 = past scrollback -> screen_row 0 = "scr1"
-        // row 2 = screen_row 1 = "scr2"
-        // row 3 = screen_row 2 = "scr3"
-        assert_eq!(grid.visible_row_text(0), "old2");
-        assert_eq!(grid.visible_row_text(1), "scr1");
-        assert_eq!(grid.visible_row_text(2), "scr2");
-        assert_eq!(grid.visible_row_text(3), "scr3");
-    }
-
-    #[test]
-    fn scroll_offset_zero_shows_live() {
-        let mut grid = DisplayGrid::new(10, 2);
-        let data = make_screen_data(&["live1", "live2"], 10, 2);
-        grid.apply_snapshot(&data);
-
-        grid.scrollback = vec![make_line("old", 10)];
-        grid.scroll_offset = 0; // Not scrolled.
-
-        assert_eq!(grid.visible_row_text(0), "live1");
-        assert_eq!(grid.visible_row_text(1), "live2");
-    }
-
-    #[test]
-    fn scroll_with_no_scrollback_data() {
-        let mut grid = DisplayGrid::new(10, 2);
-        let data = make_screen_data(&["live1", "live2"], 10, 2);
-        grid.apply_snapshot(&data);
-
-        grid.scroll_offset = 5; // Scrolled but no data yet.
-        // Should show blanks.
-        assert_eq!(grid.visible_row_text(0), "");
-        assert_eq!(grid.visible_row_text(1), "");
-    }
-
-    #[test]
-    fn scroll_large_offset_with_many_lines() {
-        let mut grid = DisplayGrid::new(20, 3);
-
-        // Simulate 100 scrollback lines.
-        let mut scrollback = Vec::new();
-        for i in 1..=100 {
-            scrollback.push(make_line(&format!("line{}", i), 20));
-        }
-        grid.scrollback = scrollback;
-        grid.scrollback_total = 100;
-
-        // Scroll to the very top.
-        grid.scroll_offset = 100;
-        assert_eq!(grid.visible_row_text(0), "line1");
-        assert_eq!(grid.visible_row_text(1), "line2");
-        assert_eq!(grid.visible_row_text(2), "line3");
-
-        // Scroll to middle.
-        grid.scroll_offset = 50;
-        // sb_start = 100 - 50 = 50
-        assert_eq!(grid.visible_row_text(0), "line51");
-        assert_eq!(grid.visible_row_text(1), "line52");
-        assert_eq!(grid.visible_row_text(2), "line53");
-
-        // Scroll near bottom.
-        grid.scroll_offset = 3;
-        // sb_start = 100 - 3 = 97
-        assert_eq!(grid.visible_row_text(0), "line98");
-        assert_eq!(grid.visible_row_text(1), "line99");
-        assert_eq!(grid.visible_row_text(2), "line100");
-    }
 }

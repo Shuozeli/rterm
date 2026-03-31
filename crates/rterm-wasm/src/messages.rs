@@ -27,13 +27,30 @@ pub fn encode_key_input(data: &[u8]) -> Vec<u8> {
     fbb.finished_data().to_vec()
 }
 
-/// Encode a ScrollbackRequest ClientMessage.
-pub fn encode_scrollback_request(offset: u32, count: u32) -> Vec<u8> {
+/// Encode a PasteInput ClientMessage.
+pub fn encode_paste_input(text: &str) -> Vec<u8> {
     let mut fbb = FlatBufferBuilder::new();
-    let sr = fbs::ScrollbackRequest::create(&mut fbb, &fbs::ScrollbackRequestArgs { offset, count });
+    let payload = fbb.create_string(text);
+    let pi = fbs::PasteInput::create(&mut fbb, &fbs::PasteInputArgs { text: Some(payload) });
     let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
-        body_type: fbs::ClientBody::ScrollbackRequest,
-        body: Some(sr.as_union_value()),
+        body_type: fbs::ClientBody::PasteInput,
+        body: Some(pi.as_union_value()),
+    });
+    fbb.finish(msg, None);
+    fbb.finished_data().to_vec()
+}
+
+
+
+/// Encode a MouseEvent ClientMessage.
+pub fn encode_mouse_event(row: u16, col: u16, button: u8, modifiers: u8, kind: u8) -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let me = fbs::MouseEvent::create(&mut fbb, &fbs::MouseEventArgs {
+        row, col, button, modifiers, kind: fbs::MouseEventKind(kind)
+    });
+    let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+        body_type: fbs::ClientBody::MouseEvent,
+        body: Some(me.as_union_value()),
     });
     fbb.finish(msg, None);
     fbb.finished_data().to_vec()
@@ -43,17 +60,12 @@ pub fn encode_scrollback_request(offset: u32, count: u32) -> Vec<u8> {
 pub enum ServerMsg {
     ScreenSnapshot(ScreenData),
     ScreenUpdate(ScreenData),
-    ScrollbackData(ScrollbackDataMsg),
     Exit(i32),
     Error(String),
     Bell,
 }
 
-pub struct ScrollbackDataMsg {
-    pub lines: Vec<CellRange>,
-    pub offset: u32,
-    pub total: u32,
-}
+
 
 pub struct ScreenData {
     pub changes: Vec<CellRange>,
@@ -63,7 +75,9 @@ pub struct ScreenData {
     pub cursor_style: u8,
     pub cols: u16,
     pub rows: u16,
-    pub scrollback_len: u32,
+    pub mouse_tracking_mode: u8,
+    pub alt_screen_active: bool,
+    pub application_cursor_keys: bool,
 }
 
 pub struct CellRange {
@@ -108,7 +122,9 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: ss.cols(),
                 rows: ss.num_rows(),
-                scrollback_len: ss.scrollback_len(),
+                mouse_tracking_mode: ss.mouse_tracking_mode(),
+                alt_screen_active: ss.alt_screen_active(),
+                application_cursor_keys: ss.application_cursor_keys(),
             }))
         }
         fbs::ServerBody::ScreenUpdate => {
@@ -121,17 +137,12 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 cursor_visible: cursor.visible(), cursor_style: cursor.style(),
                 cols: su.cols(),
                 rows: su.rows(),
-                scrollback_len: su.scrollback_len(),
+                mouse_tracking_mode: su.mouse_tracking_mode(),
+                alt_screen_active: su.alt_screen_active(),
+                application_cursor_keys: su.application_cursor_keys(),
             }))
         }
-        fbs::ServerBody::ScrollbackData => {
-            let sd = msg.body_as_scrollback_data().ok_or("missing ScrollbackData")?;
-            Ok(ServerMsg::ScrollbackData(ScrollbackDataMsg {
-                lines: decode_cell_ranges(sd.lines())?,
-                offset: sd.offset(),
-                total: sd.total(),
-            }))
-        }
+
         fbs::ServerBody::Exit => {
             let e = msg.body_as_exit().ok_or("missing Exit")?;
             Ok(ServerMsg::Exit(e.code()))

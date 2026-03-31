@@ -15,22 +15,30 @@ pub fn handle_selection(
 ) {
     let origin = response.rect.min;
 
+    let pos_to_cell = |pos: egui::Pos2| -> (usize, usize) {
+        let col = ((pos.x - origin.x) / cell_size.x).floor().max(0.0) as usize;
+        let row = ((pos.y - origin.y) / cell_size.y).floor().max(0.0) as usize;
+        (row.min(rows.saturating_sub(1)), col.min(cols.saturating_sub(1)))
+    };
+
     if response.drag_started() {
         if let Some(pos) = response.interact_pointer_pos() {
-            let col = ((pos.x - origin.x) / cell_size.x) as usize;
-            let row = ((pos.y - origin.y) / cell_size.y) as usize;
+            // Subtract the accumulated drag delta to get the original click position.
+            // egui fires drag_started() only after a small movement threshold,
+            // so the current pos has already moved past the click origin.
+            let drag_origin = pos - response.drag_delta();
+            let (row, col) = pos_to_cell(drag_origin);
             if let Ok(mut s) = shared.try_borrow_mut() {
-                s.grid.selection_start = Some((row.min(rows - 1), col.min(cols - 1)));
-                s.grid.selection_end = Some((row.min(rows - 1), col.min(cols - 1)));
+                s.grid.selection_start = Some((row, col));
+                s.grid.selection_end = Some((row, col));
             }
         }
     }
     if response.dragged() {
         if let Some(pos) = response.interact_pointer_pos() {
-            let col = ((pos.x - origin.x) / cell_size.x) as usize;
-            let row = ((pos.y - origin.y) / cell_size.y) as usize;
+            let (row, col) = pos_to_cell(pos);
             if let Ok(mut s) = shared.try_borrow_mut() {
-                s.grid.selection_end = Some((row.min(rows - 1), col.min(cols - 1)));
+                s.grid.selection_end = Some((row, col));
             }
         }
     }
@@ -47,7 +55,6 @@ pub fn handle_selection(
         if let Ok(mut s) = shared.try_borrow_mut() {
             s.grid.selection_start = None;
             s.grid.selection_end = None;
-            s.grid.scroll_offset = 0; // click snaps to bottom
         }
     }
 }

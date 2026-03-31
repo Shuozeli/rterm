@@ -1,10 +1,9 @@
 /// Terminal application: TerminalApp struct, shared state, and the eframe::App update loop.
 use crate::connection;
 use crate::input::encode_vt_key;
-use crate::messages::encode_key_input;
+use crate::messages::{encode_key_input, encode_mouse_event, encode_paste_input};
 use crate::protocol::encode_message;
 use crate::render::{paint_grid, DisplayGrid};
-use crate::scroll;
 use crate::selection;
 use eframe::egui;
 use std::cell::RefCell;
@@ -113,27 +112,38 @@ impl eframe::App for TerminalApp {
                     }
                 }
 
-                // Scroll handling.
-                scroll::handle_scroll(ui, &response, &self.shared);
+                // Read terminal modes for input handling.
+                let mouse_tracking_mode = self.shared.borrow().grid.mouse_tracking_mode;
+                let app_cursor_keys = self.shared.borrow().grid.application_cursor_keys;
 
-                // Mouse selection.
-                selection::handle_selection(
-                    &response,
-                    cell_size,
-                    cols,
-                    rows,
-                    &self.shared,
-                );
+                // Mouse: forward to PTY when tracking is on, otherwise use for selection.
+                if mouse_tracking_mode > 0 {
+                    // Forward mouse events to the PTY.
+                    self.handle_mouse_events(&response, cell_size, cols, rows, mouse_tracking_mode);
+                } else {
+                    // Local text selection.
+                    selection::handle_selection(
+                        &response,
+                        cell_size,
+                        cols,
+                        rows,
+                        &self.shared,
+                    );
+                }
 
                 // Keyboard input.
                 let events = ui.input(|i| i.events.clone());
                 for event in &events {
                     match event {
+                        egui::Event::Paste(text) => {
+                            if !text.is_empty() {
+                                self.send_key(text.as_bytes());
+                            }
+                        }
                         egui::Event::Text(text) => {
                             if let Ok(mut s) = self.shared.try_borrow_mut() {
                                 s.grid.selection_start = None;
                                 s.grid.selection_end = None;
-                                s.grid.scroll_offset = 0;
                             }
                             for ch in text.chars() {
                                 let mut buf = [0u8; 4];
@@ -147,26 +157,12 @@ impl eframe::App for TerminalApp {
                             modifiers,
                             ..
                         } => {
-                            // Ctrl+C with selection = copy, not interrupt
-                            if *key == egui::Key::C && modifiers.ctrl {
-                                if let Ok(s) = self.shared.try_borrow() {
-                                    if s.grid.selection_start.is_some() {
-                                        let text = s.grid.selected_text();
-                                        if !text.is_empty() {
-                                            selection::copy_to_clipboard(&text);
-                                        }
-                                        drop(s);
-                                        if let Ok(mut s) =
-                                            self.shared.try_borrow_mut()
-                                        {
-                                            s.grid.selection_start = None;
-                                            s.grid.selection_end = None;
-                                        }
-                                        continue;
-                                    }
-                                }
+                            if let Ok(mut s) = self.shared.try_borrow_mut() {
+                                s.grid.selection_start = None;
+                                s.grid.selection_end = None;
                             }
-                            if let Some(bytes) = encode_vt_key(*key, modifiers) {
+
+                            if let Some(bytes) = encode_vt_key(*key, modifiers, app_cursor_keys) {
                                 self.send_key(&bytes);
                             }
                         }
@@ -174,5 +170,73 @@ impl eframe::App for TerminalApp {
                     }
                 }
             });
+    }
+}
+
+impl TerminalApp {
+    /// Forward mouse events to the PTY when mouse tracking is active.
+    fn handle_mouse_events(
+        &self,
+        response: &egui::Response,
+        cell_size: egui::Vec2,
+        cols: usize,
+        rows: usize,
+        _tracking_mode: u8,
+    ) {
+        let origin = response.rect.min;
+        let pos_to_cell = |pos: egui::Pos2| -> (u16, u16) {
+            let col = ((pos.x - origin.x) / cell_size.x).floor().max(0.0) as u16;
+            let row = ((pos.y - origin.y) / cell_size.y).floor().max(0.0) as u16;
+            (row.min(rows.saturating_sub(1) as u16), col.min(cols.saturating_sub(1) as u16))
+        };
+
+        // Press (button down).
+        if response.drag_started() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let (row, col) = pos_to_cell(pos);
+                let button = 0u8; // left button
+                self.send_mouse(row, col, button, 0, 0); // kind=Press=0
+            }
+        }
+
+        // Drag (button held + move).
+        if response.dragged() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let (row, col) = pos_to_cell(pos);
+                let button = 32u8; // drag modifier
+                self.send_mouse(row, col, button, 0, 2); // kind=Drag=2
+            }
+        }
+
+        // Release.
+        if response.drag_stopped() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                let (row, col) = pos_to_cell(pos);
+                let button = 3u8; // release
+                self.send_mouse(row, col, button, 0, 1); // kind=Release=1
+            }
+        }
+
+        // Scroll.
+        let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
+        if scroll_delta != 0.0 {
+            if let Some(pos) = response.hover_pos() {
+                let (row, col) = pos_to_cell(pos);
+                if scroll_delta > 0.0 {
+                    self.send_mouse(row, col, 64, 0, 3); // ScrollUp=3
+                } else {
+                    self.send_mouse(row, col, 65, 0, 4); // ScrollDown=4
+                }
+            }
+        }
+    }
+
+    fn send_mouse(&self, row: u16, col: u16, button: u8, modifiers: u8, kind: u8) {
+        if let Ok(mut s) = self.shared.try_borrow_mut() {
+            if s.connected {
+                let msg = encode_mouse_event(row, col, button, modifiers, kind);
+                s.send_queue.push_back(encode_message(&msg));
+            }
+        }
     }
 }

@@ -101,7 +101,10 @@ impl ManagedSession {
         }
 
         // Rebuild prev_screen for fresh diffing.
-        let snapshot = screen_diff::snapshot(self.terminal.screen());
+        let mut snapshot = screen_diff::snapshot(self.terminal.screen());
+        snapshot.mouse_tracking_mode = self.terminal.modes.mouse_tracking_mode;
+        snapshot.alt_screen_active = self.terminal.is_alt_screen_active();
+        snapshot.application_cursor_keys = self.terminal.modes.application_cursor_keys;
         self.prev_screen = PrevScreen::new(self.cols as usize, self.rows as usize);
         self.prev_screen.update_from_snapshot(&snapshot);
 
@@ -135,54 +138,13 @@ impl ManagedSession {
         }
 
         if let Some(mut update) = self.prev_screen.diff(self.terminal.screen()) {
-            update.scrollback_len = self.terminal.screen().scrollback_len() as u32;
+            update.mouse_tracking_mode = self.terminal.modes.mouse_tracking_mode;
+            update.alt_screen_active = self.terminal.is_alt_screen_active();
+            update.application_cursor_keys = self.terminal.modes.application_cursor_keys;
             if let Some(tx) = &self.client_tx {
                 let _ = tx.try_send(ServerMsg::ScreenUpdate(update));
             }
         }
-    }
-
-    /// Get scrollback data for the client.
-    pub fn get_scrollback(&self, offset: u32, count: u32) -> Option<ServerMsg> {
-        use crate::screen_diff::{pack_attrs, pack_color};
-
-        let screen = self.terminal.screen();
-        let sb_len = screen.scrollback_len();
-        if sb_len == 0 {
-            return None;
-        }
-
-        let offset_usize = offset as usize;
-        let count_usize = count as usize;
-        let start = sb_len.saturating_sub(offset_usize + count_usize);
-        let end = sb_len.saturating_sub(offset_usize);
-
-        let mut lines = Vec::new();
-        for i in start..end {
-            let cols = screen.scrollback_cols(i);
-            let cells: Vec<CellData> = (0..cols)
-                .map(|col| {
-                    let cell = screen.scrollback_cell(i, col);
-                    CellData {
-                        ch: cell.ch,
-                        fg: pack_color(&cell.fg),
-                        bg: pack_color(&cell.bg),
-                        attrs: pack_attrs(&cell.attrs),
-                    }
-                })
-                .collect();
-            lines.push(CellRangeData {
-                row: (i - start) as u16,
-                col_start: 0,
-                cells,
-            });
-        }
-
-        Some(ServerMsg::ScrollbackData(ScrollbackDataMsg {
-            lines,
-            offset,
-            total: sb_len as u32,
-        }))
     }
 
     /// Check if the session has timed out (detached too long).
