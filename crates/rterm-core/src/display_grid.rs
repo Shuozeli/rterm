@@ -156,12 +156,6 @@ mod tests {
         }
     }
 
-    fn line(text: &str, cols: usize) -> Vec<DisplayCell> {
-        let mut cells: Vec<DisplayCell> = text.chars().map(|c| cell(c)).collect();
-        cells.resize(cols, DisplayCell::default());
-        cells
-    }
-
     fn screen_data(lines: &[&str], cols: u16, rows: u16, scrollback_len: u32) -> DisplayScreenData {
         DisplayScreenData {
             changes: lines
@@ -170,7 +164,7 @@ mod tests {
                 .map(|(i, text)| DisplayCellRange {
                     row: i as u16,
                     col_start: 0,
-                    cells: text.chars().map(|c| cell(c)).collect(),
+                    cells: text.chars().map(cell).collect(),
                 })
                 .collect(),
             cursor_row: 0,

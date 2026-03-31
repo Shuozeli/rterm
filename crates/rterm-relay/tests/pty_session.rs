@@ -642,7 +642,8 @@ async fn error_first_message_not_resize() {
                     break;
                 }
             }
-            assert!(got_error || true, "stream ended — server handled the error");
+            // Either we got an explicit error, or the stream ended cleanly — both are acceptable.
+            let _ = got_error;
         }
     }
 }
@@ -679,7 +680,8 @@ async fn error_invalid_shell() {
                     break;
                 }
             }
-            assert!(got_error || true, "stream ended — server handled the error");
+            // Either we got an explicit error, or the stream ended cleanly — both are acceptable.
+            let _ = got_error;
         }
     }
 }

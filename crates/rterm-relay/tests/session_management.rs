@@ -6,7 +6,7 @@
 use rterm_proto::*;
 use rterm_relay::managed_session::{ManagedSession, SessionState, session_output_loop};
 use rterm_relay::pty::fake::FakePtySpawner;
-use rterm_relay::session_manager::{SessionManager, generate_session_name};
+use rterm_relay::session_manager::SessionManager;
 use std::sync::Arc;
 use tokio::sync::{Mutex, mpsc};
 

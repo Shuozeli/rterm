@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Pre-commit hook: format, clippy, test
-set -e
+set -eo pipefail
 
 echo "=== pre-commit: cargo fmt ==="
 cargo fmt --check || {
@@ -9,16 +9,15 @@ cargo fmt --check || {
 }
 
 echo "=== pre-commit: cargo clippy ==="
-cargo clippy --workspace -- -D warnings || {
+cargo clippy --workspace --tests -- -D warnings || {
     echo "Clippy failed. Fix warnings before committing."
     exit 1
 }
 
 echo "=== pre-commit: cargo test ==="
-cargo test --workspace --lib --tests 2>&1 | tail -5
-if [ ${PIPESTATUS[0]} -ne 0 ]; then
+cargo test --workspace --lib --tests 2>&1 | tail -5 || {
     echo "Tests failed."
     exit 1
-fi
+}
 
 echo "=== pre-commit: all checks passed ==="

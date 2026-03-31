@@ -9,11 +9,13 @@ use std::process::Command;
 // Zellij driver
 // ============================================================================
 
+#[allow(dead_code)]
 struct ZellijSession {
     name: String,
     script_pid: Option<u32>,
 }
 
+#[allow(dead_code)]
 impl ZellijSession {
     fn start() -> Option<Self> {
         // Check zellij exists.
@@ -382,6 +384,7 @@ fn pty_scroll_region() {
 
 /// Run all zellij comparison tests sequentially sharing one session.
 /// This avoids spawning/killing multiple sessions (slow + flaky).
+#[allow(dead_code)]
 fn zellij_comparisons() {
     let Some(zj) = ZellijSession::start() else {
         eprintln!("SKIP: zellij not available or no TTY");
