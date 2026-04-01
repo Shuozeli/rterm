@@ -79,7 +79,7 @@ async fn serve_static_hyper(
             .status(302)
             .header("location", format!("/{}", name))
             .body(http_body_util::Full::new(bytes::Bytes::new()))
-            .unwrap());
+            .expect("valid HTTP response"));
     }
 
     // SPA fallback: session name paths (e.g., /dev, /deploy) serve index.html.
@@ -115,12 +115,12 @@ async fn serve_static_hyper(
                 .header("content-type", content_type)
                 .header("cache-control", "no-cache")
                 .body(http_body_util::Full::new(data))
-                .unwrap())
+                .expect("valid HTTP response"))
         }
         Err(_) => Ok(hyper::Response::builder()
             .status(404)
             .body(http_body_util::Full::new(bytes::Bytes::from("Not Found")))
-            .unwrap()),
+            .expect("valid HTTP response")),
     }
 }
 

@@ -1,0 +1,13 @@
+services:
+  rterm-relay:
+    build:
+      context: ../../../../
+      dockerfile: crates/rterm-relay/tests/e2e/Dockerfile
+    image: rterm-relay:test
+    container_name: rterm-relay-e2e-test
+    ports:
+      - "14433:4433/udp" # WebTransport
+      - "14434:4434/tcp" # gRPC HTTP/2
+      - "14435:4435/udp" # gRPC HTTP/3
+    volumes:
+      - ../fixtures/test_rterm.toml:/etc/rterm.toml:ro

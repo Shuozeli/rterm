@@ -15,7 +15,10 @@ pub async fn serve_file(
         Ok(data) => data,
         Err(_) => {
             debug!("404: {}", file_path.display());
-            let resp = http::Response::builder().status(404).body(()).unwrap();
+            let resp = http::Response::builder()
+                .status(404)
+                .body(())
+                .expect("valid HTTP response");
             stream.send_response(resp).await?;
             stream.send_data(Bytes::from("Not Found")).await?;
             stream.finish().await?;
@@ -30,7 +33,7 @@ pub async fn serve_file(
         .header("content-type", content_type)
         .header("cache-control", "no-cache")
         .body(())
-        .unwrap();
+        .expect("valid HTTP response");
 
     stream.send_response(resp).await?;
     stream.send_data(Bytes::from(data)).await?;

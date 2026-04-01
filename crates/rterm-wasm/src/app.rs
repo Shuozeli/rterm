@@ -75,7 +75,7 @@ impl eframe::App for TerminalApp {
                     if !s.connection_started && fit_cols >= 10 && fit_rows >= 3 {
                         s.current_cols = fit_cols;
                         s.current_rows = fit_rows;
-                        s.grid = DisplayGrid::new(fit_cols, fit_rows);
+                        s.grid.resize(fit_cols, fit_rows);
                         s.initial_size = Some((fit_cols, fit_rows));
                         s.connection_started = true;
                         drop(s);
@@ -99,10 +99,10 @@ impl eframe::App for TerminalApp {
                     && (fit_cols != cols || fit_rows != rows)
                 {
                     if let Ok(mut s) = self.shared.try_borrow_mut() {
+                        s.current_cols = fit_cols;
+                        s.current_rows = fit_rows;
+                        s.grid.resize(fit_cols, fit_rows);
                         if s.connected {
-                            s.current_cols = fit_cols;
-                            s.current_rows = fit_rows;
-                            s.grid = DisplayGrid::new(fit_cols, fit_rows);
                             let resize = crate::messages::encode_resize(
                                 fit_cols as u16,
                                 fit_rows as u16,
@@ -110,6 +110,7 @@ impl eframe::App for TerminalApp {
                             s.send_queue.push_back(encode_message(&resize));
                         }
                     }
+                    ctx.request_repaint();
                 }
 
                 // Read terminal modes for input handling.
@@ -170,6 +171,8 @@ impl eframe::App for TerminalApp {
                     }
                 }
             });
+
+        ctx.request_repaint();
     }
 }
 

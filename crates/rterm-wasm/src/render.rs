@@ -72,13 +72,7 @@ impl DisplayGrid {
     pub fn apply_update(&mut self, data: &ScreenData) {
         // Handle resize.
         if data.cols as usize != self.cols || data.rows as usize != self.rows {
-            let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
-            self.cols = data.cols as usize;
-            self.rows = data.rows as usize;
-            self.cells.resize(self.rows, vec![default_cell; self.cols]);
-            for row in &mut self.cells {
-                row.resize(self.cols, default_cell);
-            }
+            self.resize(data.cols as usize, data.rows as usize);
         }
 
 
@@ -100,6 +94,32 @@ impl DisplayGrid {
         self.mouse_tracking_mode = data.mouse_tracking_mode;
         self.alt_screen_active = data.alt_screen_active;
         self.application_cursor_keys = data.application_cursor_keys;
+    }
+
+    /// Resize the local grid immediately so viewport changes repaint without
+    /// waiting for a round-trip snapshot from the server.
+    pub fn resize(&mut self, cols: usize, rows: usize) {
+        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
+        self.cols = cols;
+        self.rows = rows;
+        self.cells.resize(rows, vec![default_cell; cols]);
+        for row in &mut self.cells {
+            row.resize(cols, default_cell);
+        }
+
+        if rows > 0 {
+            self.cursor_row = self.cursor_row.min((rows - 1) as u16);
+        } else {
+            self.cursor_row = 0;
+        }
+        if cols > 0 {
+            self.cursor_col = self.cursor_col.min((cols - 1) as u16);
+        } else {
+            self.cursor_col = 0;
+        }
+
+        self.selection_start = None;
+        self.selection_end = None;
     }
 
     /// Get the cell that should be visible at (row, col) accounting for scroll offset.
@@ -192,8 +212,8 @@ pub fn paint_grid(
     let fit_rows = (available.y / cell_size.y).floor().max(1.0) as usize;
 
     let grid_size = Vec2::new(
-        cell_size.x * grid.cols as f32,
-        cell_size.y * grid.rows as f32,
+        cell_size.x * fit_cols as f32,
+        cell_size.y * fit_rows as f32,
     );
 
     let (response, painter) = ui.allocate_painter(grid_size, Sense::click_and_drag());
@@ -202,9 +222,9 @@ pub fn paint_grid(
 
     painter.rect_filled(response.rect, 0.0, DEFAULT_BG);
 
-    for row in 0..grid.rows {
+    for row in 0..fit_rows {
         let y = origin.y + row as f32 * cell_size.y;
-        for col in 0..grid.cols {
+        for col in 0..fit_cols {
             let cell = grid.visible_cell(row, col);
             let (mut fg, mut bg) = (unpack_color32(cell.fg, DEFAULT_FG), unpack_color32(cell.bg, DEFAULT_BG));
 

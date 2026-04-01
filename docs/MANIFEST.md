@@ -9,3 +9,4 @@
 | tasks.md | Phase-by-phase task tracking with checkboxes | Task completion, new tasks |
 | codelabs.md | Learning exercises for understanding the codebase | New codelab topics |
 | code-quality-findings.md | Code audit results, duplication, dead code, clippy, performance | New findings, resolved findings |
+| automation.md | Automation API design, command reference, test scenarios, open questions | New commands, new test scenarios, API changes |

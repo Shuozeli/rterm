@@ -217,8 +217,90 @@ table ServerMessage {
 // gRPC Service
 // ============================================================================
 
-rpc_service TerminalService {
-    Session(ClientMessage): ServerMessage (streaming: "bidi");
+table GetSnapshotRequest {
+    session_name: string;
 }
 
+table GetSnapshotResponse {
+    snapshot: ScreenSnapshot;
+    plain_text: string;
+}
+
+table TypeRequest {
+    session_name: string;
+    text: string;
+}
+
+table TypeResponse {
+    success: bool;
+    error: string;
+}
+
+table UnaryListSessionsRequest {}
+
+table UnaryListSessionsResponse {
+    sessions: [SessionInfo];
+}
+
+rpc_service TerminalService {
+    // Browser streaming API
+    Session(ClientMessage): ServerMessage (streaming: "bidi");
+
+    // ── Automation APIs (Playwright style) ─────────────────────────────────
+    // Session lifecycle
+    ListActiveSessions(UnaryListSessionsRequest): UnaryListSessionsResponse;
+    CreateSession(CreateSessionRequest): CreateSessionResponse;
+    KillSession(KillSessionRequest): KillSessionResponse;
+    ResizeSession(ResizeSessionRequest): ResizeSessionResponse;
+
+    // Input
+    TypeAction(TypeRequest): TypeResponse;
+    SendKeys(SendKeysRequest): SendKeysResponse;
+
+    // Output / waiting
+    GetSnapshot(GetSnapshotRequest): GetSnapshotResponse;
+    WaitForText(WaitForTextRequest): WaitForTextResponse;
+
+    // Higher-level
+    RunCommand(RunCommandRequest): RunCommandResponse;
+}
+
+// ── Automation message types (serialized with hand-rolled binary codec) ──────
+// These are declared here for documentation. Their Rust types live in
+// rterm-proto/src/lib.rs using a simple length-prefixed binary format
+// (not FlatBuffers generated code) to avoid requiring flatc for additions.
+
+table CreateSessionRequest {
+    session_name: string;
+    shell: string;       // empty = server default
+    cols: uint16;
+    rows: uint16;
+}
+table CreateSessionResponse { success: bool; error: string; }
+
+table KillSessionRequest { session_name: string; }
+table KillSessionResponse { success: bool; error: string; }
+
+table ResizeSessionRequest { session_name: string; cols: uint16; rows: uint16; }
+table ResizeSessionResponse { success: bool; error: string; }
+
+table SendKeysRequest { session_name: string; keys: [ubyte]; }
+table SendKeysResponse { success: bool; error: string; }
+
+table WaitForTextRequest {
+    session_name: string;
+    pattern: string;
+    timeout_ms: uint64;
+}
+table WaitForTextResponse { found: bool; plain_text: string; }
+
+table RunCommandRequest {
+    session_name: string;
+    command: string;
+    timeout_ms: uint64;
+}
+table RunCommandResponse { output: string; timed_out: bool; }
+
+// FlatBuffers requirement: standard HTTP/2 needs a root type for standard message parsing,
+// though gRPC handles this per endpoint. We leave ClientMessage as default root for legacy parser.
 root_type ClientMessage;

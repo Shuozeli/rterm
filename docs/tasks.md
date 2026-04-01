@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-03-29T23:20:00Z -->
+<!-- agent-updated: 2026-03-31T00:00:00Z -->
 # rterm Tasks
 
 ## Phase 1: VT Emulation Core
@@ -128,6 +128,43 @@ Priority: logical correctness. No GUI.
 - [x] Clipboard copy/paste
 - [ ] Scrollback search
 - [ ] Window/terminal size query responses
+
+## Phase 8: Automation API
+
+### Open issues to resolve
+- [x] Fix sentinel collision in `RunCommand` — `subsec_nanos()` can repeat; use `AtomicU64` counter
+- [x] Fix output capture boundaries in `RunCommand` — snapshot before/after, return only new non-empty lines
+- [x] Resolve `assert` design — CLI-only `assert` command calls `WaitForText` with `timeout_ms=0`; no new RPC
+- [x] Add `press` command + `PressKeys` RPC — server reads `application_cursor_keys` from session VT state to send the correct arrow key bytes (normal `\x1b[A` vs application `\x1bOA`)
+- [x] Add `exec` command — alias for `type session "<command>\n"` with explicit intent
+- [x] Add `snapshot-json` command — JSON output instead of Rust debug format
+
+### Proto / unit tests
+- [x] Round-trip encode/decode tests for all 6 new automation message types (`CreateSession`, `KillSession`, `ResizeSession`, `SendKeys`, `WaitForText`, `RunCommand`)
+- [x] `ManagedSession::plain_text()` unit test — verify correct text extraction from VT state
+- [x] `ManagedSession::resize()` unit test — verify `cols`/`rows` updated and `pty_resize_tx` signaled
+
+### In-process integration tests (FakePtySpawner, no network, no Docker)
+- [x] `CreateSession` handler — success + idempotent (same name twice returns same session)
+- [x] `KillSession` handler — success + kill nonexistent returns error
+- [x] `ResizeSession` handler — success + resize nonexistent returns error
+- [x] `SendKeys` handler — bytes arrive at PTY stdin
+- [x] `WaitForText` found path — inject PTY output, confirm `found=true` and `plain_text` contains pattern
+- [x] `WaitForText` timeout path — no output injected, confirm `found=false` returns within ~timeout
+- [x] `RunCommand` success — sentinel appears, output trimmed correctly
+- [x] `RunCommand` timeout path — returns `timed_out=true`
+- [x] `PressKeys` normal cursor mode — `Up` sends `\x1b[A`
+- [x] `PressKeys` application cursor mode — `Up` sends `\x1bOA` when `application_cursor_keys=true`
+
+### Docker E2E tests (full stack, real PTY)
+- [x] **Scenario A** — Simple command: `run "echo hello-world"`, assert output contains `hello-world`
+- [x] **Scenario B** — Multi-command state: `export FOO=bar` then `echo $FOO`, assert `bar`
+- [x] **Scenario C** — Vim lifecycle: `exec vim`, wait for `~`, insert text, `:wq`, verify file written
+- [x] **Scenario D** — Vim navigation: open file, `/` search, assert cursor row
+- [x] **Scenario E** — Python REPL: `exec python3`, wait for `>>>`, eval `2+2`, assert `4`, `exit()`
+- [x] **Scenario F** — Ctrl+C interrupt: `exec "sleep 60"`, `press Ctrl+C`, wait for prompt
+- [x] **Scenario G** — Resize: create 80×24, resize to 120×40, `snapshot-json` asserts new dimensions
+- [x] **Scenario H** — WaitForText timeout: pattern never appears, returns within 300ms with `found=false`
 
 ## Phase 7: Mobile
 

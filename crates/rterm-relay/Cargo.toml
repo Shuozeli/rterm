@@ -13,7 +13,7 @@ path = "src/main.rs"
 rterm-core = { path = "../rterm-core" }
 rterm-proto = { path = "../rterm-proto" }
 grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3", "tls"] }
 grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
 portable-pty = "0.9"
 flatbuffers = "25.12.19"
@@ -38,7 +38,12 @@ rcgen = "0.13"
 time = "0.3"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+http-body = "1.0"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = "1.1.0"
+clap = { version = "4.6.0", features = ["derive"] }
 
 [dev-dependencies]
 grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+reqwest = "0.13.2"
 tempfile = "3"

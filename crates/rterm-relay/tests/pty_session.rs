@@ -16,12 +16,21 @@ use http::uri::PathAndQuery;
 use rterm_proto::{ClientMsg, KeyInput, Resize, ServerMsg};
 use rterm_relay::service::TerminalServer;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 
 // ============================================================================
 // Test helpers
 // ============================================================================
+
+fn ensure_crypto_provider() {
+    static INIT: OnceLock<()> = OnceLock::new();
+    INIT.get_or_init(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
 
 fn generate_cert() -> (Vec<u8>, Vec<u8>) {
     use rcgen::{CertificateParams, KeyPair, PKCS_ECDSA_P256_SHA256};
@@ -43,11 +52,14 @@ async fn start_relay() -> (SocketAddr, Vec<u8>) {
 }
 
 async fn start_relay_with_shell(shell: &str) -> (SocketAddr, Vec<u8>) {
+    ensure_crypto_provider();
+
     let (cert_pem, key_pem) = generate_cert();
     let endpoint = H3Server::bind("127.0.0.1:0".parse().unwrap(), &cert_pem, &key_pem).unwrap();
     let addr = endpoint.local_addr().unwrap();
 
-    let server = TerminalServer::with_shell(shell);
+    let session_mgr = Arc::new(rterm_relay::session_manager::SessionManager::new(shell));
+    let server = TerminalServer::with_shell(shell, session_mgr);
     let router = Router::new().add_service(TerminalServer::NAME, server);
 
     tokio::spawn(async move {

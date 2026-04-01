@@ -42,7 +42,7 @@ impl std::error::Error for SessionError {}
 /// 4. Forward client input to PTY, PTY output to screen diffs
 /// 5. Send Exit on PTY close
 pub async fn run_session(
-    client_rx: &mut mpsc::Receiver<ClientMsg>,
+    mut client_rx: mpsc::Receiver<ClientMsg>,
     server_tx: &mpsc::Sender<ServerMsg>,
     spawner: &dyn PtySpawner,
     shell: &str,
@@ -85,43 +85,38 @@ pub async fn run_session(
         .map_err(|e| SessionError::SendFailed(e.to_string()))?;
 
     // 4. Forward client input to PTY in a background task.
-    {
-        let (relay_tx, relay_rx) = mpsc::channel(64);
-        let mut client = std::mem::replace(client_rx, relay_rx);
-        tokio::spawn(async move {
-            while let Some(msg) = client.recv().await {
-                match msg {
-                    ClientMsg::KeyInput(k) => {
-                        if stdin_tx.send(k.data).await.is_err() {
-                            break;
-                        }
+    tokio::spawn(async move {
+        while let Some(msg) = client_rx.recv().await {
+            match msg {
+                ClientMsg::KeyInput(k) => {
+                    if stdin_tx.send(k.data).await.is_err() {
+                        break;
                     }
-                    ClientMsg::PasteInput(p) => {
-                        // Send raw text — the managed session path handles
-                        // conditional bracketed paste wrapping.
-                        if stdin_tx.send(p.text.into_bytes()).await.is_err() {
-                            break;
-                        }
-                    }
-                    ClientMsg::Resize(r) => {
-                        if resize_tx.send((r.cols, r.rows)).await.is_err() {
-                            break;
-                        }
-                    }
-                    ClientMsg::MouseEvent(_) => {}
-                    // Session management messages are handled by the transport
-                    // adapter before reaching the session loop.
-                    ClientMsg::CreateSession(_)
-                    | ClientMsg::AttachSession(_)
-                    | ClientMsg::DetachSession
-                    | ClientMsg::DestroySession(_)
-                    | ClientMsg::ListSessions(_) => {}
                 }
+                ClientMsg::PasteInput(p) => {
+                    // Send raw text — the managed session path handles
+                    // conditional bracketed paste wrapping.
+                    if stdin_tx.send(p.text.into_bytes()).await.is_err() {
+                        break;
+                    }
+                }
+                ClientMsg::Resize(r) => {
+                    if resize_tx.send((r.cols, r.rows)).await.is_err() {
+                        break;
+                    }
+                }
+                ClientMsg::MouseEvent(_) => {}
+                // Session management messages are handled by the transport
+                // adapter before reaching the session loop.
+                ClientMsg::CreateSession(_)
+                | ClientMsg::AttachSession(_)
+                | ClientMsg::DetachSession
+                | ClientMsg::DestroySession(_)
+                | ClientMsg::ListSessions(_) => {}
             }
-            debug!("session: client input forwarding ended");
-        });
-        drop(relay_tx);
-    }
+        }
+        debug!("session: client input forwarding ended");
+    });
 
     // 5. Main loop: handle PTY stdout and scrollback requests.
     loop {
@@ -158,7 +153,7 @@ mod tests {
         spawner: &dyn PtySpawner,
         messages: Vec<ClientMsg>,
     ) -> (Vec<ServerMsg>, Result<(), SessionError>) {
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, mut server_rx) = mpsc::channel(64);
 
         // Send all client messages.
@@ -167,7 +162,7 @@ mod tests {
         }
         drop(client_tx); // Close the stream.
 
-        let result = run_session(&mut client_rx, &server_tx, spawner, "/bin/bash").await;
+        let result = run_session(client_rx, &server_tx, spawner, "/bin/bash").await;
         drop(server_tx);
 
         // Collect all server messages.
@@ -306,7 +301,7 @@ mod tests {
     #[tokio::test]
     async fn key_input_forwarded_to_pty_stdin() {
         let spawner = FakePtySpawner::new().with_stdout(vec![b"prompt$ ".to_vec()]);
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, mut server_rx) = mpsc::channel(64);
 
         // Send Resize first, then KeyInput.
@@ -322,7 +317,7 @@ mod tests {
             .unwrap();
         drop(client_tx);
 
-        let result = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        let result = run_session(client_rx, &server_tx, &spawner, "/bin/bash").await;
         assert!(result.is_ok());
         drop(server_tx);
 
@@ -336,7 +331,7 @@ mod tests {
     #[tokio::test]
     async fn paste_input_forwarded() {
         let spawner = FakePtySpawner::new();
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, _server_rx) = mpsc::channel(64);
 
         client_tx
@@ -351,14 +346,14 @@ mod tests {
             .unwrap();
         drop(client_tx);
 
-        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        let _ = run_session(client_rx, &server_tx, &spawner, "/bin/bash").await;
         // No panic = forwarding worked. PasteInput sent as bytes to PTY stdin.
     }
 
     #[tokio::test]
     async fn resize_forwarded_to_pty() {
         let spawner = FakePtySpawner::new();
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, _server_rx) = mpsc::channel(64);
 
         client_tx
@@ -374,14 +369,14 @@ mod tests {
             .unwrap();
         drop(client_tx);
 
-        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        let _ = run_session(client_rx, &server_tx, &spawner, "/bin/bash").await;
         // No panic = resize forwarded.
     }
 
     #[tokio::test]
     async fn mouse_event_does_not_crash() {
         let spawner = FakePtySpawner::new();
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, _server_rx) = mpsc::channel(64);
 
         client_tx
@@ -400,7 +395,7 @@ mod tests {
             .unwrap();
         drop(client_tx);
 
-        let _ = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        let _ = run_session(client_rx, &server_tx, &spawner, "/bin/bash").await;
         // No panic, no stdin data sent for mouse events.
     }
 
@@ -408,7 +403,7 @@ mod tests {
     async fn client_disconnect_mid_session() {
         let spawner =
             FakePtySpawner::new().with_stdout(vec![b"output1".to_vec(), b"output2".to_vec()]);
-        let (client_tx, mut client_rx) = mpsc::channel(64);
+        let (client_tx, client_rx) = mpsc::channel(64);
         let (server_tx, mut server_rx) = mpsc::channel(64);
 
         client_tx
@@ -418,7 +413,7 @@ mod tests {
         // Drop client immediately — simulates disconnect.
         drop(client_tx);
 
-        let result = run_session(&mut client_rx, &server_tx, &spawner, "/bin/bash").await;
+        let result = run_session(client_rx, &server_tx, &spawner, "/bin/bash").await;
         assert!(
             result.is_ok(),
             "session should handle client disconnect gracefully"

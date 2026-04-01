@@ -1,0 +1,17 @@
+# rterm test config
+static_dir = "/opt/rterm/dist"
+
+[[listener]]
+protocol = "webtransport"
+port = 4433
+tls = true
+
+[[listener]]
+protocol = "grpc-h2"
+port = 4434
+tls = false
+
+[[listener]]
+protocol = "grpc-h3"
+port = 4435
+tls = true

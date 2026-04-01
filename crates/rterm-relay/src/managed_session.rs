@@ -7,6 +7,10 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::info;
 
+/// Return type for `ManagedSession::new`: the session and its PTY stdout channel.
+type NewSessionResult =
+    Result<(ManagedSession, mpsc::Receiver<Vec<u8>>), Box<dyn std::error::Error + Send + Sync>>;
+
 /// Session state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionState {
@@ -44,14 +48,13 @@ pub struct ManagedSession {
 impl ManagedSession {
     /// Create a new session. Spawns the PTY and starts the output loop.
     /// Returns (ManagedSession, stdout_rx) -- caller must start the output loop.
-    #[allow(clippy::type_complexity)]
     pub fn new(
         name: String,
         shell: &str,
         cols: u16,
         rows: u16,
         spawner: &dyn PtySpawner,
-    ) -> Result<(Self, mpsc::Receiver<Vec<u8>>), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> NewSessionResult {
         let pty = spawner.spawn(shell, cols, rows)?;
 
         let session = Self {
@@ -145,6 +148,30 @@ impl ManagedSession {
                 let _ = tx.try_send(ServerMsg::ScreenUpdate(update));
             }
         }
+    }
+
+    /// Resize the terminal and notify the PTY.
+    pub fn resize(&mut self, cols: u16, rows: u16) {
+        self.cols = cols;
+        self.rows = rows;
+        self.terminal.resize(cols as usize, rows as usize);
+        let _ = self.pty_resize_tx.try_send((cols, rows));
+    }
+
+    /// Return the current screen as plain text (one trimmed line per row).
+    pub fn plain_text(&self) -> String {
+        let screen = self.terminal.screen();
+        let mut out = String::new();
+        for row_idx in 0..screen.rows() {
+            let mut line = String::new();
+            for col_idx in 0..screen.cols() {
+                let ch = screen.cell(row_idx, col_idx).ch;
+                line.push(if ch == '\0' { ' ' } else { ch });
+            }
+            out.push_str(line.trim_end());
+            out.push('\n');
+        }
+        out
     }
 
     /// Check if the session has timed out (detached too long).

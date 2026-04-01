@@ -4033,6 +4033,615 @@ impl ::core::fmt::Debug for ServerMessage<'_> {
       ds.finish()
   }
 }
+pub enum GetSnapshotRequestOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct GetSnapshotRequest<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for GetSnapshotRequest<'a> {
+  type Inner = GetSnapshotRequest<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> GetSnapshotRequest<'a> {
+  pub const VT_SESSION_NAME: ::flatbuffers::VOffsetT = 4;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    GetSnapshotRequest { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args GetSnapshotRequestArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<GetSnapshotRequest<'bldr>> {
+    let mut builder = GetSnapshotRequestBuilder::new(_fbb);
+    if let Some(x) = args.session_name { builder.add_session_name(x); }
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn session_name(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(GetSnapshotRequest::VT_SESSION_NAME, None)}
+  }
+}
+
+impl ::flatbuffers::Verifiable for GetSnapshotRequest<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("session_name", Self::VT_SESSION_NAME, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct GetSnapshotRequestArgs<'a> {
+    pub session_name: Option<::flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for GetSnapshotRequestArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    GetSnapshotRequestArgs {
+      session_name: None,
+    }
+  }
+}
+
+pub struct GetSnapshotRequestBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> GetSnapshotRequestBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_session_name(&mut self, session_name: ::flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(GetSnapshotRequest::VT_SESSION_NAME, session_name);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> GetSnapshotRequestBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    GetSnapshotRequestBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<GetSnapshotRequest<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for GetSnapshotRequest<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("GetSnapshotRequest");
+      ds.field("session_name", &self.session_name());
+      ds.finish()
+  }
+}
+pub enum GetSnapshotResponseOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct GetSnapshotResponse<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for GetSnapshotResponse<'a> {
+  type Inner = GetSnapshotResponse<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> GetSnapshotResponse<'a> {
+  pub const VT_SNAPSHOT: ::flatbuffers::VOffsetT = 4;
+  pub const VT_PLAIN_TEXT: ::flatbuffers::VOffsetT = 6;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    GetSnapshotResponse { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args GetSnapshotResponseArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<GetSnapshotResponse<'bldr>> {
+    let mut builder = GetSnapshotResponseBuilder::new(_fbb);
+    if let Some(x) = args.plain_text { builder.add_plain_text(x); }
+    if let Some(x) = args.snapshot { builder.add_snapshot(x); }
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn snapshot(&self) -> Option<ScreenSnapshot<'a>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<ScreenSnapshot>>(GetSnapshotResponse::VT_SNAPSHOT, None)}
+  }
+  #[inline]
+  pub fn plain_text(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(GetSnapshotResponse::VT_PLAIN_TEXT, None)}
+  }
+}
+
+impl ::flatbuffers::Verifiable for GetSnapshotResponse<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<ScreenSnapshot>>("snapshot", Self::VT_SNAPSHOT, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("plain_text", Self::VT_PLAIN_TEXT, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct GetSnapshotResponseArgs<'a> {
+    pub snapshot: Option<::flatbuffers::WIPOffset<ScreenSnapshot<'a>>>,
+    pub plain_text: Option<::flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for GetSnapshotResponseArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    GetSnapshotResponseArgs {
+      snapshot: None,
+      plain_text: None,
+    }
+  }
+}
+
+pub struct GetSnapshotResponseBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> GetSnapshotResponseBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_snapshot(&mut self, snapshot: ::flatbuffers::WIPOffset<ScreenSnapshot<'b >>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<ScreenSnapshot>>(GetSnapshotResponse::VT_SNAPSHOT, snapshot);
+  }
+  #[inline]
+  pub fn add_plain_text(&mut self, plain_text: ::flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(GetSnapshotResponse::VT_PLAIN_TEXT, plain_text);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> GetSnapshotResponseBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    GetSnapshotResponseBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<GetSnapshotResponse<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for GetSnapshotResponse<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("GetSnapshotResponse");
+      ds.field("snapshot", &self.snapshot());
+      ds.field("plain_text", &self.plain_text());
+      ds.finish()
+  }
+}
+pub enum TypeRequestOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct TypeRequest<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for TypeRequest<'a> {
+  type Inner = TypeRequest<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> TypeRequest<'a> {
+  pub const VT_SESSION_NAME: ::flatbuffers::VOffsetT = 4;
+  pub const VT_TEXT: ::flatbuffers::VOffsetT = 6;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    TypeRequest { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args TypeRequestArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<TypeRequest<'bldr>> {
+    let mut builder = TypeRequestBuilder::new(_fbb);
+    if let Some(x) = args.text { builder.add_text(x); }
+    if let Some(x) = args.session_name { builder.add_session_name(x); }
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn session_name(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(TypeRequest::VT_SESSION_NAME, None)}
+  }
+  #[inline]
+  pub fn text(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(TypeRequest::VT_TEXT, None)}
+  }
+}
+
+impl ::flatbuffers::Verifiable for TypeRequest<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("session_name", Self::VT_SESSION_NAME, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("text", Self::VT_TEXT, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct TypeRequestArgs<'a> {
+    pub session_name: Option<::flatbuffers::WIPOffset<&'a str>>,
+    pub text: Option<::flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for TypeRequestArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    TypeRequestArgs {
+      session_name: None,
+      text: None,
+    }
+  }
+}
+
+pub struct TypeRequestBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> TypeRequestBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_session_name(&mut self, session_name: ::flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(TypeRequest::VT_SESSION_NAME, session_name);
+  }
+  #[inline]
+  pub fn add_text(&mut self, text: ::flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(TypeRequest::VT_TEXT, text);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> TypeRequestBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    TypeRequestBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<TypeRequest<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for TypeRequest<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("TypeRequest");
+      ds.field("session_name", &self.session_name());
+      ds.field("text", &self.text());
+      ds.finish()
+  }
+}
+pub enum TypeResponseOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct TypeResponse<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for TypeResponse<'a> {
+  type Inner = TypeResponse<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> TypeResponse<'a> {
+  pub const VT_SUCCESS: ::flatbuffers::VOffsetT = 4;
+  pub const VT_ERROR: ::flatbuffers::VOffsetT = 6;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    TypeResponse { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args TypeResponseArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<TypeResponse<'bldr>> {
+    let mut builder = TypeResponseBuilder::new(_fbb);
+    if let Some(x) = args.error { builder.add_error(x); }
+    builder.add_success(args.success);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn success(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(TypeResponse::VT_SUCCESS, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn error(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<&str>>(TypeResponse::VT_ERROR, None)}
+  }
+}
+
+impl ::flatbuffers::Verifiable for TypeResponse<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .visit_field::<bool>("success", Self::VT_SUCCESS, false)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<&str>>("error", Self::VT_ERROR, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct TypeResponseArgs<'a> {
+    pub success: bool,
+    pub error: Option<::flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for TypeResponseArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    TypeResponseArgs {
+      success: false,
+      error: None,
+    }
+  }
+}
+
+pub struct TypeResponseBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> TypeResponseBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_success(&mut self, success: bool) {
+    self.fbb_.push_slot::<bool>(TypeResponse::VT_SUCCESS, success, false);
+  }
+  #[inline]
+  pub fn add_error(&mut self, error: ::flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(TypeResponse::VT_ERROR, error);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> TypeResponseBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    TypeResponseBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<TypeResponse<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for TypeResponse<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("TypeResponse");
+      ds.field("success", &self.success());
+      ds.field("error", &self.error());
+      ds.finish()
+  }
+}
+pub enum UnaryListSessionsRequestOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct UnaryListSessionsRequest<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for UnaryListSessionsRequest<'a> {
+  type Inner = UnaryListSessionsRequest<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> UnaryListSessionsRequest<'a> {
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    UnaryListSessionsRequest { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    _args: &'args UnaryListSessionsRequestArgs
+  ) -> ::flatbuffers::WIPOffset<UnaryListSessionsRequest<'bldr>> {
+    let mut builder = UnaryListSessionsRequestBuilder::new(_fbb);
+    builder.finish()
+  }
+
+}
+
+impl ::flatbuffers::Verifiable for UnaryListSessionsRequest<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct UnaryListSessionsRequestArgs {
+}
+impl<'a> Default for UnaryListSessionsRequestArgs {
+  #[inline]
+  fn default() -> Self {
+    UnaryListSessionsRequestArgs {
+    }
+  }
+}
+
+pub struct UnaryListSessionsRequestBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> UnaryListSessionsRequestBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> UnaryListSessionsRequestBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    UnaryListSessionsRequestBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<UnaryListSessionsRequest<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for UnaryListSessionsRequest<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("UnaryListSessionsRequest");
+      ds.finish()
+  }
+}
+pub enum UnaryListSessionsResponseOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct UnaryListSessionsResponse<'a> {
+  pub _tab: ::flatbuffers::Table<'a>,
+}
+
+impl<'a> ::flatbuffers::Follow<'a> for UnaryListSessionsResponse<'a> {
+  type Inner = UnaryListSessionsResponse<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { ::flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> UnaryListSessionsResponse<'a> {
+  pub const VT_SESSIONS: ::flatbuffers::VOffsetT = 4;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+    UnaryListSessionsResponse { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: ::flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args UnaryListSessionsResponseArgs<'args>
+  ) -> ::flatbuffers::WIPOffset<UnaryListSessionsResponse<'bldr>> {
+    let mut builder = UnaryListSessionsResponseBuilder::new(_fbb);
+    if let Some(x) = args.sessions { builder.add_sessions(x); }
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn sessions(&self) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo<'a>>>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo>>>>(UnaryListSessionsResponse::VT_SESSIONS, None)}
+  }
+}
+
+impl ::flatbuffers::Verifiable for UnaryListSessionsResponse<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut ::flatbuffers::Verifier, pos: usize
+  ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+    v.visit_table(pos)?
+     .visit_field::<::flatbuffers::ForwardsUOffset<::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<SessionInfo>>>>("sessions", Self::VT_SESSIONS, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct UnaryListSessionsResponseArgs<'a> {
+    pub sessions: Option<::flatbuffers::WIPOffset<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<SessionInfo<'a>>>>>,
+}
+impl<'a> Default for UnaryListSessionsResponseArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    UnaryListSessionsResponseArgs {
+      sessions: None,
+    }
+  }
+}
+
+pub struct UnaryListSessionsResponseBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> UnaryListSessionsResponseBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_sessions(&mut self, sessions: ::flatbuffers::WIPOffset<::flatbuffers::Vector<'b , ::flatbuffers::ForwardsUOffset<SessionInfo<'b >>>>) {
+    self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(UnaryListSessionsResponse::VT_SESSIONS, sessions);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>) -> UnaryListSessionsResponseBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    UnaryListSessionsResponseBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> ::flatbuffers::WIPOffset<UnaryListSessionsResponse<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    ::flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl ::core::fmt::Debug for UnaryListSessionsResponse<'_> {
+  fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+    let mut ds = f.debug_struct("UnaryListSessionsResponse");
+      ds.field("sessions", &self.sessions());
+      ds.finish()
+  }
+}
 #[inline]
 /// Verifies that a buffer of bytes contains a `ClientMessage`
 /// and returns it.

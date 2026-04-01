@@ -1,0 +1,13 @@
+static_dir = "crates/rterm-wasm/dist"
+
+[[listener]]
+protocol = "webtransport"
+port = 4433
+
+[[listener]]
+protocol = "grpc-h2"
+port = 4434
+
+[[listener]]
+protocol = "grpc-h3"
+port = 4435
