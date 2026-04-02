@@ -1,0 +1,13 @@
+[package]
+name = "rterm-session"
+description = "Session management: Terminal + Transport + screen state, named sessions, automation"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rterm-core = { path = "../rterm-core" }
+rterm-proto = { path = "../rterm-proto" }
+rterm-transport = { path = "../rterm-transport" }
+tokio = { version = "1", features = ["sync", "time"] }
+tracing = "0.1"

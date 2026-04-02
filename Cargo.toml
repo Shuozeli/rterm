@@ -6,7 +6,11 @@ members = [
     "crates/rterm-gui",
     "crates/rterm-shell",
     "crates/rterm-relay",
+    "crates/rterm-transport",
+    "crates/rterm-session",
+    "crates/rterm-service",
     "crates/rterm-cli",
+    "crates/rterm-agent",
 ]
 
 # rterm-wasm is WASM-only, excluded from default workspace.

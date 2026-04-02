@@ -12,6 +12,9 @@ path = "src/main.rs"
 [dependencies]
 rterm-core = { path = "../rterm-core" }
 rterm-proto = { path = "../rterm-proto" }
+rterm-transport = { path = "../rterm-transport" }
+rterm-session = { path = "../rterm-session" }
+rterm-service = { path = "../rterm-service" }
 grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
 grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3", "tls"] }
 grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }

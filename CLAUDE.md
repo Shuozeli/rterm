@@ -6,9 +6,14 @@ Terminal emulator in the browser via egui WASM + WebTransport, with server-side 
 
 - `rterm-core` — VT100/VT220 terminal emulation (screen buffer, cell grid, escape sequences)
 - `rterm-proto` — FlatBuffers protocol with typed screen updates (Cell, CellRange, ScreenUpdate)
-- `rterm-relay` — HTTP/3 + WebTransport relay server (PTY spawning, VT emulation, screen diffing)
+- `rterm-transport` — Transport trait abstraction (PTY, SSH, fake) with PtySpawner
+- `rterm-session` — Session management (ManagedSession, SessionManager, screen diffing, automation)
+- `rterm-service` — gRPC service handlers (TerminalServer, unary + bidi streaming RPCs)
+- `rterm-relay` — HTTP/3 + WebTransport relay server (gRPC service, WebTransport handler)
 - `rterm-gui` — egui terminal grid widget (colors, selection, scrolling) for native demo
 - `rterm-wasm` — Browser thin renderer (excluded from workspace, built with `trunk`)
+- `rterm-cli` — Automation CLI (Playwright-style terminal control via gRPC)
+- `rterm-agent` — SSH terminal agent: localhost gRPC server with SshPtySpawner
 - `rterm-shell` — Native WebView wrapper (placeholder)
 
 ## Build

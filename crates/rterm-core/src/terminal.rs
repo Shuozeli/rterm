@@ -1,6 +1,82 @@
-use crate::buffer::ScreenBuffer;
+use crate::buffer::{Pen, ScreenBuffer};
 use crate::cell::Flags;
 use crate::color::Color;
+
+/// Character set designation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Charset {
+    /// Standard ASCII.
+    #[default]
+    Ascii,
+    /// DEC Special Graphics (line drawing characters).
+    DecSpecialGraphics,
+}
+
+/// Map a byte in 0x60..=0x7E to DEC Special Graphics Unicode character.
+fn dec_special_graphics_char(ch: char) -> Option<char> {
+    let mapped = match ch {
+        '_' => ' ',
+        '`' => '\u{25c6}', // diamond
+        'a' => '\u{2592}', // medium shade
+        'b' => '\u{2409}', // HT symbol
+        'c' => '\u{240c}', // FF symbol
+        'd' => '\u{240d}', // CR symbol
+        'e' => '\u{240a}', // LF symbol
+        'f' => '\u{00b0}', // degree
+        'g' => '\u{00b1}', // plus-minus
+        'h' => '\u{2424}', // NL symbol
+        'i' => '\u{240b}', // VT symbol
+        'j' => '\u{2518}', // box: bottom-right
+        'k' => '\u{2510}', // box: top-right
+        'l' => '\u{250c}', // box: top-left
+        'm' => '\u{2514}', // box: bottom-left
+        'n' => '\u{253c}', // box: cross
+        'o' => '\u{23ba}', // scan line 1
+        'p' => '\u{23bb}', // scan line 3
+        'q' => '\u{2500}', // horizontal line
+        'r' => '\u{23bc}', // scan line 7
+        's' => '\u{23bd}', // scan line 9
+        't' => '\u{251c}', // box: left tee
+        'u' => '\u{2524}', // box: right tee
+        'v' => '\u{2534}', // box: bottom tee
+        'w' => '\u{252c}', // box: top tee
+        'x' => '\u{2502}', // vertical line
+        'y' => '\u{2264}', // less-than-or-equal
+        'z' => '\u{2265}', // greater-than-or-equal
+        '{' => '\u{03c0}', // pi
+        '|' => '\u{2260}', // not-equal
+        '}' => '\u{00a3}', // pound sterling
+        '~' => '\u{00b7}', // middle dot
+        _ => return None,
+    };
+    Some(mapped)
+}
+
+/// Saved cursor state for DECSC/DECRC.
+#[derive(Debug, Clone)]
+pub struct SavedCursor {
+    pub row: usize,
+    pub col: usize,
+    pub pen: Pen,
+    pub origin_mode: bool,
+    pub charset_g0: Charset,
+    pub charset_g1: Charset,
+    pub active_charset: usize,
+}
+
+impl Default for SavedCursor {
+    fn default() -> Self {
+        Self {
+            row: 0,
+            col: 0,
+            pen: Pen::default(),
+            origin_mode: false,
+            charset_g0: Charset::Ascii,
+            charset_g1: Charset::Ascii,
+            active_charset: 0,
+        }
+    }
+}
 
 /// Terminal modes that affect behavior.
 #[derive(Debug, Clone)]
@@ -17,6 +93,10 @@ pub struct TerminalModes {
     pub mouse_tracking_mode: u8,
     /// SGR Mouse mode (1006): use `<button;x;yM` format instead of legacy 223 max.
     pub mouse_sgr_mode: bool,
+    /// Application keypad mode (DECKPAM=true, DECKPNM=false).
+    pub application_keypad: bool,
+    /// Focus event tracking (DECSET 1004).
+    pub focus_events: bool,
 }
 
 impl Default for TerminalModes {
@@ -28,6 +108,8 @@ impl Default for TerminalModes {
             origin: false,
             mouse_tracking_mode: 0,
             mouse_sgr_mode: false,
+            application_keypad: false,
+            focus_events: false,
         }
     }
 }
@@ -42,8 +124,8 @@ pub struct Terminal {
     alt_active: bool,
     /// Terminal modes.
     pub modes: TerminalModes,
-    /// Saved cursor position (for DECSC/DECRC).
-    saved_cursor: (usize, usize),
+    /// Saved cursor state (for DECSC/DECRC).
+    saved_cursor: SavedCursor,
     /// Response bytes to be read by the PTY (e.g., DSR responses).
     response_buf: Vec<u8>,
     /// Persistent VT parser (retains state between feed() calls).
@@ -55,6 +137,18 @@ pub struct Terminal {
     /// Cursor style (DECSCUSR): 0=default, 1=blinking block, 2=steady block,
     /// 3=blinking underline, 4=steady underline, 5=blinking bar, 6=steady bar.
     pub cursor_style: u8,
+    /// Window/icon title set by OSC 0/1/2.
+    pub title: Option<String>,
+    /// Icon name set by OSC 1.
+    pub icon_name: Option<String>,
+    /// Bell pending flag -- set when BEL (0x07) is received.
+    pub bell_pending: bool,
+    /// G0 charset designation.
+    charset_g0: Charset,
+    /// G1 charset designation.
+    charset_g1: Charset,
+    /// Active charset: 0 = G0, 1 = G1.
+    active_charset: usize,
 }
 
 impl Terminal {
@@ -64,12 +158,18 @@ impl Terminal {
             alternate: ScreenBuffer::new(cols, rows),
             alt_active: false,
             modes: TerminalModes::default(),
-            saved_cursor: (0, 0),
+            saved_cursor: SavedCursor::default(),
             response_buf: Vec::new(),
             parser: vte::Parser::new(),
             sync_mode: false,
             bracketed_paste: false,
             cursor_style: 0,
+            title: None,
+            icon_name: None,
+            bell_pending: false,
+            charset_g0: Charset::Ascii,
+            charset_g1: Charset::Ascii,
+            active_charset: 0,
         }
     }
 
@@ -101,8 +201,13 @@ impl Terminal {
         std::mem::take(&mut self.response_buf)
     }
 
+    /// Push response bytes (for DA1, DA2, DSR, etc.).
+    fn write_response(&mut self, bytes: &[u8]) {
+        self.response_buf.extend_from_slice(bytes);
+    }
+
     /// Whether synchronized output mode is active.
-    /// When true, the renderer should NOT repaint — wait for it to go false.
+    /// When true, the renderer should NOT repaint -- wait for it to go false.
     pub fn is_sync_mode(&self) -> bool {
         self.sync_mode
     }
@@ -124,6 +229,15 @@ impl Terminal {
         self.parser = parser;
     }
 
+    /// Get the active charset for printing.
+    fn active_charset(&self) -> Charset {
+        if self.active_charset == 1 {
+            self.charset_g1
+        } else {
+            self.charset_g0
+        }
+    }
+
     /// Switch to alternate screen buffer.
     fn enter_alternate_screen(&mut self) {
         if !self.alt_active {
@@ -137,18 +251,31 @@ impl Terminal {
         self.alt_active = false;
     }
 
-    /// Save cursor position (DECSC).
+    /// Save cursor position and pen state (DECSC).
     fn save_cursor(&mut self) {
         let s = self.screen();
-        self.saved_cursor = (s.cursor.row, s.cursor.col);
+        self.saved_cursor = SavedCursor {
+            row: s.cursor.row,
+            col: s.cursor.col,
+            pen: s.pen.clone(),
+            origin_mode: self.modes.origin,
+            charset_g0: self.charset_g0,
+            charset_g1: self.charset_g1,
+            active_charset: self.active_charset,
+        };
     }
 
-    /// Restore cursor position (DECRC).
+    /// Restore cursor position and pen state (DECRC).
     fn restore_cursor(&mut self) {
-        let (row, col) = self.saved_cursor;
+        let saved = self.saved_cursor.clone();
         let s = self.screen_mut();
-        s.cursor.row = row;
-        s.cursor.col = col;
+        s.cursor.row = saved.row;
+        s.cursor.col = saved.col;
+        s.pen = saved.pen;
+        self.modes.origin = saved.origin_mode;
+        self.charset_g0 = saved.charset_g0;
+        self.charset_g1 = saved.charset_g1;
+        self.active_charset = saved.active_charset;
     }
 
     /// Handle SGR (Select Graphic Rendition) parameters.
@@ -310,6 +437,7 @@ impl Terminal {
                         self.modes.mouse_tracking_mode = 0;
                     }
                 }
+                1004 => self.modes.focus_events = set, // Focus events
                 1006 => self.modes.mouse_sgr_mode = set,
                 1049 => {
                     // Alternate screen buffer with save/restore cursor.
@@ -342,20 +470,24 @@ impl Terminal {
 
 impl vte::Perform for Terminal {
     fn print(&mut self, c: char) {
-        self.screen_mut().write_char(c);
+        // Apply charset mapping if active charset is DEC Special Graphics.
+        let ch = if self.active_charset() == Charset::DecSpecialGraphics {
+            dec_special_graphics_char(c).unwrap_or(c)
+        } else {
+            c
+        };
+        self.screen_mut().write_char(ch);
     }
 
     fn execute(&mut self, byte: u8) {
         match byte {
-            0x08 => self.screen_mut().cursor_back(1), // BS (backspace)
-            0x09 => {
-                // HT (horizontal tab): advance to next tab stop (every 8 cols).
-                let s = self.screen_mut();
-                let next_tab = (s.cursor.col / 8 + 1) * 8;
-                s.cursor.col = next_tab.min(s.cols() - 1);
-            }
-            0x0A..=0x0C => self.screen_mut().line_feed(), // LF, VT, FF
-            0x0D => self.screen_mut().carriage_return(),  // CR
+            0x07 => self.bell_pending = true,                // BEL
+            0x08 => self.screen_mut().cursor_back(1),        // BS (backspace)
+            0x09 => self.screen_mut().cursor_forward_tab(1), // HT (horizontal tab)
+            0x0A..=0x0C => self.screen_mut().line_feed(),    // LF, VT, FF
+            0x0D => self.screen_mut().carriage_return(),     // CR
+            0x0E => self.active_charset = 1,                 // SO (Shift Out) -> G1
+            0x0F => self.active_charset = 0,                 // SI (Shift In) -> G0
             _ => {}
         }
     }
@@ -385,7 +517,37 @@ impl vte::Perform for Terminal {
             }
         }
 
-        // Standard CSI sequences.
+        // Handle CSI > sequences (secondary DA, xterm private).
+        if intermediates == [b'>'] {
+            if action == 'c' {
+                // DA2 (Secondary Device Attributes): respond with VT100-compat.
+                self.write_response(b"\x1b[>0;0;0c");
+            }
+            return;
+        }
+
+        // Reject other intermediates for standard CSI sequences.
+        if !intermediates.is_empty() {
+            // Handle specific known intermediates.
+            match (intermediates, action) {
+                // Soft terminal reset (DECSTR).
+                ([b'!'], 'p') => {
+                    self.screen_mut().reset();
+                    self.modes = TerminalModes::default();
+                    self.charset_g0 = Charset::Ascii;
+                    self.charset_g1 = Charset::Ascii;
+                    self.active_charset = 0;
+                }
+                // DECSCUSR: set cursor style.
+                ([b' '], 'q') => {
+                    self.cursor_style = first as u8;
+                }
+                _ => {} // Ignore unknown intermediates.
+            }
+            return;
+        }
+
+        // Standard CSI sequences (no intermediates).
         let n = if first == 0 { 1 } else { first as usize };
 
         match action {
@@ -394,14 +556,36 @@ impl vte::Perform for Terminal {
             'B' => self.screen_mut().cursor_down(n),    // CUD
             'C' => self.screen_mut().cursor_forward(n), // CUF
             'D' => self.screen_mut().cursor_back(n),    // CUB
+            'E' => {
+                // CNL: Cursor Next Line -- move down n lines, then CR.
+                self.screen_mut().cursor_down(n);
+                self.screen_mut().carriage_return();
+            }
+            'F' => {
+                // CPL: Cursor Previous Line -- move up n lines, then CR.
+                self.screen_mut().cursor_up(n);
+                self.screen_mut().carriage_return();
+            }
+            'G' => {
+                // CHA: cursor character absolute (column only, 1-indexed).
+                self.screen_mut().cursor.col = n.saturating_sub(1).min(self.screen().cols() - 1);
+            }
             'H' | 'f' => {
                 // CUP / HVP: set cursor position (row;col, 1-indexed).
                 let row = if first == 0 { 1 } else { first as usize };
                 let col = if second == 0 { 1 } else { second as usize };
                 self.screen_mut().set_cursor_pos(row, col);
             }
-            'G' => {
-                // CHA: cursor character absolute (column only, 1-indexed).
+            'I' => {
+                // CHT: Cursor Forward Tab -- advance by n tab stops.
+                self.screen_mut().cursor_forward_tab(n);
+            }
+            'Z' => {
+                // CBT: Cursor Backward Tab -- move back by n tab stops.
+                self.screen_mut().cursor_backward_tab(n);
+            }
+            '`' => {
+                // HPA: Horizontal Position Absolute (same as CHA).
                 self.screen_mut().cursor.col = n.saturating_sub(1).min(self.screen().cols() - 1);
             }
             'd' => {
@@ -412,6 +596,10 @@ impl vte::Perform for Terminal {
             // Erase.
             'J' => self.screen_mut().erase_in_display(first), // ED
             'K' => self.screen_mut().erase_in_line(first),    // EL
+            'X' => {
+                // ECH: Erase Characters -- erase n chars at cursor, no cursor move.
+                self.screen_mut().erase_chars(n);
+            }
 
             // Scroll.
             'S' => self.screen_mut().scroll_up(n),   // SU
@@ -433,9 +621,15 @@ impl vte::Perform for Terminal {
             '@' => self.screen_mut().insert_chars(n), // ICH
             'P' => self.screen_mut().delete_chars(n), // DCH
 
-            // SGR — only handle standard SGR (no intermediates).
+            // Tab clear.
+            'g' => {
+                // TBC: Tab Clear.
+                self.screen_mut().clear_tab_stop(first);
+            }
+
+            // SGR -- only handle standard SGR (no intermediates).
             // CSI > m and CSI < m are xterm/kitty private sequences, not SGR.
-            'm' if intermediates.is_empty() => self.handle_sgr(params),
+            'm' => self.handle_sgr(params),
 
             // Device Status Report.
             'n' => {
@@ -444,19 +638,19 @@ impl vte::Perform for Terminal {
                     let row = self.screen().cursor.row + 1;
                     let col = self.screen().cursor.col + 1;
                     let response = format!("\x1b[{};{}R", row, col);
-                    self.response_buf.extend_from_slice(response.as_bytes());
+                    self.write_response(response.as_bytes());
+                } else if first == 5 {
+                    // DSR 5n: Device Status Report -- terminal OK.
+                    self.write_response(b"\x1b[0n");
                 }
             }
 
-            // Soft terminal reset (DECSTR).
-            'p' if intermediates == [b'!'] => {
-                self.screen_mut().reset();
-                self.modes = TerminalModes::default();
-            }
-
-            // DECSCUSR: set cursor style.
-            'q' if intermediates == [b' '] => {
-                self.cursor_style = first as u8;
+            // DA1: Primary Device Attributes.
+            'c' => {
+                // CSI c or CSI 0 c -- respond with VT220 identity.
+                if first == 0 {
+                    self.write_response(b"\x1b[?62;22c");
+                }
             }
 
             _ => {} // Ignore unknown CSI sequences.
@@ -468,6 +662,15 @@ impl vte::Perform for Terminal {
             ([], b'7') => self.save_cursor(),            // DECSC
             ([], b'8') => self.restore_cursor(),         // DECRC
             ([], b'D') => self.screen_mut().line_feed(), // IND (index = LF)
+            ([], b'E') => {
+                // NEL: Next Line = LF + CR combined.
+                self.screen_mut().line_feed();
+                self.screen_mut().carriage_return();
+            }
+            ([], b'H') => {
+                // HTS: Horizontal Tab Set -- set tab stop at current column.
+                self.screen_mut().set_tab_stop();
+            }
             ([], b'M') => {
                 // RI (reverse index): move cursor up, scroll down if at top.
                 let top = self.screen().cursor.row;
@@ -481,13 +684,59 @@ impl vte::Perform for Terminal {
                 // RIS: full reset.
                 self.screen_mut().reset();
                 self.modes = TerminalModes::default();
+                self.charset_g0 = Charset::Ascii;
+                self.charset_g1 = Charset::Ascii;
+                self.active_charset = 0;
+                self.title = None;
+                self.icon_name = None;
+                self.bell_pending = false;
             }
+            ([], b'=') => {
+                // DECKPAM: Application Keypad Mode.
+                self.modes.application_keypad = true;
+            }
+            ([], b'>') => {
+                // DECKPNM: Normal Keypad Mode.
+                self.modes.application_keypad = false;
+            }
+            // SCS: Designate G0 character set.
+            ([b'('], b'0') => self.charset_g0 = Charset::DecSpecialGraphics,
+            ([b'('], b'B') => self.charset_g0 = Charset::Ascii,
+            // SCS: Designate G1 character set.
+            ([b')'], b'0') => self.charset_g1 = Charset::DecSpecialGraphics,
+            ([b')'], b'B') => self.charset_g1 = Charset::Ascii,
             _ => {}
         }
     }
 
-    fn osc_dispatch(&mut self, _params: &[&[u8]], _bell_terminated: bool) {
-        // TODO: handle OSC 0/2 (window title), OSC 8 (hyperlinks), OSC 52 (clipboard).
+    fn osc_dispatch(&mut self, params: &[&[u8]], _bell_terminated: bool) {
+        if params.is_empty() {
+            return;
+        }
+        // First param is the OSC command number (as bytes, e.g., b"0", b"1", b"2").
+        let cmd = std::str::from_utf8(params[0]).unwrap_or("");
+        let text = if params.len() > 1 {
+            std::str::from_utf8(params[1]).ok().map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        match cmd {
+            "0" => {
+                // OSC 0: set icon name and window title.
+                self.icon_name = text.clone();
+                self.title = text;
+            }
+            "1" => {
+                // OSC 1: set icon name only.
+                self.icon_name = text;
+            }
+            "2" => {
+                // OSC 2: set window title only.
+                self.title = text;
+            }
+            _ => {} // Ignore unknown OSC commands.
+        }
     }
 }
 
@@ -746,7 +995,7 @@ mod tests {
         t.resize(40, 10);
         assert_eq!(t.screen().cols(), 40);
         assert_eq!(t.screen().rows(), 10);
-        // Content may shift during resize — verify no panic and dimensions correct.
+        // Content may shift during resize -- verify no panic and dimensions correct.
     }
 
     #[test]
@@ -782,7 +1031,7 @@ mod tests {
         assert!(!c.flags.contains(Flags::STRIKEOUT));
     }
 
-    /// SGR 21 sets DOUBLE_UNDERLINE (standard behavior — BEHAVIOR CHANGE from old bold-off).
+    /// SGR 21 sets DOUBLE_UNDERLINE (standard behavior -- BEHAVIOR CHANGE from old bold-off).
     #[test]
     fn sgr_21_sets_double_underline() {
         let mut t = term();
@@ -877,7 +1126,7 @@ mod tests {
         let mut t = Terminal::new(10, 3);
         feed(&mut t, "Line0\r\nLine1\r\nLine2");
         feed(&mut t, "\x1b[H"); // home
-        feed(&mut t, "\x1bM"); // RI: reverse index at top — should scroll down
+        feed(&mut t, "\x1bM"); // RI: reverse index at top -- should scroll down
         assert_eq!(t.screen().cell(0, 0).ch, ' '); // blank line inserted
         assert_eq!(t.screen().cell(1, 0).ch, 'L'); // old line 0
     }
@@ -1010,5 +1259,353 @@ mod tests {
         assert!(cell.flags.contains(Flags::BOLD));
         assert!(cell.flags.contains(Flags::ITALIC));
         assert!(cell.flags.contains(Flags::BOLD_ITALIC));
+    }
+
+    // ==================== P0 Tests ====================
+
+    #[test]
+    fn da1_primary_device_attributes() {
+        let mut t = term();
+        feed(&mut t, "\x1b[c"); // DA1: CSI c
+        let response = t.take_response();
+        assert_eq!(response, b"\x1b[?62;22c");
+    }
+
+    #[test]
+    fn da1_with_zero_param() {
+        let mut t = term();
+        feed(&mut t, "\x1b[0c"); // DA1: CSI 0 c
+        let response = t.take_response();
+        assert_eq!(response, b"\x1b[?62;22c");
+    }
+
+    #[test]
+    fn osc_0_sets_title_and_icon() {
+        let mut t = term();
+        feed(&mut t, "\x1b]0;My Title\x07");
+        assert_eq!(t.title.as_deref(), Some("My Title"));
+        assert_eq!(t.icon_name.as_deref(), Some("My Title"));
+    }
+
+    #[test]
+    fn osc_1_sets_icon_name() {
+        let mut t = term();
+        feed(&mut t, "\x1b]1;MyIcon\x07");
+        assert_eq!(t.icon_name.as_deref(), Some("MyIcon"));
+        assert!(t.title.is_none());
+    }
+
+    #[test]
+    fn osc_2_sets_title() {
+        let mut t = term();
+        feed(&mut t, "\x1b]2;Window Title\x07");
+        assert_eq!(t.title.as_deref(), Some("Window Title"));
+        assert!(t.icon_name.is_none());
+    }
+
+    #[test]
+    fn osc_st_terminated() {
+        let mut t = term();
+        // OSC terminated with ST (ESC \) instead of BEL.
+        feed(&mut t, "\x1b]0;ST Title\x1b\\");
+        assert_eq!(t.title.as_deref(), Some("ST Title"));
+    }
+
+    // ==================== P1 Tests ====================
+
+    #[test]
+    fn cnl_cursor_next_line() {
+        let mut t = term();
+        feed(&mut t, "\x1b[5;10H"); // row 5, col 10
+        feed(&mut t, "\x1b[2E"); // CNL: move down 2 lines + CR
+        assert_eq!(t.screen().cursor.row, 6); // 4 + 2
+        assert_eq!(t.screen().cursor.col, 0); // CR
+    }
+
+    #[test]
+    fn cpl_cursor_previous_line() {
+        let mut t = term();
+        feed(&mut t, "\x1b[5;10H"); // row 5, col 10
+        feed(&mut t, "\x1b[2F"); // CPL: move up 2 lines + CR
+        assert_eq!(t.screen().cursor.row, 2); // 4 - 2
+        assert_eq!(t.screen().cursor.col, 0); // CR
+    }
+
+    #[test]
+    fn ech_erase_characters() {
+        let mut t = Terminal::new(10, 1);
+        feed(&mut t, "ABCDEFGH");
+        feed(&mut t, "\x1b[4G"); // col 4 (0-indexed: 3)
+        feed(&mut t, "\x1b[3X"); // ECH: erase 3 chars at cursor
+        assert_eq!(t.screen().cell(0, 2).ch, 'C'); // not erased
+        assert_eq!(t.screen().cell(0, 3).ch, ' '); // erased
+        assert_eq!(t.screen().cell(0, 4).ch, ' '); // erased
+        assert_eq!(t.screen().cell(0, 5).ch, ' '); // erased
+        assert_eq!(t.screen().cell(0, 6).ch, 'G'); // not erased
+        // Cursor should NOT move.
+        assert_eq!(t.screen().cursor.col, 3);
+    }
+
+    #[test]
+    fn hpa_horizontal_position_absolute() {
+        let mut t = term();
+        feed(&mut t, "\x1b[15`"); // HPA: go to column 15 (1-indexed)
+        assert_eq!(t.screen().cursor.col, 14);
+    }
+
+    #[test]
+    fn cht_cursor_forward_tab() {
+        let mut t = term();
+        feed(&mut t, "\x1b[2I"); // CHT: forward 2 tab stops
+        assert_eq!(t.screen().cursor.col, 16); // 0 -> 8 -> 16
+    }
+
+    #[test]
+    fn cbt_cursor_backward_tab() {
+        let mut t = term();
+        feed(&mut t, "\x1b[20G"); // col 20 (0-indexed: 19)
+        feed(&mut t, "\x1b[2Z"); // CBT: backward 2 tab stops
+        assert_eq!(t.screen().cursor.col, 8); // 19 -> 16 -> 8
+    }
+
+    #[test]
+    fn hts_horizontal_tab_set() {
+        let mut t = term();
+        feed(&mut t, "\x1b[6G"); // col 6 (0-indexed: 5)
+        feed(&mut t, "\x1bH"); // HTS: set tab stop at col 5
+        feed(&mut t, "\x1b[1G"); // col 1 (0-indexed: 0)
+        feed(&mut t, "\t"); // tab -- should go to col 5 (custom stop)
+        assert_eq!(t.screen().cursor.col, 5);
+    }
+
+    #[test]
+    fn tbc_clear_tab_at_cursor() {
+        let mut t = term();
+        // Default tab stop at col 8.
+        feed(&mut t, "\x1b[9G"); // col 9 (0-indexed: 8)
+        feed(&mut t, "\x1b[0g"); // TBC mode 0: clear at cursor
+        feed(&mut t, "\x1b[1G"); // go to col 0
+        feed(&mut t, "\t"); // tab -- should skip col 8, go to 16
+        assert_eq!(t.screen().cursor.col, 16);
+    }
+
+    #[test]
+    fn tbc_clear_all_tabs() {
+        let mut t = term();
+        feed(&mut t, "\x1b[3g"); // TBC mode 3: clear all tab stops
+        feed(&mut t, "\x1b[1G"); // go to col 0
+        feed(&mut t, "\t"); // tab -- no stops, go to last col
+        assert_eq!(t.screen().cursor.col, 79);
+    }
+
+    #[test]
+    fn dsr_5n_device_status() {
+        let mut t = term();
+        feed(&mut t, "\x1b[5n"); // DSR: status report
+        let response = t.take_response();
+        assert_eq!(response, b"\x1b[0n"); // terminal OK
+    }
+
+    #[test]
+    fn da2_secondary_device_attributes() {
+        let mut t = term();
+        feed(&mut t, "\x1b[>c"); // DA2: CSI > c
+        let response = t.take_response();
+        assert_eq!(response, b"\x1b[>0;0;0c");
+    }
+
+    #[test]
+    fn nel_next_line() {
+        let mut t = term();
+        feed(&mut t, "\x1b[5;10H"); // row 5, col 10
+        feed(&mut t, "\x1bE"); // NEL: next line (LF + CR)
+        assert_eq!(t.screen().cursor.row, 5); // was 4, now 5
+        assert_eq!(t.screen().cursor.col, 0); // CR
+    }
+
+    #[test]
+    fn bel_sets_bell_pending() {
+        let mut t = term();
+        assert!(!t.bell_pending);
+        feed(&mut t, "\x07"); // BEL
+        assert!(t.bell_pending);
+        // Clear it.
+        t.bell_pending = false;
+        assert!(!t.bell_pending);
+    }
+
+    #[test]
+    fn focus_events_mode() {
+        let mut t = term();
+        assert!(!t.modes.focus_events);
+        feed(&mut t, "\x1b[?1004h"); // enable focus events
+        assert!(t.modes.focus_events);
+        feed(&mut t, "\x1b[?1004l"); // disable focus events
+        assert!(!t.modes.focus_events);
+    }
+
+    #[test]
+    fn scs_g0_dec_special_graphics() {
+        let mut t = term();
+        feed(&mut t, "\x1b(0"); // designate G0 as DEC Special Graphics
+        assert_eq!(t.charset_g0, Charset::DecSpecialGraphics);
+        // 'q' in DEC SG = horizontal line U+2500
+        feed(&mut t, "q");
+        assert_eq!(t.screen().cell(0, 0).ch, '\u{2500}');
+        // 'l' = top-left corner U+250C
+        feed(&mut t, "l");
+        assert_eq!(t.screen().cell(0, 1).ch, '\u{250c}');
+        // Switch back to ASCII.
+        feed(&mut t, "\x1b(B");
+        assert_eq!(t.charset_g0, Charset::Ascii);
+        feed(&mut t, "q");
+        assert_eq!(t.screen().cell(0, 2).ch, 'q'); // plain ASCII
+    }
+
+    #[test]
+    fn scs_g1_and_shift_out_in() {
+        let mut t = term();
+        feed(&mut t, "\x1b)0"); // designate G1 as DEC Special Graphics
+        assert_eq!(t.charset_g1, Charset::DecSpecialGraphics);
+        // SO (0x0E) = shift to G1.
+        feed(&mut t, "\x0e");
+        assert_eq!(t.active_charset, 1);
+        feed(&mut t, "x"); // vertical line in DEC SG
+        assert_eq!(t.screen().cell(0, 0).ch, '\u{2502}');
+        // SI (0x0F) = shift to G0 (ASCII).
+        feed(&mut t, "\x0f");
+        assert_eq!(t.active_charset, 0);
+        feed(&mut t, "x");
+        assert_eq!(t.screen().cell(0, 1).ch, 'x'); // plain ASCII
+    }
+
+    #[test]
+    fn dec_special_graphics_full_mapping() {
+        // Test all characters in 0x60..=0x7E range.
+        let expected = [
+            ('`', '\u{25c6}'),
+            ('a', '\u{2592}'),
+            ('b', '\u{2409}'),
+            ('c', '\u{240c}'),
+            ('d', '\u{240d}'),
+            ('e', '\u{240a}'),
+            ('f', '\u{00b0}'),
+            ('g', '\u{00b1}'),
+            ('h', '\u{2424}'),
+            ('i', '\u{240b}'),
+            ('j', '\u{2518}'),
+            ('k', '\u{2510}'),
+            ('l', '\u{250c}'),
+            ('m', '\u{2514}'),
+            ('n', '\u{253c}'),
+            ('o', '\u{23ba}'),
+            ('p', '\u{23bb}'),
+            ('q', '\u{2500}'),
+            ('r', '\u{23bc}'),
+            ('s', '\u{23bd}'),
+            ('t', '\u{251c}'),
+            ('u', '\u{2524}'),
+            ('v', '\u{2534}'),
+            ('w', '\u{252c}'),
+            ('x', '\u{2502}'),
+            ('y', '\u{2264}'),
+            ('z', '\u{2265}'),
+            ('{', '\u{03c0}'),
+            ('|', '\u{2260}'),
+            ('}', '\u{00a3}'),
+            ('~', '\u{00b7}'),
+        ];
+        for (input, expected_ch) in expected {
+            assert_eq!(
+                dec_special_graphics_char(input),
+                Some(expected_ch),
+                "DEC SG mapping for {:?}",
+                input
+            );
+        }
+        // underscore maps to space.
+        assert_eq!(dec_special_graphics_char('_'), Some(' '));
+        // Characters outside range return None.
+        assert_eq!(dec_special_graphics_char('A'), None);
+    }
+
+    #[test]
+    fn deckpam_deckpnm() {
+        let mut t = term();
+        assert!(!t.modes.application_keypad);
+        feed(&mut t, "\x1b="); // DECKPAM
+        assert!(t.modes.application_keypad);
+        feed(&mut t, "\x1b>"); // DECKPNM
+        assert!(!t.modes.application_keypad);
+    }
+
+    #[test]
+    fn decsc_decrc_saves_pen_state() {
+        let mut t = term();
+        // Set pen state.
+        feed(&mut t, "\x1b[1;31m"); // bold + red fg
+        feed(&mut t, "\x1b[5;10H"); // row 5, col 10
+        feed(&mut t, "\x1b(0"); // G0 = DEC Special Graphics
+        feed(&mut t, "\x1b7"); // DECSC: save all
+        // Change everything.
+        feed(&mut t, "\x1b[0m"); // reset pen
+        feed(&mut t, "\x1b[1;1H"); // move to 1,1
+        feed(&mut t, "\x1b(B"); // G0 = ASCII
+        // Restore.
+        feed(&mut t, "\x1b8"); // DECRC: restore all
+        assert_eq!(t.screen().cursor.row, 4);
+        assert_eq!(t.screen().cursor.col, 9);
+        assert!(t.screen().pen.flags.contains(Flags::BOLD));
+        assert_eq!(t.screen().pen.fg, Color::Indexed(1));
+        assert_eq!(t.charset_g0, Charset::DecSpecialGraphics);
+    }
+
+    #[test]
+    fn decsc_decrc_saves_origin_mode() {
+        let mut t = term();
+        feed(&mut t, "\x1b[?6h"); // origin mode on
+        feed(&mut t, "\x1b7"); // DECSC
+        feed(&mut t, "\x1b[?6l"); // origin mode off
+        assert!(!t.modes.origin);
+        feed(&mut t, "\x1b8"); // DECRC
+        assert!(t.modes.origin); // restored
+    }
+
+    #[test]
+    fn soft_reset_resets_charsets() {
+        let mut t = term();
+        feed(&mut t, "\x1b(0"); // G0 = DEC SG
+        feed(&mut t, "\x0e"); // SO -> G1
+        feed(&mut t, "\x1b[!p"); // DECSTR: soft reset
+        assert_eq!(t.charset_g0, Charset::Ascii);
+        assert_eq!(t.charset_g1, Charset::Ascii);
+        assert_eq!(t.active_charset, 0);
+    }
+
+    #[test]
+    fn full_reset_clears_title() {
+        let mut t = term();
+        feed(&mut t, "\x1b]0;Hello\x07");
+        assert!(t.title.is_some());
+        feed(&mut t, "\x1bc"); // RIS
+        assert!(t.title.is_none());
+        assert!(t.icon_name.is_none());
+    }
+
+    #[test]
+    fn full_reset_clears_bell() {
+        let mut t = term();
+        feed(&mut t, "\x07"); // BEL
+        assert!(t.bell_pending);
+        feed(&mut t, "\x1bc"); // RIS
+        assert!(!t.bell_pending);
+    }
+
+    #[test]
+    fn da1_does_not_respond_to_nonzero_param() {
+        let mut t = term();
+        feed(&mut t, "\x1b[1c"); // CSI 1 c -- not DA1, should be ignored
+        let response = t.take_response();
+        assert!(response.is_empty());
     }
 }

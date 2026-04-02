@@ -1,0 +1,24 @@
+[package]
+name = "rterm-agent"
+description = "SSH terminal agent: localhost gRPC server with SSH transport for mobile/desktop clients"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rterm-agent"
+path = "src/main.rs"
+
+[dependencies]
+rterm-core = { path = "../rterm-core" }
+rterm-proto = { path = "../rterm-proto" }
+rterm-transport = { path = "../rterm-transport" }
+rterm-session = { path = "../rterm-session" }
+rterm-service = { path = "../rterm-service" }
+grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+clap = { version = "4.6.0", features = ["derive"] }

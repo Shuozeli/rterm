@@ -451,11 +451,7 @@ async fn press_keys_application_cursor_mode_bytes_arrive() {
     let app_cursor = session.terminal.modes.application_cursor_keys;
     assert!(app_cursor);
 
-    let up_bytes = if app_cursor {
-        b"\x1bOA".as_ref()
-    } else {
-        b"\x1b[A".as_ref()
-    };
+    let up_bytes: &[u8] = if app_cursor { b"\x1bOA" } else { b"\x1b[A" };
     let stdin_tx = session.pty_stdin_tx.clone();
     stdin_tx.send(up_bytes.to_vec()).await.unwrap();
 

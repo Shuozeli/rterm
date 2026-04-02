@@ -1,389 +1,318 @@
-<!-- agent-updated: 2026-03-29T23:20:00Z -->
+<!-- agent-updated: 2026-04-02T22:00:00Z -->
 # rterm Architecture
 
 ## Overview
 
-rterm is a minimal, correct terminal emulator built in Rust. The relay server runs VT emulation server-side and sends typed screen updates to clients over FlatBuffers. egui compiled to WASM is the universal renderer -- it receives pre-parsed cell data (characters, colors, attributes) and paints them directly. The WASM browser client connects to a relay server over WebTransport using length-prefixed FlatBuffers. Native clients connect via gRPC over HTTP/3 (QUIC). On desktop, a native WebView shell (planned) loads the WASM bundle and provides a local PTY. The WASM code has zero platform-specific branches.
+rterm is a terminal system built in Rust with two deployment modes:
+
+- **Server mode (relay):** PTY runs on a remote server, clients connect via
+  WebTransport (browser) or gRPC (native/mobile). VT emulation is server-side.
+- **Client mode (agent):** SSH connection runs from the device, VT emulation
+  is local. A local gRPC service exposes the same API as the relay.
+
+Both modes share the same session/VT/gRPC layers. The only difference is the
+byte source: PTY (server) vs SSH (client).
+
+rterm-core (the VT emulator) is pure Rust with zero OS dependencies. It compiles
+to any target: WASM, ARM, x86_64.
 
 ## Design Principles
 
-- **Alacritty philosophy**: No tabs, no panes, no splits. One terminal per window.
-- **WASM-first**: egui WASM is the single rendering path for all platforms.
-- **Server-side VT emulation**: The relay runs the VT emulator and sends typed screen diffs. Clients are thin renderers.
-- **Logical correctness first**: VT emulation correctness before GUI polish.
-- **HTTP/3 transport**: QUIC everywhere. No HTTP/2, no WebSocket, no fallbacks.
-- **Dogfooding**: Uses flatbuffers-rs and pure-grpc-rs. Bugs found are fixed upstream.
+- **rterm-core is the product:** A portable, correct VT emulator that any client
+  can embed. The relay and agent are just different wrappers around it.
+- **gRPC is the universal boundary:** All inter-process communication uses gRPC.
+  No FFI, no shared libraries, no .so/.dylib. Clean process boundaries.
+- **Rust everywhere except UI:** VT emulation, SSH, session management, gRPC
+  service — all Rust. Only the mobile UI layer (Flutter) is non-Rust.
+- **Transport-agnostic sessions:** A session is a Transport + VT emulator.
+  The Transport trait abstracts PTY, SSH, or test fakes.
+- **Logical correctness first:** VT emulation correctness before GUI polish.
 
 ## Crate Structure
 
 ```
 rterm/
   crates/
-    rterm-proto/    -- FlatBuffers protocol: typed screen updates (Cell, CellRange, ScreenUpdate, ScreenSnapshot)
-    rterm-core/     -- VT100/VT220 emulation: vte parser, screen buffer, cell types
-    rterm-gui/      -- egui terminal widget: color palette, input encoding, selection, scrollback
-    rterm-shell/    -- Native WebView wrapper + local PTY (stub, not yet implemented)
-    rterm-relay/    -- HTTP/3 + WebTransport relay server (PTY spawning, VT emulation, screen diffing)
-    rterm-wasm/     -- WASM browser thin renderer (excluded from workspace, built with trunk)
+    rterm-core/          VT100/VT220 emulation engine
+    │                    Pure Rust. No OS deps. Compiles everywhere.
+    │                    vte parser, screen buffer, cell grid, Flags bitfield.
+    │
+    rterm-proto/         FlatBuffers protocol + gRPC service definitions
+    │                    Wire types: CellData, ScreenUpdate, ScreenSnapshot.
+    │                    Codec: FlatBuffers encode/decode for all message types.
+    │
+    rterm-transport/     I/O source abstraction (NEW, to be extracted)
+    │                    trait Transport { read, write, resize, close }
+    │                    PtyTransport  — wraps portable-pty (server mode)
+    │                    SshTransport  — wraps russh (client mode)
+    │                    FakeTransport — in-memory channels (tests)
+    │
+    rterm-session/       Session = Transport + VT + screen state (NEW, to be extracted)
+    │                    Session — owns Terminal + Transport, feeds bytes, diffs screen
+    │                    SessionManager — named sessions, reaper, attach/detach
+    │                    Automation — RunCommand, WaitForText, PressKeys logic
+    │
+    rterm-service/       gRPC service layer (NEW, to be extracted)
+    │                    TerminalService — gRPC handlers, delegates to SessionManager
+    │                    Works with ANY Transport (PTY or SSH)
+    │
+    rterm-relay/         Binary: server mode
+    │                    Wires up PtyTransport + rterm-service + WebTransport
+    │                    Serves WASM bundle over HTTPS
+    │                    Thin launcher after extraction
+    │
+    rterm-agent/         Binary: client mode
+    │                    SshPtySpawner bridges SSH into PtyHandle channels
+    │                    Plaintext gRPC/H2 on 127.0.0.1 (localhost only)
+    │                    CreateSession shell field: ssh://user:pass@host:port
+    │
+    rterm-wasm/          Browser renderer (egui, connects to relay via WebTransport)
+    rterm-gui/           Desktop demo (egui, connects via gRPC)
+    rterm-cli/           Automation CLI (connects via gRPC)
+
+  mobile/
+    Flutter app          Dart UI, connects via gRPC to rterm-agent (localhost)
+                         or rterm-relay (remote)
 ```
 
-rterm-wasm is excluded from the default Cargo workspace because it targets wasm32 only. Build it with: `cd crates/rterm-wasm && RUSTFLAGS="--cfg web_sys_unstable_apis" trunk build`
+## The Transport Trait
 
-## Related Repositories (bug fixes in scope)
+The key abstraction that enables both server and client modes:
 
-| Repo | Role | Fix Scope |
-|---|---|---|
-| flatbuffers-rs | FlatBuffers compiler + runtime | Bugs found via rterm-proto |
-| pure-grpc-rs | gRPC framework + FlatBuffers codec | Bugs found via rterm transport; HTTP/3 support |
+```rust
+#[async_trait]
+pub trait Transport: Send + Sync {
+    async fn read(&mut self) -> Result<Vec<u8>, TransportError>;
+    async fn write(&mut self, data: &[u8]) -> Result<(), TransportError>;
+    async fn resize(&mut self, cols: u16, rows: u16) -> Result<(), TransportError>;
+    async fn close(&mut self) -> Result<(), TransportError>;
+}
+```
+
+| Implementation | Byte source | Used by |
+|---------------|-------------|---------|
+| PtyTransport | Local PTY (portable-pty) | rterm-relay |
+| SshTransport | SSH channel (russh) | rterm-agent |
+| FakeTransport | In-memory channels | Tests |
 
 ## System Architecture
 
-```
-+-----------------------------------------------+
-|  WASM Bundle (identical on every platform)     |
-|                                                |
-|  egui (WebGL/WebGPU canvas)                    |
-|  +------------------------------------------+  |
-|  |  Terminal Grid Widget (rterm-gui)        |  |
-|  |  - Monospace cell rendering              |  |
-|  |  - Full 256 + true color                 |  |
-|  |  - Cursor rendering (block)              |  |
-|  |  - Selection highlighting                |  |
-|  |  - Scrollback view with mouse wheel      |  |
-|  +------------------------------------------+  |
-|  |  Input Handler (rterm-gui)               |  |
-|  |  - Keyboard -> VT sequences              |  |
-|  |  - Ctrl+key combinations                 |  |
-|  |  - Application cursor keys mode          |  |
-|  +------------------------------------------+  |
-|  |  Screen State (rterm-wasm)               |  |
-|  |  - Applies ScreenUpdate cell changes     |  |
-|  |  - Applies ScreenSnapshot full state     |  |
-|  |  - Scrollback data management            |  |
-|  |  - No VT parsing on client               |  |
-|  +------------------------------------------+  |
-|  |  Transport Client (rterm-wasm)           |  |
-|  |  - WebTransport API (web-sys)            |  |
-|  |  - Length-prefixed FlatBuffers protocol  |  |
-|  |  - Sends KeyInput, PasteInput, Resize,   |  |
-|  |    MouseEvent                            |  |
-|  |  - Receives ScreenUpdate, ScreenSnapshot,|  |
-|  |    ScrollbackData, Exit, Error, Bell     |  |
-|  +------------------------------------------+  |
-+-----------------------------------------------+
-```
-
-## Server-Side VT Emulation
-
-The relay server runs the VT emulator, not the client. This is the key architectural decision:
+### Server Mode (relay — for browser + automation)
 
 ```
-+-----------------------------------------------+
-|  rterm-relay (server)                          |
-|                                                |
-|  +------------------------------------------+  |
-|  |  session::run_session (shared logic)     |  |
-|  |  - Read initial Resize from client       |  |
-|  |  - Spawn PTY via PtySpawner trait        |  |
-|  |  - Send initial ScreenSnapshot           |  |
-|  |  - Forward client input to PTY           |  |
-|  |  - Feed PTY stdout through Terminal      |  |
-|  |  - Diff screen state via PrevScreen      |  |
-|  |  - Send ScreenUpdate with changed cells  |  |
-|  |  - Send Exit when PTY closes             |  |
-|  +------------------------------------------+  |
-|  |  wt_handler (WebTransport adapter)       |  |
-|  |  - Bridges bidi stream <-> channels      |  |
-|  |  - Delegates to session::run_session     |  |
-|  +------------------------------------------+  |
-|  |  service (gRPC adapter)                  |  |
-|  |  - Bridges Streaming <-> channels        |  |
-|  |  - Delegates to session::run_session     |  |
-|  +------------------------------------------+  |
-+-----------------------------------------------+
+Browser / rterm-cli / rterm-gui
+        │
+        │ gRPC or WebTransport
+        ▼
++------------------------------------------+
+│ rterm-relay                              │
+│                                          │
+│  rterm-service (gRPC handlers)           │
+│       │                                  │
+│  rterm-session (SessionManager)          │
+│       │                                  │
+│  Session = PtyTransport + rterm-core     │
+│       │                                  │
+│  PtyTransport ──── PTY ──── /bin/bash    │
++------------------------------------------+
 ```
 
-Both transport adapters are thin: they only translate between their protocol (WebTransport bidi stream or gRPC Streaming) and mpsc channels, then call `session::run_session()` for all business logic.
+### Client Mode (agent — for mobile SSH)
+
+```
+Flutter app (or any gRPC client)
+        │
+        │ gRPC (localhost)
+        ▼
++------------------------------------------+
+│ rterm-agent (runs on device)             │
+│                                          │
+│  rterm-service (same gRPC handlers)      │
+│       │                                  │
+│  rterm-session (same SessionManager)     │
+│       │                                  │
+│  Session = SshTransport + rterm-core     │
+│       │                                  │
+│  SshTransport ──── SSH ──── remote host  │
++------------------------------------------+
+```
+
+**Flutter does not know or care** which mode it is talking to. Same gRPC API,
+same proto, same behavior. The user picks "SSH direct" or "relay server"
+in connection settings.
+
+### Combined Mode (future)
+
+rterm-relay could also accept SSH connections alongside PTY sessions,
+making it a jump host / bastion. Same crate structure, just both
+Transport implementations active.
 
 ## Protocol
 
-### Serialization: FlatBuffers
-
-All messages are FlatBuffers-encoded. Defined once in rterm-proto, used by all crates.
+### FlatBuffers Messages
 
 ```
-Client -> Server:
-  ClientMessage {
-    KeyInput { data: [ubyte] }          -- keyboard input bytes (VT sequences)
-    PasteInput { text: string }         -- pasted text
-    Resize { cols: u16, rows: u16 }     -- terminal resize
-    MouseEvent { row, col, button,      -- mouse event (currently ignored)
-                 modifiers, kind }
-  }
+Client → Server:
+  KeyInput { data: [ubyte] }
+  PasteInput { text: string }
+  Resize { cols: u16, rows: u16 }
+  MouseEvent { row, col, button, modifiers, kind }
 
-Server -> Client:
-  ServerMessage {
-    ScreenUpdate {                      -- incremental screen diff
-      changes: [CellRange]              -- changed cell ranges
-      cursor: CursorState               -- cursor position + visibility
-      cols: u16, rows: u16              -- screen dimensions
-      title: string (optional)          -- window title
-    }
-    ScreenSnapshot {                    -- full screen state
-      rows: [CellRange]                -- all cells
-      cursor: CursorState
-      cols: u16, num_rows: u16
-      title: string (optional)
-      scrollback_len: u32
-    }
-    ScrollbackData {                    -- scrollback query response
-      lines: [CellRange]
-      offset: u32, total: u32
-    }
-    Exit { code: i32 }                 -- shell exited
-    Error { message: string }          -- error
-    Bell {}                            -- terminal bell
-  }
+Server → Client:
+  ScreenUpdate { changes: [CellRange], cursor, cols, rows, title }
+  ScreenSnapshot { rows: [CellRange], cursor, cols, num_rows, title, scrollback_len }
+  ScrollbackData { lines: [CellRange], offset, total }
+  Exit { code: i32 }
+  Error { message: string }
+  Bell {}
 
-CellRange {
-  row: u16, col_start: u16
-  cells: [Cell]                        -- contiguous changed cells
-}
-
-Cell {
-  ch: u32                              -- Unicode codepoint
-  fg: u32                              -- packed color (RGB, indexed, or default)
-  bg: u32                              -- packed color
-  attrs: u8                            -- bitflags (bold, italic, underline, etc.)
-}
+Cell { ch: u32, fg: u32, bg: u32, flags: u16 }
 ```
 
-Color packing: `0x00RRGGBB` for RGB, `0xFF0000II` for indexed, `0xFFFFFFFF` for default.
+Color packing: `0x00RRGGBB` (RGB), `0xFF0000II` (indexed), `0xFFFFFFFF` (default).
 
-Attribute bitflags: bold(1), italic(2), underline(4), strikethrough(8), reverse(16), dim(32), hidden(64).
-
-### Transport: Dual Path
-
-Two transport paths serve different client types:
-
-**1. WASM Browser Client (WebTransport + length-prefixed FlatBuffers)**
-
-```
-+-----------------------------------+
-|  FlatBuffers Messages             |
-|  (rterm-proto schema)             |
-+-----------------------------------+
-|  Length-prefixed framing           |
-|  (4-byte BE length + payload)     |
-+-----------------------------------+
-|  WebTransport bidi stream         |
-+-----------------------------------+
-|  HTTP/3 (QUIC/UDP)               |
-|  Browser: WebTransport API        |
-+-----------------------------------+
-```
-
-The WASM client (rterm-wasm) opens a WebTransport connection to the relay, creates a bidi stream, and exchanges length-prefixed FlatBuffers messages directly. This is simpler than gRPC framing since it runs on a raw bidi stream.
-
-**2. Native gRPC Client (gRPC/H3 via pure-grpc-rs)**
-
-```
-+-----------------------------------+
-|  FlatBuffers Messages             |
-|  (rterm-proto schema)             |
-+-----------------------------------+
-|  gRPC framing                     |
-|  (length-prefixed messages)       |
-+-----------------------------------+
-|  HTTP/3                           |
-|  (QUIC/UDP via quinn)             |
-+-----------------------------------+
-```
-
-Native clients (e.g., the rterm-gui demo) use standard gRPC bidi streaming over HTTP/3 via pure-grpc-rs with the FlatBuffers codec.
+Flags: u16 bitfield matching alacritty layout (BOLD, ITALIC, UNDERLINE,
+DOUBLE_UNDERLINE, UNDERCURL, DOTTED_UNDERLINE, DASHED_UNDERLINE, DIM,
+INVERSE, HIDDEN, STRIKEOUT, WIDE_CHAR, WIDE_CHAR_SPACER, WRAPLINE).
 
 ### gRPC Service
 
 ```
 service TerminalService {
+  // Streaming session (browser/native)
   rpc Session (stream ClientMessage) returns (stream ServerMessage);
+
+  // Automation API (unary RPCs)
+  rpc ListActiveSessions (Request) returns (Response);
+  rpc CreateSession (Request) returns (Response);
+  rpc KillSession (Request) returns (Response);
+  rpc ResizeSession (Request) returns (Response);
+  rpc TypeAction (Request) returns (Response);
+  rpc SendKeys (Request) returns (Response);
+  rpc PressKeys (Request) returns (Response);
+  rpc GetSnapshot (Request) returns (Response);
+  rpc WaitForText (Request) returns (Response);
+  rpc RunCommand (Request) returns (Response);
 }
 ```
 
-One bidi streaming RPC per terminal session. Used by native gRPC clients. The server runs VT emulation and sends typed screen updates -- clients never see raw escape sequences.
+### Transport Paths
 
-### Connection Flow
-
-#### WASM Browser Client
-
-```
-1. Browser loads WASM bundle from rterm-relay HTTPS server (TCP:4433)
-2. Server injects cert hash into HTML as window.__RTERM_CERT_HASH__
-3. WASM reads cert hash and connects via WebTransport (QUIC:4433)
-   using serverCertificateHashes for self-signed cert trust
-4. Client opens a bidi stream
-5. Client sends length-prefixed Resize(cols, rows) as first message
-6. Server spawns PTY with that size, creates VT emulator
-7. Server sends ScreenSnapshot (full initial screen state)
-8. Bidirectional streaming:
-   - Client sends KeyInput/PasteInput for keyboard/paste input
-   - Client sends Resize on window resize
-   - Server feeds PTY output through VT emulator
-   - Server diffs screen state and sends ScreenUpdate (changed cells only)
-   - Synchronized output (CSI ?2026) suppresses updates during batches
-9. Server sends Exit(code) when shell dies
-10. Stream closes, connection closes
-```
-
-#### Native gRPC Client
-
-```
-1. Client connects via HTTP/3 (QUIC handshake)
-2. Client opens gRPC bidi stream (TerminalService.Session)
-3. Client sends Resize(cols, rows) as first message
-4. Server spawns PTY, creates VT emulator
-5. Server sends ScreenSnapshot (full initial screen state)
-6. Bidirectional streaming via gRPC:
-   - Client sends KeyInput/PasteInput/Resize/MouseEvent
-   - Server sends ScreenUpdate/ScreenSnapshot/ScrollbackData/Bell
-7. Server sends Exit(code) when shell dies
-8. gRPC stream closes, QUIC connection closes
-```
-
-## Composable Server Architecture
-
-### Trait Boundaries
-
-- **PtySpawner trait**: Abstracts PTY creation. `RealPtySpawner` uses portable-pty; `FakePtySpawner` uses in-memory channels for testing.
-- **PtyHandle**: Data bag with three channels (`stdin_tx`, `stdout_rx`, `resize_tx`). No methods.
-- **Channel-based transport**: `session::run_session` accepts `mpsc::Receiver<ClientMsg>` and `mpsc::Sender<ServerMsg>` -- no trait objects for transport.
-
-### Screen Diffing
-
-- **PrevScreen**: Tracks previous screen state (packed cells). `diff()` compares current ScreenBuffer against previous state and returns `ScreenUpdateData` with only changed cell ranges.
-- **snapshot()**: Creates a full `ScreenSnapshotData` from the current buffer state. Used for initial connection and resize.
-- Cell data is packed into CellRange runs for efficient transmission.
+| Client | Transport | Use case |
+|--------|-----------|----------|
+| rterm-wasm (browser) | WebTransport bidi stream (QUIC) | Browser terminal |
+| rterm-gui (desktop) | gRPC/H3 (QUIC) | Desktop demo |
+| rterm-cli | gRPC/H2 (TLS) | Automation |
+| Flutter app (mobile) | gRPC/H2 (localhost, plaintext) | Mobile SSH client |
 
 ## Platform Architecture
-
-### Desktop (Linux/macOS/Windows)
-
-```
-rterm-shell (native binary) [NOT YET IMPLEMENTED]
-  |
-  +-- Opens WebView (webkit2gtk / WKWebView / WebView2)
-  |     Loads egui WASM bundle from embedded assets
-  |
-  +-- Spawns PTY via portable-pty (local shell: bash/zsh)
-  |
-  +-- Runs localhost gRPC/HTTP/3 server (TerminalService)
-        WASM connects via WebTransport -> gRPC
-```
-
-Currently, a native egui demo exists (rterm-gui example) that connects to rterm-relay via gRPC/H3 without a WebView.
 
 ### Browser
 
 ```
-rterm-relay serves the WASM bundle over HTTPS (TCP:4433, hyper)
-  |
-  +-- egui WASM runs in browser tab
-  |
-  +-- Connects to rterm-relay via WebTransport (QUIC:4433)
-  |     Uses length-prefixed FlatBuffers on bidi stream
-  |
-  +-- Cert hash auto-injected into HTML by relay server
-  |
-  +-- Server runs VT emulator, sends typed screen updates
+rterm-relay serves WASM bundle over HTTPS
+  → egui WASM runs in browser tab
+  → Connects via WebTransport to relay
+  → Server-side VT emulation, typed screen updates
 ```
 
-### Mobile (Android/iOS)
+### Desktop
 
 ```
-rterm-shell (native app with system WebView) [NOT YET IMPLEMENTED]
-  |
-  +-- Opens WebView (System WebView / WKWebView)
-  |     Loads egui WASM bundle from app assets
-  |
-  +-- Connects to remote rterm-relay via WebTransport
-       (no local PTY on mobile)
+rterm-gui connects to rterm-relay via gRPC/H3
+  → or: rterm-agent runs locally with SshTransport
+  → egui renders cell grid natively
+```
+
+### Mobile (Flutter)
+
+```
+rterm-agent runs as a local process on the device
+  → Manages SSH connections + VT emulation
+  → Exposes gRPC on localhost
+
+Flutter app connects to localhost gRPC
+  → Session list, accessory key bar, settings (Dart)
+  → Terminal rendering (Flutter CustomPaint or WebView with egui)
+
+Alternatively: Flutter connects directly to a remote rterm-relay
+  → Same gRPC API, no local agent needed
 ```
 
 ## Data Flow
 
-```
-Keyboard/Mouse (egui event)
-  -> Input Handler (encode to VT sequences)
-  -> Transport send (FlatBuffers ClientMessage::KeyInput/PasteInput)
-  -> WebTransport bidi stream (QUIC/UDP)
-  -> PTY stdin
-  -> Shell process
-  -> PTY stdout
-  -> Terminal.feed() (server-side VT emulation)
-  -> Screen buffer mutations (cursor, colors, text, scroll)
-  -> Synchronized output check (skip diff during CSI ?2026 h batch)
-  -> PrevScreen.diff() (compare against previous state)
-  -> ScreenUpdate with changed CellRanges
-  -> FlatBuffers ServerMessage::ScreenUpdate
-  -> WebTransport bidi stream (QUIC/UDP)
-  -> Client applies cell changes to local screen state
-  -> egui render loop paints cells
-  -> Monospace cell grid rendered to WebGL canvas
-```
-
-## Font Rendering Pipeline
-
-Currently using egui's built-in monospace font rendering. The planned custom pipeline:
+### Server mode (relay)
 
 ```
-rustybuzz (text shaping, ligatures, kerning)
-  -> fontdue (glyph rasterization to bitmaps)
-  -> Texture atlas (CPU-side, packed glyph bitmaps)
-  -> WebGL/WebGPU texture (uploaded to GPU)
-  -> egui Mesh quads with UV coordinates (render from atlas)
+Keyboard → Client (VT encode) → gRPC/WebTransport → relay
+  → PTY stdin → Shell → PTY stdout
+  → Terminal.feed() (server VT emulation)
+  → PrevScreen.diff() → ScreenUpdate
+  → gRPC/WebTransport → Client → render cells
 ```
 
-Bundled font (planned): JetBrains Mono.
-TODO: Custom font loading / system font discovery.
+### Client mode (agent)
+
+```
+Keyboard → Flutter → gRPC (localhost) → rterm-agent
+  → SshTransport.write() → SSH channel → remote host
+  → SSH channel → SshTransport.read()
+  → Terminal.feed() (local VT emulation)
+  → PrevScreen.diff() → ScreenUpdate
+  → gRPC (localhost) → Flutter → render cells
+```
+
+## Extraction Plan
+
+What moves out of rterm-relay into shared crates:
+
+| Current location | Moves to | What |
+|-----------------|----------|------|
+| relay/managed_session.rs | rterm-session | Session + VT + screen state |
+| relay/session_manager.rs | rterm-session | Named session registry |
+| relay/screen_diff.rs | rterm-session | Screen diffing |
+| relay/service.rs (gRPC handlers) | rterm-service | TerminalService impl |
+| relay/service.rs (RunCommand etc) | rterm-session | Automation logic |
+| relay/pty.rs | rterm-transport | PtyTransport + trait |
+| (new) russh wrapper | rterm-transport | SshTransport |
+| relay/main.rs | stays | Thin launcher |
+| relay/wt_server.rs | stays | WebTransport (relay-specific) |
+| relay/https_server.rs | stays | HTTPS static files (relay-specific) |
+
+## New Dependencies
+
+| Crate | Purpose | Pure Rust |
+|-------|---------|-----------|
+| russh | SSH client | Yes |
+| russh-keys | SSH key management | Yes |
+| async-trait | Async trait methods | Yes |
 
 ## Terminal Standard
 
 xterm-compatible, implemented in priority order:
 
-| Priority | Standard | What | Status |
-|---|---|---|---|
-| P0 | VT100 + VT220 core | Cursor, SGR 8-color, scroll regions, insert/delete, line drawing | Done |
-| P1 | xterm essentials | Alternate screen, 256/true color, cursor shapes, window title | Mostly done (cursor shapes and window title TODO) |
-| P2 | Interaction | SGR mouse reporting, bracketed paste, focus events | Not started |
-| P3 | Modern baseline | Synchronized output, OSC 52 clipboard, OSC 8 hyperlinks, colored underlines | Sync output done, rest TODO |
-| P4 | Kitty keyboard | Progressive enhancement key encoding | Not started |
-| P5 | Graphics | Sixel / Kitty graphics protocol | Not started |
+| Priority | Standard | Status |
+|----------|----------|--------|
+| P0 | VT100 + VT220 core (cursor, SGR, scroll regions, insert/delete) | Done |
+| P1 | xterm essentials (alt screen, 256/true color, window title) | Mostly done |
+| P1.5 | Underline variants (double, undercurl, dotted, dashed) via SGR 4:x | Done |
+| P2 | Interaction (SGR mouse, bracketed paste, focus events) | Partial |
+| P3 | Modern baseline (sync output, OSC 52 clipboard, OSC 8 hyperlinks) | Sync done |
+| P4 | Kitty keyboard protocol | Not started |
+| P5 | Sixel / Kitty graphics | Not started |
 
 ## Key Dependencies
 
 | Crate | Purpose |
-|---|---|
-| flatbuffers-rs | FlatBuffers compiler + runtime (Shuozeli) |
-| pure-grpc-rs | gRPC framework with FlatBuffers codec and H3 transport (Shuozeli) |
-| quinn | QUIC/HTTP/3 implementation (rterm-relay) |
-| h3 / h3-quinn / h3-webtransport | HTTP/3 and WebTransport server (rterm-relay) |
-| web-sys | WebTransport API bindings (rterm-wasm) |
-| vte | VT escape sequence parser |
-| egui + eframe | GUI framework (compiles to WASM) |
-| wasm-bindgen | WASM interop (rterm-wasm) |
-| portable-pty | Cross-platform PTY (rterm-relay) |
-| hyper | HTTPS page server (rterm-relay) |
-| rustls / tokio-rustls | TLS for HTTPS and QUIC |
-| rcgen | Self-signed certificate generation |
-
-Planned (not yet in use): rustybuzz (text shaping), fontdue (glyph rasterization), unicode-width (character width), wry (WebView for rterm-shell).
-
-## Configuration
-
-| Platform | Source | Storage |
-|---|---|---|
-| Desktop | TOML file | ~/.config/rterm/config.toml |
-| Browser | localStorage | Browser localStorage |
-| Mobile | localStorage | App WebView localStorage |
-
-All platforms have compiled-in defaults. Config is optional.
+|-------|---------|
+| vte | VT escape sequence parser (rterm-core) |
+| bitflags | Cell attribute flags (rterm-core) |
+| unicode-width | Character width (rterm-core) |
+| flatbuffers-rs | FlatBuffers codec (rterm-proto) |
+| pure-grpc-rs | gRPC framework + H3 transport (rterm-service) |
+| quinn | QUIC/HTTP/3 (rterm-relay) |
+| h3 / h3-webtransport | WebTransport server (rterm-relay) |
+| portable-pty | PTY abstraction (rterm-transport) |
+| russh | SSH client (rterm-transport) |
+| egui + eframe | GUI framework (rterm-gui, rterm-wasm) |
+| web-sys | WebTransport API (rterm-wasm) |

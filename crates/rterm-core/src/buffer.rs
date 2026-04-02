@@ -48,6 +48,14 @@ pub struct ScreenBuffer {
     /// Both 0-indexed. Defaults to (0, rows-1).
     scroll_top: usize,
     scroll_bottom: usize,
+    /// Tab stops: one entry per column. `true` = tab stop set.
+    /// Initialized with stops every 8 columns.
+    tab_stops: Vec<bool>,
+}
+
+/// Build initial tab stops for `cols` columns (every 8 columns).
+fn default_tab_stops(cols: usize) -> Vec<bool> {
+    (0..cols).map(|c| c > 0 && c % 8 == 0).collect()
 }
 
 impl ScreenBuffer {
@@ -64,6 +72,7 @@ impl ScreenBuffer {
             pen: Pen::default(),
             scroll_top: 0,
             scroll_bottom: rows - 1,
+            tab_stops: default_tab_stops(cols),
         }
     }
 
@@ -96,6 +105,21 @@ impl ScreenBuffer {
         // Reset scroll region to full screen.
         self.scroll_top = 0;
         self.scroll_bottom = new_rows - 1;
+
+        // Extend or truncate tab stops.
+        self.tab_stops.resize(new_cols, false);
+        // Ensure default tab stops for newly added columns.
+        for c in 0..new_cols {
+            if c >= self.tab_stops.len() {
+                break;
+            }
+            // Only set default stops for columns beyond the old width.
+            // Keep existing stops for columns that existed before.
+        }
+        // Actually, just rebuild if the width changed.
+        if new_cols != self.tab_stops.len() {
+            self.tab_stops = default_tab_stops(new_cols);
+        }
     }
 
     pub fn cols(&self) -> usize {
@@ -234,6 +258,77 @@ impl ScreenBuffer {
         self.cursor_down_with_scroll();
     }
 
+    // --- Tab Stops ---
+
+    /// Set a tab stop at the current cursor column (HTS / ESC H).
+    pub fn set_tab_stop(&mut self) {
+        let col = self.cursor.col;
+        if col < self.cols {
+            self.tab_stops[col] = true;
+        }
+    }
+
+    /// Clear tab stops (TBC / CSI g).
+    /// mode 0: clear at cursor column only.
+    /// mode 3: clear all tab stops.
+    pub fn clear_tab_stop(&mut self, mode: u16) {
+        match mode {
+            0 => {
+                let col = self.cursor.col;
+                if col < self.cols {
+                    self.tab_stops[col] = false;
+                }
+            }
+            3 => {
+                for stop in &mut self.tab_stops {
+                    *stop = false;
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// Advance cursor forward by `n` tab stops (CHT / CSI I).
+    pub fn cursor_forward_tab(&mut self, n: usize) {
+        for _ in 0..n {
+            let start = self.cursor.col + 1;
+            let mut found = false;
+            for c in start..self.cols {
+                if self.tab_stops[c] {
+                    self.cursor.col = c;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                self.cursor.col = self.cols - 1;
+                break;
+            }
+        }
+    }
+
+    /// Move cursor backward by `n` tab stops (CBT / CSI Z).
+    pub fn cursor_backward_tab(&mut self, n: usize) {
+        for _ in 0..n {
+            if self.cursor.col == 0 {
+                break;
+            }
+            let start = self.cursor.col - 1;
+            let mut found = false;
+            for c in (0..=start).rev() {
+                if self.tab_stops[c] {
+                    self.cursor.col = c;
+                    found = true;
+                    break;
+                }
+            }
+            if !found {
+                self.cursor.col = 0;
+                break;
+            }
+        }
+    }
+
     // --- Scroll ---
 
     /// Set the scroll region (1-indexed top and bottom, inclusive).
@@ -338,6 +433,16 @@ impl ScreenBuffer {
         }
     }
 
+    /// Erase `n` characters at the cursor position without moving the cursor (ECH / CSI X).
+    pub fn erase_chars(&mut self, n: usize) {
+        let row = self.cursor.row;
+        let col = self.cursor.col;
+        let end = (col + n).min(self.cols);
+        for c in col..end {
+            self.grid[row][c].reset();
+        }
+    }
+
     fn clear_row(&mut self, row: usize) {
         for col in 0..self.cols {
             self.grid[row][col].reset();
@@ -426,6 +531,7 @@ impl ScreenBuffer {
         self.pen = Pen::default();
         self.scroll_top = 0;
         self.scroll_bottom = self.rows - 1;
+        self.tab_stops = default_tab_stops(self.cols);
     }
 
     /// Extract the text content of a row as a string (trimming trailing spaces).
@@ -806,8 +912,8 @@ mod tests {
     #[test]
     fn unicode_wide_char_test() {
         let mut buf = ScreenBuffer::new(20, 3);
-        buf.write_char('世');
-        assert_eq!(buf.cell(0, 0).ch, '世');
+        buf.write_char('\u{4e16}');
+        assert_eq!(buf.cell(0, 0).ch, '\u{4e16}');
         assert!(buf.cell(0, 0).flags.contains(Flags::WIDE_CHAR));
         assert!(buf.cell(0, 1).flags.contains(Flags::WIDE_CHAR_SPACER));
         assert_eq!(buf.cursor.col, 2);
@@ -816,15 +922,125 @@ mod tests {
     #[test]
     fn wide_char_sets_wide_flag_on_left_cell() {
         let mut buf = ScreenBuffer::new(20, 3);
-        buf.write_char('世');
+        buf.write_char('\u{4e16}');
         // Left cell has WIDE_CHAR flag
         let left = buf.cell(0, 0);
-        assert_eq!(left.ch, '世');
+        assert_eq!(left.ch, '\u{4e16}');
         assert!(left.flags.contains(Flags::WIDE_CHAR));
         assert!(!left.flags.contains(Flags::WIDE_CHAR_SPACER));
         // Right cell has WIDE_CHAR_SPACER flag
         let right = buf.cell(0, 1);
         assert!(right.flags.contains(Flags::WIDE_CHAR_SPACER));
         assert!(!right.flags.contains(Flags::WIDE_CHAR));
+    }
+
+    // --- Tab stop tests ---
+
+    #[test]
+    fn default_tab_stops_every_8() {
+        let buf = ScreenBuffer::new(80, 1);
+        // col 0 is NOT a tab stop, cols 8, 16, 24, ... are.
+        assert!(!buf.tab_stops[0]);
+        assert!(buf.tab_stops[8]);
+        assert!(buf.tab_stops[16]);
+        assert!(buf.tab_stops[24]);
+        assert!(!buf.tab_stops[7]);
+    }
+
+    #[test]
+    fn cursor_forward_tab_basic() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.cursor.col = 0;
+        buf.cursor_forward_tab(1);
+        assert_eq!(buf.cursor.col, 8);
+        buf.cursor_forward_tab(1);
+        assert_eq!(buf.cursor.col, 16);
+    }
+
+    #[test]
+    fn cursor_forward_tab_multiple() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.cursor.col = 0;
+        buf.cursor_forward_tab(3);
+        assert_eq!(buf.cursor.col, 24);
+    }
+
+    #[test]
+    fn cursor_backward_tab_basic() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.cursor.col = 20;
+        buf.cursor_backward_tab(1);
+        assert_eq!(buf.cursor.col, 16);
+        buf.cursor_backward_tab(1);
+        assert_eq!(buf.cursor.col, 8);
+    }
+
+    #[test]
+    fn cursor_backward_tab_at_zero() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.cursor.col = 3;
+        buf.cursor_backward_tab(1);
+        assert_eq!(buf.cursor.col, 0); // no tab stop found, go to 0
+    }
+
+    #[test]
+    fn set_and_clear_tab_stop() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        // Set a custom tab stop at col 5.
+        buf.cursor.col = 5;
+        buf.set_tab_stop();
+        assert!(buf.tab_stops[5]);
+
+        // Forward tab from col 0 should now go to 5 (before 8).
+        buf.cursor.col = 0;
+        buf.cursor_forward_tab(1);
+        assert_eq!(buf.cursor.col, 5);
+
+        // Clear at cursor (col 5).
+        buf.clear_tab_stop(0);
+        assert!(!buf.tab_stops[5]);
+
+        // Now forward tab from 0 should go to 8 again.
+        buf.cursor.col = 0;
+        buf.cursor_forward_tab(1);
+        assert_eq!(buf.cursor.col, 8);
+    }
+
+    #[test]
+    fn clear_all_tab_stops() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.clear_tab_stop(3); // clear all
+        // No tab stops -- forward tab should go to last column.
+        buf.cursor.col = 0;
+        buf.cursor_forward_tab(1);
+        assert_eq!(buf.cursor.col, 79);
+    }
+
+    #[test]
+    fn erase_chars_basic() {
+        let mut buf = ScreenBuffer::new(10, 1);
+        for ch in "ABCDEFGH".chars() {
+            buf.write_char(ch);
+        }
+        buf.cursor.col = 2;
+        buf.erase_chars(3);
+        assert_eq!(buf.cell(0, 0).ch, 'A');
+        assert_eq!(buf.cell(0, 1).ch, 'B');
+        assert_eq!(buf.cell(0, 2).ch, ' '); // erased
+        assert_eq!(buf.cell(0, 3).ch, ' '); // erased
+        assert_eq!(buf.cell(0, 4).ch, ' '); // erased
+        assert_eq!(buf.cell(0, 5).ch, 'F'); // not erased
+        // Cursor should NOT have moved.
+        assert_eq!(buf.cursor.col, 2);
+    }
+
+    #[test]
+    fn reset_restores_tab_stops() {
+        let mut buf = ScreenBuffer::new(80, 1);
+        buf.clear_tab_stop(3); // clear all
+        buf.reset();
+        // Tab stops should be restored to defaults.
+        assert!(buf.tab_stops[8]);
+        assert!(buf.tab_stops[16]);
     }
 }
