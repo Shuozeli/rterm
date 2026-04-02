@@ -1,4 +1,4 @@
-use crate::cell::{Cell, CellAttributes};
+use crate::cell::{Cell, Flags};
 use crate::color::Color;
 
 /// Cursor position and state.
@@ -27,7 +27,7 @@ impl Default for Cursor {
 pub struct Pen {
     pub fg: Color,
     pub bg: Color,
-    pub attrs: CellAttributes,
+    pub flags: Flags,
 }
 
 /// Terminal screen buffer: a 2D grid of cells with cursor, scroll region,
@@ -138,11 +138,15 @@ impl ScreenBuffer {
         let col = self.cursor.col;
 
         // If we're overwriting a wide char's continuation, clear the left half too.
-        if col > 0 && self.grid[row][col].wide_continuation {
+        if col > 0 && self.grid[row][col].flags.contains(Flags::WIDE_CHAR_SPACER) {
             self.grid[row][col - 1].reset();
         }
         // If we're overwriting the left half of a wide char, clear the continuation.
-        if col + 1 < self.cols && self.grid[row][col + 1].wide_continuation {
+        if col + 1 < self.cols
+            && self.grid[row][col + 1]
+                .flags
+                .contains(Flags::WIDE_CHAR_SPACER)
+        {
             self.grid[row][col + 1].reset();
         }
 
@@ -150,18 +154,21 @@ impl ScreenBuffer {
             ch,
             fg: self.pen.fg,
             bg: self.pen.bg,
-            attrs: self.pen.attrs,
-            wide_continuation: false,
+            flags: self.pen.flags
+                | if wide {
+                    Flags::WIDE_CHAR
+                } else {
+                    Flags::empty()
+                },
         };
 
         if wide && col + 1 < self.cols {
-            // Mark the next cell as a wide continuation.
+            // Mark the next cell as a wide continuation (spacer).
             self.grid[row][col + 1] = Cell {
                 ch: ' ',
                 fg: self.pen.fg,
                 bg: self.pen.bg,
-                attrs: self.pen.attrs,
-                wide_continuation: true,
+                flags: self.pen.flags | Flags::WIDE_CHAR_SPACER,
             };
             self.cursor.col += 2;
         } else {
@@ -468,11 +475,11 @@ mod tests {
     fn write_char_with_pen() {
         let mut buf = ScreenBuffer::new(80, 24);
         buf.pen.fg = Color::RED;
-        buf.pen.attrs.bold = true;
+        buf.pen.flags.insert(Flags::BOLD);
         buf.write_char('X');
         let cell = buf.cell(0, 0);
         assert_eq!(cell.fg, Color::RED);
-        assert!(cell.attrs.bold);
+        assert!(cell.flags.contains(Flags::BOLD));
     }
 
     #[test]
@@ -794,5 +801,30 @@ mod tests {
         let mut buf = ScreenBuffer::new(80, 24);
         buf.set_scroll_region(10, 5); // top > bottom -- should be ignored
         // Scroll region should remain at defaults (0, 23)
+    }
+
+    #[test]
+    fn unicode_wide_char_test() {
+        let mut buf = ScreenBuffer::new(20, 3);
+        buf.write_char('世');
+        assert_eq!(buf.cell(0, 0).ch, '世');
+        assert!(buf.cell(0, 0).flags.contains(Flags::WIDE_CHAR));
+        assert!(buf.cell(0, 1).flags.contains(Flags::WIDE_CHAR_SPACER));
+        assert_eq!(buf.cursor.col, 2);
+    }
+
+    #[test]
+    fn wide_char_sets_wide_flag_on_left_cell() {
+        let mut buf = ScreenBuffer::new(20, 3);
+        buf.write_char('世');
+        // Left cell has WIDE_CHAR flag
+        let left = buf.cell(0, 0);
+        assert_eq!(left.ch, '世');
+        assert!(left.flags.contains(Flags::WIDE_CHAR));
+        assert!(!left.flags.contains(Flags::WIDE_CHAR_SPACER));
+        // Right cell has WIDE_CHAR_SPACER flag
+        let right = buf.cell(0, 1);
+        assert!(right.flags.contains(Flags::WIDE_CHAR_SPACER));
+        assert!(!right.flags.contains(Flags::WIDE_CHAR));
     }
 }

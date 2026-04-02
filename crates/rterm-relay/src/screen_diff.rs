@@ -1,7 +1,6 @@
 /// Screen differ: compares terminal screen state between frames
 /// and produces typed ScreenUpdate messages with only changed cells.
 use rterm_core::buffer::ScreenBuffer;
-use rterm_core::cell::CellAttributes;
 use rterm_core::color::Color;
 use rterm_proto::*;
 
@@ -14,44 +13,13 @@ pub fn pack_color(color: &Color) -> u32 {
     }
 }
 
-/// Convert cell attributes to packed bitflags.
-pub fn pack_attrs(attrs: &CellAttributes) -> u8 {
-    let mut flags = 0u8;
-    if attrs.bold {
-        flags |= ATTR_BOLD;
-    }
-    if attrs.italic {
-        flags |= ATTR_ITALIC;
-    }
-    if attrs.underline {
-        flags |= ATTR_UNDERLINE;
-    }
-    if attrs.strikethrough {
-        flags |= ATTR_STRIKETHROUGH;
-    }
-    if attrs.reverse {
-        flags |= ATTR_REVERSE;
-    }
-    if attrs.dim {
-        flags |= ATTR_DIM;
-    }
-    if attrs.hidden {
-        flags |= ATTR_HIDDEN;
-    }
-    flags
-}
-
 /// Convert a screen buffer cell to a CellData.
 fn cell_to_data(cell: &rterm_core::Cell) -> CellData {
-    let mut attrs = pack_attrs(&cell.attrs);
-    if rterm_core::cell::is_wide_char(cell.ch) {
-        attrs |= ATTR_WIDE;
-    }
     CellData {
         ch: cell.ch,
         fg: pack_color(&cell.fg),
         bg: pack_color(&cell.bg),
-        attrs,
+        flags: cell.flags.bits(),
     }
 }
 
@@ -89,7 +57,7 @@ pub fn snapshot(buffer: &ScreenBuffer) -> ScreenSnapshotData {
 
 /// Previous screen state for diffing.
 pub struct PrevScreen {
-    cells: Vec<Vec<(char, u32, u32, u8)>>, // (ch, fg, bg, attrs)
+    cells: Vec<Vec<(char, u32, u32, u16)>>, // (ch, fg, bg, flags)
     cursor_row: u16,
     cursor_col: u16,
     cursor_visible: bool,
@@ -100,7 +68,7 @@ pub struct PrevScreen {
 impl PrevScreen {
     pub fn new(cols: usize, rows: usize) -> Self {
         Self {
-            cells: vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0); cols]; rows],
+            cells: vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0u16); cols]; rows],
             cursor_row: 0,
             cursor_col: 0,
             cursor_visible: true,
@@ -115,7 +83,7 @@ impl PrevScreen {
         let rows = ss.num_rows as usize;
         self.cols = cols;
         self.rows = rows;
-        self.cells = vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0); cols]; rows];
+        self.cells = vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0u16); cols]; rows];
 
         for cr in &ss.rows {
             let row = cr.row as usize;
@@ -123,7 +91,7 @@ impl PrevScreen {
                 for (i, cell) in cr.cells.iter().enumerate() {
                     let col = cr.col_start as usize + i;
                     if col < cols {
-                        self.cells[row][col] = (cell.ch, cell.fg, cell.bg, cell.attrs);
+                        self.cells[row][col] = (cell.ch, cell.fg, cell.bg, cell.flags);
                     }
                 }
             }
@@ -162,7 +130,7 @@ impl PrevScreen {
                     cell.ch,
                     pack_color(&cell.fg),
                     pack_color(&cell.bg),
-                    pack_attrs(&cell.attrs),
+                    cell.flags.bits(),
                 );
                 let old = self.cells[row][col];
 

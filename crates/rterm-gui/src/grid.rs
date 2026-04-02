@@ -1,7 +1,7 @@
 use crate::colors::to_egui_color;
 use egui::{Color32, FontFamily, FontId, Pos2, Rect, Sense, Ui, Vec2};
 use rterm_core::buffer::ScreenBuffer;
-use rterm_core::cell::CellAttributes;
+use rterm_core::cell::Flags;
 use rterm_core::color::Color;
 
 const DEFAULT_FG: Color32 = Color32::from_rgb(229, 229, 229);
@@ -65,7 +65,7 @@ impl Selection {
         if row == er {
             return col <= ec;
         }
-        true // middle row — fully selected
+        true // middle row -- fully selected
     }
 
     /// Extract selected text from the buffer.
@@ -133,7 +133,7 @@ pub fn terminal_grid(
     // Paint full background.
     painter.rect_filled(response.rect, 0.0, config.default_bg);
 
-    // Clip to grid bounds — prevents character overflow.
+    // Clip to grid bounds -- prevents character overflow.
     let grid_clip = Rect::from_min_size(origin, grid_size);
 
     for view_row in 0..rows {
@@ -141,8 +141,13 @@ pub fn terminal_grid(
 
         for col in 0..cols {
             let cell = buffer.cell(view_row, col);
-            let (fg, bg) = resolve_colors(cell.fg, cell.bg, cell.attrs.reverse, config);
-            let fg = apply_dim_hidden(fg, bg, &cell.attrs);
+            let (fg, bg) = resolve_colors(
+                cell.fg,
+                cell.bg,
+                cell.flags.contains(Flags::INVERSE),
+                config,
+            );
+            let fg = apply_dim_hidden(fg, bg, cell.flags);
 
             let cell_rect =
                 Rect::from_min_size(Pos2::new(origin.x + col as f32 * cell_size.x, y), cell_size);
@@ -157,8 +162,12 @@ pub fn terminal_grid(
                 painter.rect_filled(cell_rect, 0.0, SELECTION_BG);
             }
 
-            // Character — skip spaces unless decorated.
-            if cell.ch != ' ' || cell.attrs.underline || cell.attrs.strikethrough {
+            // Character -- skip spaces unless decorated.
+            if cell.ch != ' '
+                || cell
+                    .flags
+                    .intersects(Flags::ALL_UNDERLINES | Flags::STRIKEOUT)
+            {
                 // Clip to cell bounds to prevent wide chars from bleeding.
                 let clipped = painter.with_clip_rect(cell_rect.intersect(grid_clip));
                 clipped.text(
@@ -170,8 +179,8 @@ pub fn terminal_grid(
                 );
             }
 
-            // Underline.
-            if cell.attrs.underline {
+            // Single underline.
+            if cell.flags.contains(Flags::UNDERLINE) {
                 let line_y = cell_rect.max.y - 2.0;
                 painter.line_segment(
                     [
@@ -182,8 +191,80 @@ pub fn terminal_grid(
                 );
             }
 
+            // Double underline.
+            if cell.flags.contains(Flags::DOUBLE_UNDERLINE) {
+                let line_y1 = cell_rect.max.y - 3.0;
+                let line_y2 = cell_rect.max.y - 1.0;
+                painter.line_segment(
+                    [
+                        Pos2::new(cell_rect.min.x, line_y1),
+                        Pos2::new(cell_rect.max.x, line_y1),
+                    ],
+                    egui::Stroke::new(1.0, fg),
+                );
+                painter.line_segment(
+                    [
+                        Pos2::new(cell_rect.min.x, line_y2),
+                        Pos2::new(cell_rect.max.x, line_y2),
+                    ],
+                    egui::Stroke::new(1.0, fg),
+                );
+            }
+
+            // Undercurl -- approximate as a zigzag.
+            if cell.flags.contains(Flags::UNDERCURL) {
+                let base_y = cell_rect.max.y - 2.0;
+                let amp = 1.5_f32;
+                let steps = 6;
+                let step_w = cell_size.x / steps as f32;
+                let stroke = egui::Stroke::new(1.0, fg);
+                for i in 0..steps {
+                    let x0 = cell_rect.min.x + i as f32 * step_w;
+                    let x1 = x0 + step_w;
+                    let y0 = if i % 2 == 0 {
+                        base_y - amp
+                    } else {
+                        base_y + amp
+                    };
+                    let y1 = if i % 2 == 0 {
+                        base_y + amp
+                    } else {
+                        base_y - amp
+                    };
+                    painter.line_segment([Pos2::new(x0, y0), Pos2::new(x1, y1)], stroke);
+                }
+            }
+
+            // Dotted underline -- spaced small segments.
+            if cell.flags.contains(Flags::DOTTED_UNDERLINE) {
+                let line_y = cell_rect.max.y - 2.0;
+                let dot_len = 1.5_f32;
+                let gap = 2.5_f32;
+                let stroke = egui::Stroke::new(1.0, fg);
+                let mut x = cell_rect.min.x;
+                while x < cell_rect.max.x {
+                    let x_end = (x + dot_len).min(cell_rect.max.x);
+                    painter.line_segment([Pos2::new(x, line_y), Pos2::new(x_end, line_y)], stroke);
+                    x += dot_len + gap;
+                }
+            }
+
+            // Dashed underline -- longer segments.
+            if cell.flags.contains(Flags::DASHED_UNDERLINE) {
+                let line_y = cell_rect.max.y - 2.0;
+                let dash_len = 4.0_f32;
+                let gap = 2.0_f32;
+                let stroke = egui::Stroke::new(1.0, fg);
+                let mut x = cell_rect.min.x;
+                while x < cell_rect.max.x {
+                    let x_end = (x + dash_len).min(cell_rect.max.x);
+                    painter.line_segment([Pos2::new(x, line_y), Pos2::new(x_end, line_y)], stroke);
+                    x += dash_len + gap;
+                }
+            }
+
             // Strikethrough.
-            if cell.attrs.strikethrough {
+            if cell.flags.contains(Flags::STRIKEOUT) {
                 let line_y = cell_rect.center().y;
                 painter.line_segment(
                     [
@@ -231,10 +312,10 @@ fn resolve_colors(
     if reverse { (bg32, fg32) } else { (fg32, bg32) }
 }
 
-fn apply_dim_hidden(fg: Color32, bg: Color32, attrs: &CellAttributes) -> Color32 {
-    if attrs.hidden {
+fn apply_dim_hidden(fg: Color32, bg: Color32, flags: Flags) -> Color32 {
+    if flags.contains(Flags::HIDDEN) {
         bg
-    } else if attrs.dim {
+    } else if flags.contains(Flags::DIM) {
         // Dim: reduce brightness by ~40% (not 50% which is too dark).
         let dim = |v: u8| -> u8 { (v as u16 * 60 / 100) as u8 };
         Color32::from_rgba_premultiplied(dim(fg.r()), dim(fg.g()), dim(fg.b()), fg.a())
@@ -335,7 +416,7 @@ mod tests {
             end: Some((1, 5)),
             active: false,
         };
-        // Same as above — range() normalizes.
+        // Same as above -- range() normalizes.
         assert!(sel.contains(2, 0));
         assert!(sel.contains(1, 5));
     }

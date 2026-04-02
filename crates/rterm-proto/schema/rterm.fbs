@@ -95,9 +95,16 @@ struct Cell {
     ch: uint32;
     fg: uint32;
     bg: uint32;
-    /// bit 0-6: bold,italic,underline,strikethrough,reverse,dim,hidden
-    /// bit 7: wide (CJK double-width)
-    attrs: uint8;
+    /// Flags bitfield (u16), matches rterm_core::cell::Flags layout:
+    ///   bit  0: INVERSE           bit  8: HIDDEN
+    ///   bit  1: BOLD              bit  9: STRIKEOUT
+    ///   bit  2: ITALIC            bit 10: LEADING_WIDE_CHAR_SPACER
+    ///   bit  3: UNDERLINE         bit 11: DOUBLE_UNDERLINE
+    ///   bit  4: WRAPLINE          bit 12: UNDERCURL
+    ///   bit  5: WIDE_CHAR         bit 13: DOTTED_UNDERLINE
+    ///   bit  6: WIDE_CHAR_SPACER  bit 14: DASHED_UNDERLINE
+    ///   bit  7: DIM               bit 15: (reserved)
+    flags: uint16;
 }
 
 /// A contiguous range of cells on a single row.

@@ -1,5 +1,6 @@
 /// Detailed rendering test: feed real Claude Code output through the emulator
 /// and dump cell-by-cell state to find rendering issues.
+use rterm_core::cell::Flags;
 use rterm_core::{Color, Terminal};
 
 #[test]
@@ -29,10 +30,10 @@ fn claude_code_detailed_render() {
 
         for col in 0..80 {
             let cell = t.screen().cell(row, col);
-            if cell.attrs.underline {
+            if cell.flags.contains(Flags::UNDERLINE) {
                 has_underline = true;
             }
-            if cell.attrs.dim {
+            if cell.flags.contains(Flags::DIM) {
                 has_dim = true;
             }
             line.push(cell.ch);
@@ -56,22 +57,24 @@ fn claude_code_detailed_render() {
             let details: Vec<String> = (0..80)
                 .filter(|&c| {
                     let cell = t.screen().cell(row, c);
-                    cell.ch != ' ' || cell.attrs.underline || cell.bg != Color::Default
+                    cell.ch != ' '
+                        || cell.flags.contains(Flags::UNDERLINE)
+                        || cell.bg != Color::Default
                 })
                 .take(5)
                 .map(|c| {
                     let cell = t.screen().cell(row, c);
                     let mut attrs = Vec::new();
-                    if cell.attrs.bold {
+                    if cell.flags.contains(Flags::BOLD) {
                         attrs.push("B");
                     }
-                    if cell.attrs.dim {
+                    if cell.flags.contains(Flags::DIM) {
                         attrs.push("D");
                     }
-                    if cell.attrs.underline {
+                    if cell.flags.contains(Flags::UNDERLINE) {
                         attrs.push("U");
                     }
-                    if cell.attrs.reverse {
+                    if cell.flags.contains(Flags::INVERSE) {
                         attrs.push("R");
                     }
                     if cell.bg != Color::Default {
@@ -114,7 +117,7 @@ fn claude_code_detailed_render() {
     let mut underline_rows = Vec::new();
     for row in 0..24 {
         for col in 0..80 {
-            if t.screen().cell(row, col).attrs.underline {
+            if t.screen().cell(row, col).flags.contains(Flags::UNDERLINE) {
                 underline_rows.push(row);
                 break;
             }
@@ -127,7 +130,7 @@ fn claude_code_detailed_render() {
         );
         for &row in &underline_rows {
             let cells: Vec<String> = (0..80)
-                .filter(|&c| t.screen().cell(row, c).attrs.underline)
+                .filter(|&c| t.screen().cell(row, c).flags.contains(Flags::UNDERLINE))
                 .map(|c| format!("col{}:'{}'", c, t.screen().cell(row, c).ch))
                 .collect();
             println!("  Row {}: underlined cells: [{}]", row, cells.join(", "));
@@ -138,7 +141,9 @@ fn claude_code_detailed_render() {
     let mut dim_rows = Vec::new();
     for row in 0..24 {
         for col in 0..80 {
-            if t.screen().cell(row, col).attrs.dim && t.screen().cell(row, col).ch != ' ' {
+            if t.screen().cell(row, col).flags.contains(Flags::DIM)
+                && t.screen().cell(row, col).ch != ' '
+            {
                 dim_rows.push(row);
                 break;
             }

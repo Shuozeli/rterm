@@ -221,8 +221,8 @@ fn snapshot_to_json(snap: &ScreenSnapshotData, plain_text: &str) -> String {
     for row in &snap.rows {
         for cell in &row.cells {
             cells.push(format!(
-                r#"{{"row":{},"col":{},"ch":{:?},"fg":{},"bg":{},"attrs":{}}}"#,
-                row.row, row.col_start, cell.ch, cell.fg, cell.bg, cell.attrs
+                r#"{{"row":{},"col":{},"ch":{:?},"fg":{},"bg":{},"flags":{}}}"#,
+                row.row, row.col_start, cell.ch, cell.fg, cell.bg, cell.flags
             ));
         }
     }

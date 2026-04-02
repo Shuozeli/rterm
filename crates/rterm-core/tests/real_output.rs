@@ -2,6 +2,7 @@
 //! Verifies no panics, correct screen state, and proper handling of
 //! common escape sequences used by TUI apps.
 
+use rterm_core::cell::Flags;
 use rterm_core::{Color, Terminal};
 
 fn feed(t: &mut Terminal, s: &str) {
@@ -26,7 +27,7 @@ fn ls_color_output() {
     );
 
     assert_eq!(t.screen().cell(0, 0).ch, 'D');
-    assert!(t.screen().cell(0, 0).attrs.bold); // bold
+    assert!(t.screen().cell(0, 0).flags.contains(Flags::BOLD)); // bold
     assert_eq!(t.screen().cell(0, 0).fg, Color::Indexed(4)); // blue
 }
 
@@ -91,11 +92,11 @@ fn sgr_reset_mid_sequence() {
     feed(&mut t, "\x1b[1;31mBold Red\x1b[0m Normal");
     // "B" should be bold red.
     let b = t.screen().cell(0, 0);
-    assert!(b.attrs.bold);
+    assert!(b.flags.contains(Flags::BOLD));
     assert_eq!(b.fg, Color::Indexed(1));
     // "N" after reset should be default.
     let n = t.screen().cell(0, 9);
-    assert!(!n.attrs.bold);
+    assert!(!n.flags.contains(Flags::BOLD));
     assert_eq!(n.fg, Color::Default);
 }
 
@@ -104,9 +105,9 @@ fn sgr_multiple_attributes() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[1;3;4;31mX\x1b[0m"); // bold+italic+underline+red
     let c = t.screen().cell(0, 0);
-    assert!(c.attrs.bold);
-    assert!(c.attrs.italic);
-    assert!(c.attrs.underline);
+    assert!(c.flags.contains(Flags::BOLD));
+    assert!(c.flags.contains(Flags::ITALIC));
+    assert!(c.flags.contains(Flags::UNDERLINE));
     assert_eq!(c.fg, Color::Indexed(1));
 }
 
@@ -122,8 +123,8 @@ fn sgr_256_and_rgb() {
 fn sgr_reverse_video() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[7mX\x1b[27mY");
-    assert!(t.screen().cell(0, 0).attrs.reverse);
-    assert!(!t.screen().cell(0, 1).attrs.reverse);
+    assert!(t.screen().cell(0, 0).flags.contains(Flags::INVERSE));
+    assert!(!t.screen().cell(0, 1).flags.contains(Flags::INVERSE));
 }
 
 #[test]
@@ -214,7 +215,7 @@ fn tui_reverse_video_header() {
     let mut t = Terminal::new(80, 24);
     feed(&mut t, "\x1b[7m  PID  COMMAND \x1b[27m");
     let cell = t.screen().cell(0, 0);
-    assert!(cell.attrs.reverse);
+    assert!(cell.flags.contains(Flags::INVERSE));
     assert_eq!(cell.ch, ' ');
 }
 
@@ -299,9 +300,19 @@ fn unicode_characters() {
     feed(&mut t, "Hello 世界 🌍");
     assert_eq!(t.screen().cell(0, 0).ch, 'H');
     assert_eq!(t.screen().cell(0, 6).ch, '世'); // wide char at col 6
-    assert!(t.screen().cell(0, 7).wide_continuation); // col 7 is continuation
+    assert!(
+        t.screen()
+            .cell(0, 7)
+            .flags
+            .contains(Flags::WIDE_CHAR_SPACER)
+    ); // col 7 is continuation
     assert_eq!(t.screen().cell(0, 8).ch, '界'); // next wide char at col 8
-    assert!(t.screen().cell(0, 9).wide_continuation); // col 9 is continuation
+    assert!(
+        t.screen()
+            .cell(0, 9)
+            .flags
+            .contains(Flags::WIDE_CHAR_SPACER)
+    ); // col 9 is continuation
 }
 
 #[test]
@@ -443,7 +454,7 @@ fn ink_status_bar_at_bottom() {
     feed(&mut t, "\x1b[10;1H\x1b[7m Status: Ready \x1b[27m");
     let cell = t.screen().cell(9, 1);
     assert_eq!(cell.ch, 'S');
-    assert!(cell.attrs.reverse);
+    assert!(cell.flags.contains(Flags::INVERSE));
 }
 
 #[test]
@@ -500,7 +511,7 @@ fn xterm_private_mode_not_sgr_underline() {
     feed(&mut t, "\x1b[>4m"); // xterm modifyOtherKeys — NOT underline
     feed(&mut t, "Hello");
     assert!(
-        !t.screen().cell(0, 0).attrs.underline,
+        !t.screen().cell(0, 0).flags.contains(Flags::UNDERLINE),
         "CSI > 4 m should not set underline"
     );
 }

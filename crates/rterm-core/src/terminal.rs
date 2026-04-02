@@ -1,5 +1,5 @@
 use crate::buffer::ScreenBuffer;
-use crate::cell::CellAttributes;
+use crate::cell::Flags;
 use crate::color::Color;
 
 /// Terminal modes that affect behavior.
@@ -152,55 +152,72 @@ impl Terminal {
     }
 
     /// Handle SGR (Select Graphic Rendition) parameters.
+    /// Iterates over param groups to support sub-parameters (e.g., 4:2 for double underline).
     fn handle_sgr(&mut self, params: &vte::Params) {
-        // Collect params to avoid borrow conflicts with self.
-        let param_list: Vec<u16> = params.iter().flat_map(|p| p.iter().copied()).collect();
-        let mut i = 0;
+        // Collect param groups to avoid borrow conflicts with self.
+        let groups: Vec<Vec<u16>> = params.iter().map(|p| p.to_vec()).collect();
 
-        while i < param_list.len() {
-            let code = param_list[i];
-            i += 1;
+        for group in &groups {
+            if group.is_empty() {
+                continue;
+            }
+            let code = group[0];
 
             match code {
                 0 => {
                     let s = self.screen_mut();
                     s.pen.fg = Color::Default;
                     s.pen.bg = Color::Default;
-                    s.pen.attrs = CellAttributes::NORMAL;
+                    s.pen.flags = Flags::empty();
                 }
-                1 => self.screen_mut().pen.attrs.bold = true,
-                2 => self.screen_mut().pen.attrs.dim = true,
-                3 => self.screen_mut().pen.attrs.italic = true,
-                4 => self.screen_mut().pen.attrs.underline = true,
-                7 => self.screen_mut().pen.attrs.reverse = true,
-                8 => self.screen_mut().pen.attrs.hidden = true,
-                9 => self.screen_mut().pen.attrs.strikethrough = true,
-                21 => self.screen_mut().pen.attrs.bold = false,
-                22 => {
-                    let s = self.screen_mut();
-                    s.pen.attrs.bold = false;
-                    s.pen.attrs.dim = false;
+                1 => self.screen_mut().pen.flags.insert(Flags::BOLD),
+                2 => self.screen_mut().pen.flags.insert(Flags::DIM),
+                3 => self.screen_mut().pen.flags.insert(Flags::ITALIC),
+                4 => {
+                    let style = group.get(1).copied().unwrap_or(1);
+                    self.screen_mut().pen.flags.remove(Flags::ALL_UNDERLINES);
+                    match style {
+                        0 => {} // 4:0 = underline off
+                        2 => self.screen_mut().pen.flags.insert(Flags::DOUBLE_UNDERLINE),
+                        3 => self.screen_mut().pen.flags.insert(Flags::UNDERCURL),
+                        4 => self.screen_mut().pen.flags.insert(Flags::DOTTED_UNDERLINE),
+                        5 => self.screen_mut().pen.flags.insert(Flags::DASHED_UNDERLINE),
+                        _ => self.screen_mut().pen.flags.insert(Flags::UNDERLINE), // 1 or unrecognized
+                    }
                 }
-                23 => self.screen_mut().pen.attrs.italic = false,
-                24 => self.screen_mut().pen.attrs.underline = false,
-                27 => self.screen_mut().pen.attrs.reverse = false,
-                28 => self.screen_mut().pen.attrs.hidden = false,
-                29 => self.screen_mut().pen.attrs.strikethrough = false,
+                7 => self.screen_mut().pen.flags.insert(Flags::INVERSE),
+                8 => self.screen_mut().pen.flags.insert(Flags::HIDDEN),
+                9 => self.screen_mut().pen.flags.insert(Flags::STRIKEOUT),
+                // SGR 21: DOUBLE_UNDERLINE (standard behavior; was non-standard bold-off)
+                21 => self.screen_mut().pen.flags.insert(Flags::DOUBLE_UNDERLINE),
+                22 => self.screen_mut().pen.flags.remove(Flags::BOLD | Flags::DIM),
+                23 => self.screen_mut().pen.flags.remove(Flags::ITALIC),
+                24 => self.screen_mut().pen.flags.remove(Flags::ALL_UNDERLINES),
+                27 => self.screen_mut().pen.flags.remove(Flags::INVERSE),
+                28 => self.screen_mut().pen.flags.remove(Flags::HIDDEN),
+                29 => self.screen_mut().pen.flags.remove(Flags::STRIKEOUT),
 
                 30..=37 => self.screen_mut().pen.fg = Color::Indexed((code - 30) as u8),
                 38 => {
-                    if let Some((color, consumed)) = Self::parse_extended_color(&param_list[i..]) {
-                        self.screen_mut().pen.fg = color;
-                        i += consumed;
+                    // Extended color: sub-params in same group (38:5:n or 38:2:r:g:b),
+                    // or legacy semicolon-separated params (handled via next groups).
+                    if group.len() >= 3 && group[1] == 5 {
+                        self.screen_mut().pen.fg = Color::Indexed(group[2] as u8);
+                    } else if group.len() >= 5 && group[1] == 2 {
+                        self.screen_mut().pen.fg =
+                            Color::Rgb(group[2] as u8, group[3] as u8, group[4] as u8);
                     }
+                    // Legacy semicolon form is handled below via remaining_groups
                 }
                 39 => self.screen_mut().pen.fg = Color::Default,
 
                 40..=47 => self.screen_mut().pen.bg = Color::Indexed((code - 40) as u8),
                 48 => {
-                    if let Some((color, consumed)) = Self::parse_extended_color(&param_list[i..]) {
-                        self.screen_mut().pen.bg = color;
-                        i += consumed;
+                    if group.len() >= 3 && group[1] == 5 {
+                        self.screen_mut().pen.bg = Color::Indexed(group[2] as u8);
+                    } else if group.len() >= 5 && group[1] == 2 {
+                        self.screen_mut().pen.bg =
+                            Color::Rgb(group[2] as u8, group[3] as u8, group[4] as u8);
                     }
                 }
                 49 => self.screen_mut().pen.bg = Color::Default,
@@ -210,6 +227,40 @@ impl Terminal {
 
                 _ => {}
             }
+        }
+
+        // Handle legacy semicolon-separated 38/48 color forms:
+        // e.g., ESC[38;5;200m sends groups [[38],[5],[200]].
+        // We need a second pass over the flat list for this.
+        self.handle_sgr_legacy_extended_colors(params);
+    }
+
+    /// Second-pass handler for legacy semicolon-extended colors (38;5;n, 38;2;r;g;b).
+    /// The main handle_sgr loop handles colon sub-params (38:5:n).
+    /// This handles the semicolon form where each number is a separate group.
+    fn handle_sgr_legacy_extended_colors(&mut self, params: &vte::Params) {
+        let flat: Vec<u16> = params.iter().flat_map(|p| p.iter().copied()).collect();
+        let mut i = 0;
+        while i < flat.len() {
+            let code = flat[i];
+            match code {
+                38 => {
+                    if let Some((color, consumed)) = Self::parse_extended_color(&flat[i + 1..]) {
+                        self.screen_mut().pen.fg = color;
+                        i += 1 + consumed;
+                        continue;
+                    }
+                }
+                48 => {
+                    if let Some((color, consumed)) = Self::parse_extended_color(&flat[i + 1..]) {
+                        self.screen_mut().pen.bg = color;
+                        i += 1 + consumed;
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+            i += 1;
         }
     }
 
@@ -495,13 +546,13 @@ mod tests {
         let cell = t.screen().cell(0, 0);
         assert_eq!(cell.ch, 'X');
         assert_eq!(cell.fg, Color::Indexed(1)); // red
-        assert!(cell.attrs.bold);
+        assert!(cell.flags.contains(Flags::BOLD));
 
         // After reset, pen should be default.
         feed(&mut t, "Y");
         let cell = t.screen().cell(0, 1);
         assert_eq!(cell.fg, Color::Default);
-        assert!(!cell.attrs.bold);
+        assert!(!cell.flags.contains(Flags::BOLD));
     }
 
     #[test]
@@ -675,8 +726,9 @@ mod tests {
         let cell = t.screen().cell(0, 0);
         assert_eq!(cell.ch, 's');
         assert_eq!(cell.fg, Color::Indexed(2)); // green
-        assert!(cell.attrs.bold);
+        assert!(cell.flags.contains(Flags::BOLD));
     }
+
     #[test]
     fn sync_mode() {
         let mut t = term();
@@ -704,31 +756,43 @@ mod tests {
             &mut t,
             "\x1b[2mD\x1b[3mI\x1b[4mU\x1b[7mR\x1b[8mH\x1b[9mS\x1b[0m",
         );
-        assert!(t.screen().cell(0, 0).attrs.dim);
-        assert!(t.screen().cell(0, 1).attrs.italic);
-        assert!(t.screen().cell(0, 2).attrs.underline);
-        assert!(t.screen().cell(0, 3).attrs.reverse);
-        assert!(t.screen().cell(0, 4).attrs.hidden);
-        assert!(t.screen().cell(0, 5).attrs.strikethrough);
+        assert!(t.screen().cell(0, 0).flags.contains(Flags::DIM));
+        assert!(t.screen().cell(0, 1).flags.contains(Flags::ITALIC));
+        assert!(t.screen().cell(0, 2).flags.contains(Flags::UNDERLINE));
+        assert!(t.screen().cell(0, 3).flags.contains(Flags::INVERSE));
+        assert!(t.screen().cell(0, 4).flags.contains(Flags::HIDDEN));
+        assert!(t.screen().cell(0, 5).flags.contains(Flags::STRIKEOUT));
     }
 
     #[test]
     fn sgr_reset_individual_attrs() {
         let mut t = term();
         feed(&mut t, "\x1b[1;2;3;4;7;8;9m");
-        feed(
-            &mut t,
-            "\x1b[21m\x1b[22m\x1b[23m\x1b[24m\x1b[27m\x1b[28m\x1b[29m",
-        );
+        // SGR 21 now sets DOUBLE_UNDERLINE (standard behavior), not bold-off.
+        // SGR 22 resets bold+dim, 23 italic, 24 all underlines, 27 inverse, 28 hidden, 29 strikeout.
+        feed(&mut t, "\x1b[22m\x1b[23m\x1b[24m\x1b[27m\x1b[28m\x1b[29m");
         feed(&mut t, "X");
         let c = t.screen().cell(0, 0);
-        assert!(!c.attrs.bold);
-        assert!(!c.attrs.dim);
-        assert!(!c.attrs.italic);
-        assert!(!c.attrs.underline);
-        assert!(!c.attrs.reverse);
-        assert!(!c.attrs.hidden);
-        assert!(!c.attrs.strikethrough);
+        assert!(!c.flags.contains(Flags::BOLD));
+        assert!(!c.flags.contains(Flags::DIM));
+        assert!(!c.flags.contains(Flags::ITALIC));
+        assert!(!c.flags.contains(Flags::UNDERLINE));
+        assert!(!c.flags.contains(Flags::INVERSE));
+        assert!(!c.flags.contains(Flags::HIDDEN));
+        assert!(!c.flags.contains(Flags::STRIKEOUT));
+    }
+
+    /// SGR 21 sets DOUBLE_UNDERLINE (standard behavior — BEHAVIOR CHANGE from old bold-off).
+    #[test]
+    fn sgr_21_sets_double_underline() {
+        let mut t = term();
+        feed(&mut t, "\x1b[1m"); // bold on
+        feed(&mut t, "\x1b[21m"); // double underline (NOT bold off)
+        feed(&mut t, "X");
+        let c = t.screen().cell(0, 0);
+        assert!(c.flags.contains(Flags::DOUBLE_UNDERLINE));
+        // Bold is NOT reset by SGR 21 (only by SGR 22).
+        assert!(c.flags.contains(Flags::BOLD));
     }
 
     #[test]
@@ -862,5 +926,89 @@ mod tests {
         assert!(t.modes.origin);
         feed(&mut t, "\x1b[?6l"); // DECOM off
         assert!(!t.modes.origin);
+    }
+
+    #[test]
+    fn sgr_underline_subparams() {
+        // SGR 4:2 -> DOUBLE_UNDERLINE
+        let mut t = term();
+        feed(&mut t, "\x1b[4:2mA");
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::DOUBLE_UNDERLINE));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::DOUBLE_UNDERLINE);
+
+        // SGR 4:3 -> UNDERCURL
+        let mut t = term();
+        feed(&mut t, "\x1b[4:3mB");
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::UNDERCURL));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::UNDERCURL);
+
+        // SGR 4:4 -> DOTTED_UNDERLINE
+        let mut t = term();
+        feed(&mut t, "\x1b[4:4mC");
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::DOTTED_UNDERLINE));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::DOTTED_UNDERLINE);
+
+        // SGR 4:5 -> DASHED_UNDERLINE
+        let mut t = term();
+        feed(&mut t, "\x1b[4:5mD");
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::DASHED_UNDERLINE));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::DASHED_UNDERLINE);
+
+        // SGR 4:0 -> remove underline
+        let mut t = term();
+        feed(&mut t, "\x1b[4m"); // set underline first
+        feed(&mut t, "\x1b[4:0mE");
+        let cell = t.screen().cell(0, 0);
+        assert!(!cell.flags.intersects(Flags::ALL_UNDERLINES));
+
+        // SGR 4:1 -> UNDERLINE (same as plain SGR 4)
+        let mut t = term();
+        feed(&mut t, "\x1b[4:1mF");
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::UNDERLINE));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::UNDERLINE);
+    }
+
+    #[test]
+    fn sgr_24_clears_all_underlines() {
+        let mut t = term();
+        feed(&mut t, "\x1b[4:3m"); // set UNDERCURL
+        feed(&mut t, "\x1b[24mA"); // SGR 24 clears all underlines
+        let cell = t.screen().cell(0, 0);
+        assert!(!cell.flags.intersects(Flags::ALL_UNDERLINES));
+    }
+
+    #[test]
+    fn sgr_4_colon_0_clears_underline() {
+        let mut t = term();
+        feed(&mut t, "\x1b[4m"); // set UNDERLINE
+        feed(&mut t, "\x1b[4:0mA"); // SGR 4:0 clears underline
+        let cell = t.screen().cell(0, 0);
+        assert!(!cell.flags.intersects(Flags::ALL_UNDERLINES));
+    }
+
+    #[test]
+    fn sgr_underline_style_switches() {
+        let mut t = term();
+        feed(&mut t, "\x1b[4m"); // set UNDERLINE
+        feed(&mut t, "\x1b[4:3mA"); // switch to UNDERCURL
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::UNDERCURL));
+        assert!(!cell.flags.contains(Flags::UNDERLINE));
+        assert_eq!(cell.flags & Flags::ALL_UNDERLINES, Flags::UNDERCURL);
+    }
+
+    #[test]
+    fn bold_italic_combination() {
+        let mut t = term();
+        feed(&mut t, "\x1b[1;3mA"); // SGR 1;3 = BOLD + ITALIC
+        let cell = t.screen().cell(0, 0);
+        assert!(cell.flags.contains(Flags::BOLD));
+        assert!(cell.flags.contains(Flags::ITALIC));
+        assert!(cell.flags.contains(Flags::BOLD_ITALIC));
     }
 }

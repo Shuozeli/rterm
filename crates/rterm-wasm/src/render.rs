@@ -1,7 +1,9 @@
 /// Thin terminal renderer: maintains a cell grid from server ScreenUpdate messages
 /// and paints it using egui.
-use crate::messages::{CellData, ScreenData, ATTR_BOLD, ATTR_DIM, ATTR_HIDDEN,
-    ATTR_REVERSE, ATTR_STRIKETHROUGH, ATTR_UNDERLINE, ATTR_WIDE, COLOR_DEFAULT};
+use crate::messages::{CellData, ScreenData, ATTR_ALL_UNDERLINES, ATTR_BOLD, ATTR_DASHED_UNDERLINE,
+    ATTR_DIM, ATTR_DOTTED_UNDERLINE, ATTR_DOUBLE_UNDERLINE, ATTR_HIDDEN,
+    ATTR_INVERSE, ATTR_STRIKEOUT, ATTR_UNDERCURL, ATTR_UNDERLINE, ATTR_WIDE,
+    ATTR_WIDE_SPACER, COLOR_DEFAULT};
 use egui::{Color32, FontFamily, FontId, Pos2, Rect, Sense, Ui, Vec2};
 
 const DEFAULT_FG: Color32 = Color32::from_rgb(229, 229, 229);
@@ -26,7 +28,7 @@ pub struct DisplayGrid {
 
 impl DisplayGrid {
     pub fn new(cols: usize, rows: usize) -> Self {
-        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
+        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, flags: 0 };
         Self {
             cells: vec![vec![default_cell; cols]; rows],
             cols, rows,
@@ -44,7 +46,7 @@ impl DisplayGrid {
     pub fn apply_snapshot(&mut self, data: &ScreenData) {
         let cols = data.cols as usize;
         let rows = data.rows as usize;
-        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
+        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, flags: 0 };
         self.cols = cols;
         self.rows = rows;
         self.cells = vec![vec![default_cell; cols]; rows];
@@ -99,7 +101,7 @@ impl DisplayGrid {
     /// Resize the local grid immediately so viewport changes repaint without
     /// waiting for a round-trip snapshot from the server.
     pub fn resize(&mut self, cols: usize, rows: usize) {
-        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 };
+        let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, flags: 0 };
         self.cols = cols;
         self.rows = rows;
         self.cells.resize(rows, vec![default_cell; cols]);
@@ -129,7 +131,7 @@ impl DisplayGrid {
             ch: ' ',
             fg: COLOR_DEFAULT,
             bg: COLOR_DEFAULT,
-            attrs: 0,
+            flags: 0,
         };
 
         if row < self.cells.len() && col < self.cols {
@@ -226,10 +228,16 @@ pub fn paint_grid(
         let y = origin.y + row as f32 * cell_size.y;
         for col in 0..fit_cols {
             let cell = grid.visible_cell(row, col);
+
+            // Skip wide-char spacer cells (right half of CJK char).
+            if cell.flags & ATTR_WIDE_SPACER != 0 {
+                continue;
+            }
+
             let (mut fg, mut bg) = (unpack_color32(cell.fg, DEFAULT_FG), unpack_color32(cell.bg, DEFAULT_BG));
 
-            if cell.attrs & ATTR_REVERSE != 0 { std::mem::swap(&mut fg, &mut bg); }
-            if cell.attrs & ATTR_DIM != 0 {
+            if cell.flags & ATTR_INVERSE != 0 { std::mem::swap(&mut fg, &mut bg); }
+            if cell.flags & ATTR_DIM != 0 {
                 fg = Color32::from_rgba_premultiplied(
                     (fg.r() as u16 * 60 / 100) as u8,
                     (fg.g() as u16 * 60 / 100) as u8,
@@ -237,7 +245,7 @@ pub fn paint_grid(
                     fg.a(),
                 );
             }
-            if cell.attrs & ATTR_HIDDEN != 0 { fg = bg; }
+            if cell.flags & ATTR_HIDDEN != 0 { fg = bg; }
 
             let cell_rect = Rect::from_min_size(
                 Pos2::new(origin.x + col as f32 * cell_size.x, y),
@@ -253,8 +261,7 @@ pub fn paint_grid(
                 painter.rect_filled(cell_rect, 0.0, Color32::from_rgba_premultiplied(80, 120, 200, 100));
             }
 
-            // Skip wide continuation cells (right half of CJK char).
-            if cell.attrs & ATTR_WIDE != 0 {
+            if cell.flags & ATTR_WIDE != 0 {
                 // This is a wide char — draw it spanning 2 cells.
                 let wide_rect = Rect::from_min_size(
                     cell_rect.min,
@@ -272,7 +279,7 @@ pub fn paint_grid(
                     fg,
                 );
                 // Bold: draw again with 1px offset for faux bold.
-                if cell.attrs & ATTR_BOLD != 0 {
+                if cell.flags & ATTR_BOLD != 0 {
                     clipped.text(
                         Pos2::new(cell_rect.min.x + 0.5, cell_rect.min.y),
                         egui::Align2::LEFT_TOP,
@@ -281,7 +288,7 @@ pub fn paint_grid(
                         fg,
                     );
                 }
-            } else if cell.ch == ' ' && cell.attrs & (ATTR_UNDERLINE | ATTR_STRIKETHROUGH) == 0 {
+            } else if cell.ch == ' ' && cell.flags & (ATTR_ALL_UNDERLINES | ATTR_STRIKEOUT) == 0 {
                 // Skip plain spaces.
             } else {
                 let clipped = painter.with_clip_rect(cell_rect.intersect(grid_clip));
@@ -293,7 +300,7 @@ pub fn paint_grid(
                     fg,
                 );
                 // Bold: faux bold by drawing twice with slight offset.
-                if cell.attrs & ATTR_BOLD != 0 {
+                if cell.flags & ATTR_BOLD != 0 {
                     clipped.text(
                         Pos2::new(cell_rect.min.x + 0.5, cell_rect.min.y),
                         egui::Align2::LEFT_TOP,
@@ -304,14 +311,34 @@ pub fn paint_grid(
                 }
             }
 
-            if cell.attrs & ATTR_UNDERLINE != 0 {
+            // Underline variants — all rendered as colored lines at different positions/styles.
+            if cell.flags & ATTR_UNDERLINE != 0 {
+                let ly = cell_rect.max.y - 2.0;
+                painter.line_segment(
+                    [Pos2::new(cell_rect.min.x, ly), Pos2::new(cell_rect.max.x, ly)],
+                    egui::Stroke::new(1.0, fg),
+                );
+            } else if cell.flags & ATTR_DOUBLE_UNDERLINE != 0 {
+                let ly1 = cell_rect.max.y - 3.0;
+                let ly2 = cell_rect.max.y - 1.0;
+                painter.line_segment(
+                    [Pos2::new(cell_rect.min.x, ly1), Pos2::new(cell_rect.max.x, ly1)],
+                    egui::Stroke::new(1.0, fg),
+                );
+                painter.line_segment(
+                    [Pos2::new(cell_rect.min.x, ly2), Pos2::new(cell_rect.max.x, ly2)],
+                    egui::Stroke::new(1.0, fg),
+                );
+            } else if cell.flags & (ATTR_UNDERCURL | ATTR_DOTTED_UNDERLINE | ATTR_DASHED_UNDERLINE) != 0 {
+                // Approximate curly/dotted/dashed underlines as a simple underline for now.
                 let ly = cell_rect.max.y - 2.0;
                 painter.line_segment(
                     [Pos2::new(cell_rect.min.x, ly), Pos2::new(cell_rect.max.x, ly)],
                     egui::Stroke::new(1.0, fg),
                 );
             }
-            if cell.attrs & ATTR_STRIKETHROUGH != 0 {
+
+            if cell.flags & ATTR_STRIKEOUT != 0 {
                 let ly = cell_rect.center().y;
                 painter.line_segment(
                     [Pos2::new(cell_rect.min.x, ly), Pos2::new(cell_rect.max.x, ly)],
@@ -423,13 +450,7 @@ mod tests {
     use crate::messages::{CellRange, ScreenData};
 
     fn make_cell(ch: char) -> CellData {
-        CellData { ch, fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, attrs: 0 }
-    }
-
-    fn make_line(text: &str, cols: usize) -> Vec<CellData> {
-        let mut cells: Vec<CellData> = text.chars().map(|c| make_cell(c)).collect();
-        cells.resize(cols, make_cell(' '));
-        cells
+        CellData { ch, fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, flags: 0 }
     }
 
     fn make_screen_data(lines: &[&str], cols: u16, rows: u16) -> ScreenData {

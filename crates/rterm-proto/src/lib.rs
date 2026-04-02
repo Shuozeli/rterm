@@ -113,22 +113,29 @@ pub enum ColorKind {
     Rgb(u8, u8, u8),
 }
 
-/// Attribute bitflags.
-pub const ATTR_BOLD: u8 = 1 << 0;
-pub const ATTR_ITALIC: u8 = 1 << 1;
-pub const ATTR_UNDERLINE: u8 = 1 << 2;
-pub const ATTR_STRIKETHROUGH: u8 = 1 << 3;
-pub const ATTR_REVERSE: u8 = 1 << 4;
-pub const ATTR_DIM: u8 = 1 << 5;
-pub const ATTR_HIDDEN: u8 = 1 << 6;
-pub const ATTR_WIDE: u8 = 1 << 7;
+/// Attribute bitflags (u16), matching rterm_core::cell::Flags layout.
+pub const ATTR_INVERSE: u16 = 1 << 0;
+pub const ATTR_BOLD: u16 = 1 << 1;
+pub const ATTR_ITALIC: u16 = 1 << 2;
+pub const ATTR_UNDERLINE: u16 = 1 << 3;
+pub const ATTR_WRAPLINE: u16 = 1 << 4;
+pub const ATTR_WIDE_CHAR: u16 = 1 << 5;
+pub const ATTR_WIDE_CHAR_SPACER: u16 = 1 << 6;
+pub const ATTR_DIM: u16 = 1 << 7;
+pub const ATTR_HIDDEN: u16 = 1 << 8;
+pub const ATTR_STRIKEOUT: u16 = 1 << 9;
+pub const ATTR_LEADING_WIDE_CHAR_SPACER: u16 = 1 << 10;
+pub const ATTR_DOUBLE_UNDERLINE: u16 = 1 << 11;
+pub const ATTR_UNDERCURL: u16 = 1 << 12;
+pub const ATTR_DOTTED_UNDERLINE: u16 = 1 << 13;
+pub const ATTR_DASHED_UNDERLINE: u16 = 1 << 14;
 
 #[derive(Debug, Clone)]
 pub struct CellData {
     pub ch: char,
     pub fg: u32,
     pub bg: u32,
-    pub attrs: u8,
+    pub flags: u16,
 }
 
 #[derive(Debug, Clone)]
@@ -472,7 +479,7 @@ fn encode_cell_ranges<'a>(
             let cells: Vec<fbs::Cell> = cr
                 .cells
                 .iter()
-                .map(|c| fbs::Cell::new(c.ch as u32, c.fg, c.bg, c.attrs))
+                .map(|c| fbs::Cell::new(c.ch as u32, c.fg, c.bg, c.flags))
                 .collect();
             let cells_vec = fbb.create_vector(&cells);
             fbs::CellRange::create(
@@ -576,7 +583,7 @@ fn decode_cell_ranges(
                 ch: char::from_u32(c.ch()).unwrap_or(' '),
                 fg: c.fg(),
                 bg: c.bg(),
-                attrs: c.attrs(),
+                flags: c.flags(),
             })
             .collect();
         result.push(CellRangeData {
@@ -684,13 +691,13 @@ mod tests {
                         ch: 'H',
                         fg: COLOR_DEFAULT,
                         bg: COLOR_DEFAULT,
-                        attrs: ATTR_BOLD,
+                        flags: ATTR_BOLD,
                     },
                     CellData {
                         ch: 'i',
                         fg: pack_color_rgb(255, 0, 0),
                         bg: COLOR_DEFAULT,
-                        attrs: 0,
+                        flags: 0,
                     },
                 ],
             }],
@@ -713,7 +720,7 @@ mod tests {
                 assert_eq!(su.cols, 80);
                 assert_eq!(su.changes.len(), 1);
                 assert_eq!(su.changes[0].cells[0].ch, 'H');
-                assert_eq!(su.changes[0].cells[0].attrs, ATTR_BOLD);
+                assert_eq!(su.changes[0].cells[0].flags, ATTR_BOLD);
                 assert_eq!(su.changes[0].cells[1].fg, pack_color_rgb(255, 0, 0));
                 assert_eq!(su.cursor.row, 0);
                 assert_eq!(su.cursor.col, 2);
@@ -733,7 +740,7 @@ mod tests {
                     ch: 'A',
                     fg: COLOR_DEFAULT,
                     bg: COLOR_DEFAULT,
-                    attrs: 0,
+                    flags: 0,
                 }],
             }],
             cursor: CursorData {
@@ -911,22 +918,38 @@ mod tests {
 
     #[test]
     fn attr_bitflags() {
-        assert_eq!(ATTR_BOLD, 1);
-        assert_eq!(ATTR_ITALIC, 2);
-        assert_eq!(ATTR_UNDERLINE, 4);
-        assert_eq!(ATTR_STRIKETHROUGH, 8);
-        assert_eq!(ATTR_REVERSE, 16);
-        assert_eq!(ATTR_DIM, 32);
-        assert_eq!(ATTR_HIDDEN, 64);
-        // No overlap.
-        let all = ATTR_BOLD
+        assert_eq!(ATTR_INVERSE, 1 << 0);
+        assert_eq!(ATTR_BOLD, 1 << 1);
+        assert_eq!(ATTR_ITALIC, 1 << 2);
+        assert_eq!(ATTR_UNDERLINE, 1 << 3);
+        assert_eq!(ATTR_WRAPLINE, 1 << 4);
+        assert_eq!(ATTR_WIDE_CHAR, 1 << 5);
+        assert_eq!(ATTR_WIDE_CHAR_SPACER, 1 << 6);
+        assert_eq!(ATTR_DIM, 1 << 7);
+        assert_eq!(ATTR_HIDDEN, 1 << 8);
+        assert_eq!(ATTR_STRIKEOUT, 1 << 9);
+        assert_eq!(ATTR_LEADING_WIDE_CHAR_SPACER, 1 << 10);
+        assert_eq!(ATTR_DOUBLE_UNDERLINE, 1 << 11);
+        assert_eq!(ATTR_UNDERCURL, 1 << 12);
+        assert_eq!(ATTR_DOTTED_UNDERLINE, 1 << 13);
+        assert_eq!(ATTR_DASHED_UNDERLINE, 1 << 14);
+        // No overlap: all 15 bits are distinct.
+        let all = ATTR_INVERSE
+            | ATTR_BOLD
             | ATTR_ITALIC
             | ATTR_UNDERLINE
-            | ATTR_STRIKETHROUGH
-            | ATTR_REVERSE
+            | ATTR_WRAPLINE
+            | ATTR_WIDE_CHAR
+            | ATTR_WIDE_CHAR_SPACER
             | ATTR_DIM
-            | ATTR_HIDDEN;
-        assert_eq!(all, 127);
+            | ATTR_HIDDEN
+            | ATTR_STRIKEOUT
+            | ATTR_LEADING_WIDE_CHAR_SPACER
+            | ATTR_DOUBLE_UNDERLINE
+            | ATTR_UNDERCURL
+            | ATTR_DOTTED_UNDERLINE
+            | ATTR_DASHED_UNDERLINE;
+        assert_eq!(all, 0x7FFF);
     }
 
     // ── Automation message round-trip tests ─────────────────────────────────
@@ -1135,6 +1158,53 @@ mod tests {
     }
 
     #[test]
+    fn round_trip_cell_data_underline_flags() {
+        let underline_flags = [
+            ("DOUBLE_UNDERLINE", ATTR_DOUBLE_UNDERLINE),
+            ("UNDERCURL", ATTR_UNDERCURL),
+            ("DOTTED_UNDERLINE", ATTR_DOTTED_UNDERLINE),
+            ("DASHED_UNDERLINE", ATTR_DASHED_UNDERLINE),
+        ];
+
+        for (name, flag) in underline_flags {
+            let msg = ServerMsg::ScreenUpdate(ScreenUpdateData {
+                changes: vec![CellRangeData {
+                    row: 0,
+                    col_start: 0,
+                    cells: vec![CellData {
+                        ch: 'X',
+                        fg: COLOR_DEFAULT,
+                        bg: COLOR_DEFAULT,
+                        flags: flag,
+                    }],
+                }],
+                cursor: CursorData {
+                    row: 0,
+                    col: 1,
+                    visible: true,
+                    style: 0,
+                },
+                cols: 80,
+                rows: 24,
+                title: None,
+                mouse_tracking_mode: 0,
+                alt_screen_active: false,
+                application_cursor_keys: false,
+            });
+            let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+            match decoded {
+                ServerMsg::ScreenUpdate(su) => {
+                    assert_eq!(
+                        su.changes[0].cells[0].flags, flag,
+                        "flag {name} did not round-trip"
+                    );
+                }
+                _ => panic!("expected ScreenUpdate for {name}"),
+            }
+        }
+    }
+
+    #[test]
     fn round_trip_run_command_request() {
         let msg = RunCommandRequest {
             session_name: "s".into(),
@@ -1217,7 +1287,7 @@ impl FlatBufferGrpcMessage for GetSnapshotResponse {
         for row in &self.snapshot.rows {
             let mut fbs_cells = Vec::with_capacity(row.cells.len());
             for cell in &row.cells {
-                fbs_cells.push(fbs::Cell::new(cell.ch as u32, cell.fg, cell.bg, cell.attrs));
+                fbs_cells.push(fbs::Cell::new(cell.ch as u32, cell.fg, cell.bg, cell.flags));
             }
             let cells_vec = fbb.create_vector(&fbs_cells);
             row_offsets.push(fbs::CellRange::create(
@@ -1287,7 +1357,7 @@ impl FlatBufferGrpcMessage for GetSnapshotResponse {
                             ch: char::from_u32(c.ch()).unwrap_or(' '),
                             fg: c.fg(),
                             bg: c.bg(),
-                            attrs: c.attrs(),
+                            flags: c.flags(),
                         });
                     }
                 }

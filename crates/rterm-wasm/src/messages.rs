@@ -91,18 +91,25 @@ pub struct CellData {
     pub ch: char,
     pub fg: u32,
     pub bg: u32,
-    pub attrs: u8,
+    pub flags: u16,
 }
 
-// Attribute bitflags (must match rterm-proto).
-pub const ATTR_BOLD: u8 = 1 << 0;
-pub const ATTR_ITALIC: u8 = 1 << 1;
-pub const ATTR_UNDERLINE: u8 = 1 << 2;
-pub const ATTR_STRIKETHROUGH: u8 = 1 << 3;
-pub const ATTR_REVERSE: u8 = 1 << 4;
-pub const ATTR_DIM: u8 = 1 << 5;
-pub const ATTR_HIDDEN: u8 = 1 << 6;
-pub const ATTR_WIDE: u8 = 1 << 7;
+// Attribute bitflags (must match rterm-core::cell::Flags bit layout).
+pub const ATTR_INVERSE: u16 = 0x0001;
+pub const ATTR_BOLD: u16 = 0x0002;
+pub const ATTR_ITALIC: u16 = 0x0004;
+pub const ATTR_UNDERLINE: u16 = 0x0008;
+pub const ATTR_WIDE: u16 = 0x0020;
+pub const ATTR_WIDE_SPACER: u16 = 0x0040;
+pub const ATTR_DIM: u16 = 0x0080;
+pub const ATTR_HIDDEN: u16 = 0x0100;
+pub const ATTR_STRIKEOUT: u16 = 0x0200;
+pub const ATTR_DOUBLE_UNDERLINE: u16 = 0x0800;
+pub const ATTR_UNDERCURL: u16 = 0x1000;
+pub const ATTR_DOTTED_UNDERLINE: u16 = 0x2000;
+pub const ATTR_DASHED_UNDERLINE: u16 = 0x4000;
+pub const ATTR_ALL_UNDERLINES: u16 =
+    ATTR_UNDERLINE | ATTR_DOUBLE_UNDERLINE | ATTR_UNDERCURL | ATTR_DOTTED_UNDERLINE | ATTR_DASHED_UNDERLINE;
 
 pub const COLOR_DEFAULT: u32 = 0xFFFFFFFF;
 
@@ -166,7 +173,7 @@ fn decode_cell_ranges(
                 ch: char::from_u32(c.ch()).unwrap_or(' '),
                 fg: c.fg(),
                 bg: c.bg(),
-                attrs: c.attrs(),
+                flags: c.flags(),
             }).collect()
         }).unwrap_or_default();
         CellRange {

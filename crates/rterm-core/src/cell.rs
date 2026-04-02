@@ -1,30 +1,30 @@
 use crate::color::Color;
 
-/// Visual attributes for a terminal cell.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct CellAttributes {
-    pub bold: bool,
-    pub italic: bool,
-    pub underline: bool,
-    pub strikethrough: bool,
-    pub reverse: bool,
-    pub dim: bool,
-    pub hidden: bool,
-}
-
-impl CellAttributes {
-    pub const NORMAL: Self = Self {
-        bold: false,
-        italic: false,
-        underline: false,
-        strikethrough: false,
-        reverse: false,
-        dim: false,
-        hidden: false,
-    };
-
-    pub fn is_default(&self) -> bool {
-        *self == Self::NORMAL
+bitflags::bitflags! {
+    /// Cell attribute bitflags (alacritty-compatible layout).
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    pub struct Flags: u16 {
+        const INVERSE                  = 0x0001;
+        const BOLD                     = 0x0002;
+        const ITALIC                   = 0x0004;
+        const BOLD_ITALIC              = 0x0006;
+        const UNDERLINE                = 0x0008;
+        const WRAPLINE                 = 0x0010;
+        const WIDE_CHAR                = 0x0020;
+        const WIDE_CHAR_SPACER         = 0x0040;
+        const DIM                      = 0x0080;
+        const HIDDEN                   = 0x0100;
+        const STRIKEOUT                = 0x0200;
+        const LEADING_WIDE_CHAR_SPACER = 0x0400;
+        const DOUBLE_UNDERLINE         = 0x0800;
+        const UNDERCURL                = 0x1000;
+        const DOTTED_UNDERLINE         = 0x2000;
+        const DASHED_UNDERLINE         = 0x4000;
+        const ALL_UNDERLINES           = Self::UNDERLINE.bits()
+                                       | Self::DOUBLE_UNDERLINE.bits()
+                                       | Self::UNDERCURL.bits()
+                                       | Self::DOTTED_UNDERLINE.bits()
+                                       | Self::DASHED_UNDERLINE.bits();
     }
 }
 
@@ -34,10 +34,7 @@ pub struct Cell {
     pub ch: char,
     pub fg: Color,
     pub bg: Color,
-    pub attrs: CellAttributes,
-    /// If true, this cell is the right half of a wide (CJK) character.
-    /// The actual character is in the cell to the left.
-    pub wide_continuation: bool,
+    pub flags: Flags,
 }
 
 impl Default for Cell {
@@ -46,8 +43,7 @@ impl Default for Cell {
             ch: ' ',
             fg: Color::Default,
             bg: Color::Default,
-            attrs: CellAttributes::NORMAL,
-            wide_continuation: false,
+            flags: Flags::empty(),
         }
     }
 }
@@ -80,8 +76,8 @@ mod tests {
         assert_eq!(cell.ch, ' ');
         assert_eq!(cell.fg, Color::Default);
         assert_eq!(cell.bg, Color::Default);
-        assert!(cell.attrs.is_default());
-        assert!(!cell.wide_continuation);
+        assert!(cell.flags.is_empty());
+        assert!(!cell.flags.contains(Flags::WIDE_CHAR_SPACER));
     }
 
     #[test]
@@ -96,21 +92,17 @@ mod tests {
             ch: 'X',
             fg: Color::RED,
             bg: Color::BLUE,
-            attrs: CellAttributes {
-                bold: true,
-                ..CellAttributes::NORMAL
-            },
-            wide_continuation: true,
+            flags: Flags::BOLD,
         };
         cell.reset();
         assert_eq!(cell, Cell::default());
-        assert!(!cell.wide_continuation);
+        assert!(!cell.flags.contains(Flags::WIDE_CHAR_SPACER));
     }
 
     #[test]
-    fn attributes_normal_is_default() {
-        let attrs = CellAttributes::default();
-        assert!(attrs.is_default());
+    fn flags_default_is_empty() {
+        let flags = Flags::default();
+        assert!(flags.is_empty());
     }
 
     #[test]
@@ -128,5 +120,14 @@ mod tests {
         assert!(!is_wide_char('A'));
         assert!(!is_wide_char(' '));
         assert!(!is_wide_char('─')); // box drawing is not wide
+    }
+
+    #[test]
+    fn all_underlines_covers_all_variants() {
+        assert!(Flags::ALL_UNDERLINES.contains(Flags::UNDERLINE));
+        assert!(Flags::ALL_UNDERLINES.contains(Flags::DOUBLE_UNDERLINE));
+        assert!(Flags::ALL_UNDERLINES.contains(Flags::UNDERCURL));
+        assert!(Flags::ALL_UNDERLINES.contains(Flags::DOTTED_UNDERLINE));
+        assert!(Flags::ALL_UNDERLINES.contains(Flags::DASHED_UNDERLINE));
     }
 }
