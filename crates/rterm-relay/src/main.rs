@@ -1,9 +1,10 @@
 use clap::Parser;
 use grpc_server::{H3Server, NamedService, Router, Server};
-use rterm_relay::config::{Config, find_static_dir};
+use rterm_relay::config::{ClientTransport, Config, find_static_dir};
 use rterm_relay::service::TerminalServer;
 use rterm_relay::session_manager::SessionManager;
 use rterm_relay::tls::{extract_cert_der, load_or_generate_cert};
+use rterm_relay::ws_server::start_websocket_server;
 use rterm_relay::wt_server::start_webtransport_server;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -13,6 +14,10 @@ use tracing::{error, info};
 struct Cli {
     #[arg(short, long)]
     config: Option<PathBuf>,
+    /// Transport type for the WASM client: "webtransport" or "websocket".
+    /// Must match how the WASM client was built (via cargo features).
+    #[arg(long, default_value = "webtransport", value_parser = clap::value_parser!(ClientTransport))]
+    transport: ClientTransport,
 }
 
 #[tokio::main]
@@ -63,7 +68,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     });
 
     for listener_cfg in config.listeners {
-        let addr = format!("[::]:{}", listener_cfg.port).parse()?;
+        let bind_addr = listener_cfg.bind.as_deref().unwrap_or("::");
+        let addr = format!("{}:{}", bind_addr, listener_cfg.port).parse()?;
 
         match listener_cfg.protocol {
             rterm_relay::config::ProtocolType::Webtransport => {
@@ -71,7 +77,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let cert_pem = cert_pem.clone();
                 let key_pem = key_pem.clone();
                 let cert_hash_b64 = cert_hash_b64.clone();
+                let auth_tokens = config.auth_tokens.clone();
                 let session_mgr = Arc::clone(&session_mgr);
+                let transport = cli.transport;
 
                 tokio::spawn(async move {
                     if let Err(e) = start_webtransport_server(
@@ -80,6 +88,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         cert_pem,
                         key_pem,
                         cert_hash_b64,
+                        transport,
+                        auth_tokens,
                         session_mgr,
                     )
                     .await
@@ -132,6 +142,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                     };
                     if let Err(e) = H3Server::builder().serve_endpoint(endpoint, router).await {
                         error!("gRPC H3 server error on port {}: {}", port, e);
+                    }
+                });
+            }
+            rterm_relay::config::ProtocolType::WebSocket => {
+                let cert_pem = cert_pem.clone();
+                let key_pem = key_pem.clone();
+                let auth_tokens = config.auth_tokens.clone();
+                let session_mgr = Arc::clone(&session_mgr);
+                tokio::spawn(async move {
+                    if let Err(e) =
+                        start_websocket_server(addr, cert_pem, key_pem, auth_tokens, session_mgr)
+                            .await
+                    {
+                        error!(
+                            "WebSocket server error on port {}: {}",
+                            listener_cfg.port, e
+                        );
                     }
                 });
             }

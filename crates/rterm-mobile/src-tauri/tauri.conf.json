@@ -1,0 +1,22 @@
+{
+  "productName": "rterm",
+  "version": "0.1.0",
+  "identifier": "com.rterm.mobile",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "rterm",
+        "fullscreen": true
+      }
+    ]
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": []
+  }
+}

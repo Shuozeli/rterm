@@ -1,0 +1,19 @@
+[package]
+name = "rterm-mobile"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+rterm-core = { path = "../../rterm-core" }
+rterm-transport = { path = "../../rterm-transport" }
+rterm-session = { path = "../../rterm-session" }
+rterm-proto = { path = "../../rterm-proto" }
+tracing = "0.1"
+uuid = { version = "1", features = ["v4"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }

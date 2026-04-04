@@ -1,3 +1,4 @@
+use crate::config::ClientTransport;
 use crate::session_manager::SessionManager;
 use crate::tls::create_endpoint;
 use crate::{https_server, wt_handler};
@@ -7,12 +8,15 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{debug, error, info};
 
+#[allow(clippy::too_many_arguments)]
 pub async fn start_webtransport_server(
     addr: SocketAddr,
     static_dir: PathBuf,
     cert_pem: Vec<u8>,
     key_pem: Vec<u8>,
     cert_hash_b64: String,
+    transport: ClientTransport,
+    auth_tokens: Vec<String>,
     session_mgr: Arc<SessionManager>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Start HTTPS page server on TCP.
@@ -21,11 +25,18 @@ pub async fn start_webtransport_server(
     let https_key = key_pem.clone();
     let https_dir = static_dir.clone();
     let https_hash = cert_hash_b64.clone();
+    let https_transport = transport;
 
     tokio::spawn(async move {
-        if let Err(e) =
-            https_server::serve_https(https_addr, https_dir, https_cert, https_key, https_hash)
-                .await
+        if let Err(e) = https_server::serve_https(
+            https_addr,
+            https_dir,
+            https_cert,
+            https_key,
+            https_hash,
+            https_transport,
+        )
+        .await
         {
             error!("HTTPS server error: {}", e);
         }
@@ -48,12 +59,15 @@ pub async fn start_webtransport_server(
             };
 
             let session_mgr = Arc::clone(&session_mgr);
+            let auth_tokens = auth_tokens.clone();
             tokio::spawn(async move {
                 match incoming.await {
                     Ok(conn) => {
                         let remote = conn.remote_address();
                         debug!("QUIC connection from {}", remote);
-                        if let Err(e) = handle_connection(conn, Arc::clone(&session_mgr)).await {
+                        if let Err(e) =
+                            handle_connection(conn, Arc::clone(&session_mgr), auth_tokens).await
+                        {
                             error!("connection error from {}: {}", remote, e);
                         }
                     }
@@ -69,7 +83,9 @@ pub async fn start_webtransport_server(
 async fn handle_connection(
     conn: quinn::Connection,
     session_mgr: Arc<SessionManager>,
+    auth_tokens: Vec<String>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let remote = conn.remote_address();
     let mut h3_conn = h3::server::builder()
         .enable_webtransport(true)
         .enable_extended_connect(true)
@@ -92,6 +108,33 @@ async fn handle_connection(
                         .unwrap_or(false);
 
                 if is_wt {
+                    // Validate token if auth_tokens is configured.
+                    if !auth_tokens.is_empty() {
+                        let query = req.uri().query();
+                        let valid = query
+                            .map(|q| {
+                                q.split('&').any(|param| {
+                                    param
+                                        .strip_prefix("token=")
+                                        .map(|v| auth_tokens.contains(&v.to_string()))
+                                        .unwrap_or(false)
+                                })
+                            })
+                            .unwrap_or(false);
+
+                        if !valid {
+                            info!("WebTransport auth failed from {}: invalid token", remote);
+                            let mut stream = stream;
+                            let resp = http::Response::builder()
+                                .status(401)
+                                .body(())
+                                .expect("valid HTTP response");
+                            stream.send_response(resp).await?;
+                            stream.finish().await?;
+                            return Ok(());
+                        }
+                    }
+
                     let path = req.uri().path().to_string();
                     let session_name = path
                         .strip_prefix("/wt/")

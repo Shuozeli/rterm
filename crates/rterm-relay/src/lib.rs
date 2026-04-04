@@ -1,6 +1,7 @@
 pub mod config;
 pub mod https_server;
 pub mod managed_session;
+pub mod mouse_encoding;
 pub mod network;
 pub mod pty;
 pub mod screen_diff;
@@ -9,5 +10,7 @@ pub mod session;
 pub mod session_manager;
 pub mod static_files;
 pub mod tls;
+pub mod ws_handler;
+pub mod ws_server;
 pub mod wt_handler;
 pub mod wt_server;

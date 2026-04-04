@@ -1,5 +1,6 @@
 use crate::cell::{Cell, Flags};
 use crate::color::Color;
+use crate::grid::{CellRange, Column, Grid, Line, Point};
 
 /// Cursor position and state.
 #[derive(Debug, Clone)]
@@ -33,12 +34,14 @@ pub struct Pen {
 /// Terminal screen buffer: a 2D grid of cells with cursor, scroll region,
 /// scrollback, and the current pen (style for new characters).
 pub struct ScreenBuffer {
-    /// Number of columns.
-    cols: usize,
-    /// Number of visible rows.
-    rows: usize,
-    /// The active viewport grid: rows x cols.
-    grid: Vec<Vec<Cell>>,
+    /// The grid stores cells indexed by Line (i32) and Column (usize).
+    /// Viewport lines are Line(0) through Line(rows-1).
+    grid: Grid<Cell>,
+
+    /// Scrollback buffer: rows that have scrolled off the top of the viewport.
+    /// Each entry is (line_index, cells) where line_index is the original
+    /// line number when it was visible.
+    scrollback: Vec<Vec<Cell>>,
 
     /// Cursor position and visibility.
     pub cursor: Cursor,
@@ -62,12 +65,11 @@ impl ScreenBuffer {
     /// Create a new screen buffer with the given dimensions.
     pub fn new(cols: usize, rows: usize) -> Self {
         assert!(cols > 0 && rows > 0, "dimensions must be > 0");
-        let grid = vec![vec![Cell::default(); cols]; rows];
+        let template = Cell::default();
+        let grid = Grid::new(&template, rows, cols);
         Self {
-            cols,
-            rows,
             grid,
-
+            scrollback: Vec::new(),
             cursor: Cursor::default(),
             pen: Pen::default(),
             scroll_top: 0,
@@ -78,66 +80,62 @@ impl ScreenBuffer {
 
     /// Resize the buffer to new dimensions.
     /// Preserves content where possible. New cells are blank.
+    /// Clears scrollback since buffer content is invalidated.
     pub fn resize(&mut self, new_cols: usize, new_rows: usize) {
         assert!(new_cols > 0 && new_rows > 0, "dimensions must be > 0");
-
-        // Resize each existing row to new_cols.
-        for row in &mut self.grid {
-            row.resize(new_cols, Cell::default());
-        }
-
-        // Add or remove rows.
-        if new_rows > self.rows {
-            for _ in self.rows..new_rows {
-                self.grid.push(vec![Cell::default(); new_cols]);
-            }
-        } else if new_rows < self.rows {
-            self.grid.truncate(new_rows);
-        }
-
-        self.cols = new_cols;
-        self.rows = new_rows;
+        let template = Cell::default();
+        self.grid.resize(&template, new_rows, new_cols);
 
         // Clamp cursor.
-        self.cursor.row = self.cursor.row.min(new_rows - 1);
-        self.cursor.col = self.cursor.col.min(new_cols - 1);
+        self.cursor.row = self.cursor.row.min(new_rows.saturating_sub(1));
+        self.cursor.col = self.cursor.col.min(new_cols.saturating_sub(1));
 
         // Reset scroll region to full screen.
         self.scroll_top = 0;
         self.scroll_bottom = new_rows - 1;
 
-        // Extend or truncate tab stops.
-        self.tab_stops.resize(new_cols, false);
-        // Ensure default tab stops for newly added columns.
-        for c in 0..new_cols {
-            if c >= self.tab_stops.len() {
-                break;
-            }
-            // Only set default stops for columns beyond the old width.
-            // Keep existing stops for columns that existed before.
-        }
-        // Actually, just rebuild if the width changed.
-        if new_cols != self.tab_stops.len() {
-            self.tab_stops = default_tab_stops(new_cols);
-        }
+        // Rebuild tab stops.
+        self.tab_stops = default_tab_stops(new_cols);
+
+        // Clear scrollback since buffer dimensions changed.
+        self.scrollback.clear();
     }
 
     pub fn cols(&self) -> usize {
-        self.cols
+        self.grid.columns()
     }
 
     pub fn rows(&self) -> usize {
-        self.rows
+        self.grid.lines()
     }
 
     /// Get a reference to a cell at (row, col).
     pub fn cell(&self, row: usize, col: usize) -> &Cell {
-        &self.grid[row][col]
+        let point = Point::new(Line(row as i32), Column(col));
+        // Grid's cell method returns Option<&T>, we expect valid coordinates
+        self.grid.cell(point).expect("cell out of bounds")
     }
 
     /// Get a mutable reference to a cell at (row, col).
     pub fn cell_mut(&mut self, row: usize, col: usize) -> &mut Cell {
-        &mut self.grid[row][col]
+        let point = Point::new(Line(row as i32), Column(col));
+        // Grid's cell_mut method returns Option<&mut T>
+        self.grid.cell_mut(point).expect("cell out of bounds")
+    }
+
+    /// Get the grid's display offset for screen_diff.
+    pub fn display_offset(&self) -> usize {
+        self.grid.display_offset()
+    }
+
+    /// Get the scrollback buffer (rows that have scrolled off the viewport).
+    pub fn scrollback(&self) -> &[Vec<Cell>] {
+        &self.scrollback
+    }
+
+    /// Get the number of lines in scrollback.
+    pub fn scrollback_len(&self) -> usize {
+        self.scrollback.len()
     }
 
     /// Write a character at the current cursor position using the current pen,
@@ -145,15 +143,14 @@ impl ScreenBuffer {
     pub fn write_char(&mut self, ch: char) {
         let wide = crate::cell::is_wide_char(ch);
 
-        if self.cursor.col >= self.cols {
+        if self.cursor.col >= self.cols() {
             self.cursor.col = 0;
             self.cursor_down_with_scroll();
         }
 
         // Wide chars need 2 columns. If at the last column, wrap first.
-        if wide && self.cursor.col + 1 >= self.cols {
-            // Clear the last cell and wrap.
-            self.grid[self.cursor.row][self.cursor.col].reset();
+        if wide && self.cursor.col + 1 >= self.cols() {
+            self.cell_mut(self.cursor.row, self.cursor.col).reset();
             self.cursor.col = 0;
             self.cursor_down_with_scroll();
         }
@@ -161,39 +158,37 @@ impl ScreenBuffer {
         let row = self.cursor.row;
         let col = self.cursor.col;
 
-        // If we're overwriting a wide char's continuation, clear the left half too.
-        if col > 0 && self.grid[row][col].flags.contains(Flags::WIDE_CHAR_SPACER) {
-            self.grid[row][col - 1].reset();
-        }
-        // If we're overwriting the left half of a wide char, clear the continuation.
-        if col + 1 < self.cols
-            && self.grid[row][col + 1]
-                .flags
-                .contains(Flags::WIDE_CHAR_SPACER)
-        {
-            self.grid[row][col + 1].reset();
+        // Copy pen values to avoid borrow conflict.
+        let fg = self.pen.fg;
+        let bg = self.pen.bg;
+        let pen_flags = self.pen.flags;
+
+        // If we're overwriting the left half of a wide char, clear the continuation (right half).
+        if col + 1 < self.cols() {
+            let next_cell = self.cell(row, col + 1);
+            if next_cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
+                self.cell_mut(row, col + 1).reset();
+            }
         }
 
-        self.grid[row][col] = Cell {
-            ch,
-            fg: self.pen.fg,
-            bg: self.pen.bg,
-            flags: self.pen.flags
-                | if wide {
-                    Flags::WIDE_CHAR
-                } else {
-                    Flags::empty()
-                },
+        // Write the cell at cursor position.
+        let cell = self.cell_mut(row, col);
+        cell.ch = ch;
+        cell.fg = fg;
+        cell.bg = bg;
+        cell.flags = if wide {
+            pen_flags | Flags::WIDE_CHAR
+        } else {
+            pen_flags
         };
 
-        if wide && col + 1 < self.cols {
+        if wide && col + 1 < self.cols() {
             // Mark the next cell as a wide continuation (spacer).
-            self.grid[row][col + 1] = Cell {
-                ch: ' ',
-                fg: self.pen.fg,
-                bg: self.pen.bg,
-                flags: self.pen.flags | Flags::WIDE_CHAR_SPACER,
-            };
+            let next = self.cell_mut(row, col + 1);
+            next.ch = ' ';
+            next.fg = fg;
+            next.bg = bg;
+            next.flags = pen_flags | Flags::WIDE_CHAR_SPACER;
             self.cursor.col += 2;
         } else {
             self.cursor.col += 1;
@@ -217,14 +212,14 @@ impl ScreenBuffer {
         let max_row = if self.cursor.row <= self.scroll_bottom {
             self.scroll_bottom
         } else {
-            self.rows - 1
+            self.rows() - 1
         };
         self.cursor.row = (self.cursor.row + n).min(max_row);
     }
 
     /// Move cursor forward (right) by `n` columns, clamped at last column.
     pub fn cursor_forward(&mut self, n: usize) {
-        self.cursor.col = (self.cursor.col + n).min(self.cols - 1);
+        self.cursor.col = (self.cursor.col + n).min(self.cols() - 1);
     }
 
     /// Move cursor backward (left) by `n` columns, clamped at column 0.
@@ -235,15 +230,15 @@ impl ScreenBuffer {
     /// Set cursor position (1-indexed row, col as received from VT sequences).
     /// Clamps to valid range.
     pub fn set_cursor_pos(&mut self, row_1: usize, col_1: usize) {
-        self.cursor.row = row_1.saturating_sub(1).min(self.rows - 1);
-        self.cursor.col = col_1.saturating_sub(1).min(self.cols - 1);
+        self.cursor.row = row_1.saturating_sub(1).min(self.rows() - 1);
+        self.cursor.col = col_1.saturating_sub(1).min(self.cols() - 1);
     }
 
     /// Move cursor down, scrolling the scroll region if at the bottom.
     fn cursor_down_with_scroll(&mut self) {
         if self.cursor.row == self.scroll_bottom {
             self.scroll_up(1);
-        } else if self.cursor.row < self.rows - 1 {
+        } else if self.cursor.row < self.rows() - 1 {
             self.cursor.row += 1;
         }
     }
@@ -263,7 +258,7 @@ impl ScreenBuffer {
     /// Set a tab stop at the current cursor column (HTS / ESC H).
     pub fn set_tab_stop(&mut self) {
         let col = self.cursor.col;
-        if col < self.cols {
+        if col < self.cols() {
             self.tab_stops[col] = true;
         }
     }
@@ -275,7 +270,7 @@ impl ScreenBuffer {
         match mode {
             0 => {
                 let col = self.cursor.col;
-                if col < self.cols {
+                if col < self.cols() {
                     self.tab_stops[col] = false;
                 }
             }
@@ -293,7 +288,7 @@ impl ScreenBuffer {
         for _ in 0..n {
             let start = self.cursor.col + 1;
             let mut found = false;
-            for c in start..self.cols {
+            for c in start..self.cols() {
                 if self.tab_stops[c] {
                     self.cursor.col = c;
                     found = true;
@@ -301,7 +296,7 @@ impl ScreenBuffer {
                 }
             }
             if !found {
-                self.cursor.col = self.cols - 1;
+                self.cursor.col = self.cols() - 1;
                 break;
             }
         }
@@ -334,8 +329,8 @@ impl ScreenBuffer {
     /// Set the scroll region (1-indexed top and bottom, inclusive).
     /// Resets cursor to top-left of the scroll region.
     pub fn set_scroll_region(&mut self, top_1: usize, bottom_1: usize) {
-        let top = top_1.saturating_sub(1).min(self.rows - 1);
-        let bottom = bottom_1.saturating_sub(1).min(self.rows - 1);
+        let top = top_1.saturating_sub(1).min(self.rows() - 1);
+        let bottom = bottom_1.saturating_sub(1).min(self.rows() - 1);
         if top < bottom {
             self.scroll_top = top;
             self.scroll_bottom = bottom;
@@ -349,15 +344,30 @@ impl ScreenBuffer {
         let top = self.scroll_top;
         let bottom = self.scroll_bottom;
         let n = n.min(bottom - top + 1);
+        if n == 0 {
+            return;
+        }
 
-        // Shift lines up within the scroll region.
-        for row in top..=bottom {
-            if row + n <= bottom {
-                self.grid[row] = self.grid[row + n].clone();
-            } else {
-                self.grid[row] = vec![Cell::default(); self.cols];
+        let cols = self.cols();
+        let region = CellRange::from_line_cols(top as i32, 0, bottom as i32, cols - 1);
+        let template = Cell::default();
+
+        // Capture top n rows before they're overwritten.
+        // We need to read the grid before calling scroll_up.
+        let mut rows_to_save: Vec<Vec<Cell>> = Vec::with_capacity(n);
+        for i in 0..n {
+            let line = Line((top + i) as i32);
+            if let Some(row) = self.grid.get(line) {
+                let cells: Vec<Cell> = (0..cols).map(|c| row[Column(c)]).collect();
+                rows_to_save.push(cells);
             }
         }
+
+        // Do the scroll (this overwrites top n lines)
+        self.grid.scroll_up(&region, n, &template);
+
+        // Save the captured rows to scrollback
+        self.scrollback.extend(rows_to_save);
     }
 
     /// Scroll the scroll region down by `n` lines.
@@ -366,14 +376,33 @@ impl ScreenBuffer {
         let top = self.scroll_top;
         let bottom = self.scroll_bottom;
         let n = n.min(bottom - top + 1);
+        if n == 0 {
+            return;
+        }
 
-        // Shift lines down within the scroll region.
-        for row in (top..=bottom).rev() {
-            if row >= top + n {
-                self.grid[row] = self.grid[row - n].clone();
-            } else {
-                self.grid[row] = vec![Cell::default(); self.cols];
+        let cols = self.cols();
+        let region = CellRange::from_line_cols(top as i32, 0, bottom as i32, cols - 1);
+        let template = Cell::default();
+
+        // Capture bottom n rows before they're overwritten.
+        // For scroll down, these are the rows that get "pushed off" (top) conceptually
+        // but physically the bottom rows are discarded.
+        let mut rows_to_save: Vec<Vec<Cell>> = Vec::with_capacity(n);
+        let start_save_idx = bottom.saturating_sub(n - 1);
+        for i in 0..n {
+            let line = Line((start_save_idx + i) as i32);
+            if let Some(row) = self.grid.get(line) {
+                let cells: Vec<Cell> = (0..cols).map(|c| row[Column(c)]).collect();
+                rows_to_save.push(cells);
             }
+        }
+
+        // Do the scroll
+        self.grid.scroll_down(&region, n, &template);
+
+        // Save captured rows to scrollback (prepend since scroll down exposes older content)
+        for row in rows_to_save.into_iter().rev() {
+            self.scrollback.insert(0, row);
         }
     }
 
@@ -388,7 +417,7 @@ impl ScreenBuffer {
             0 => {
                 // Cursor to end: clear rest of current line, then all lines below.
                 self.erase_in_line(0);
-                for row in (self.cursor.row + 1)..self.rows {
+                for row in (self.cursor.row + 1)..self.rows() {
                     self.clear_row(row);
                 }
             }
@@ -401,9 +430,7 @@ impl ScreenBuffer {
             }
             2 => {
                 // Entire screen.
-                for row in 0..self.rows {
-                    self.clear_row(row);
-                }
+                self.clear_screen();
             }
             _ => {}
         }
@@ -417,13 +444,13 @@ impl ScreenBuffer {
         let row = self.cursor.row;
         match mode {
             0 => {
-                for col in self.cursor.col..self.cols {
-                    self.grid[row][col].reset();
+                for col in self.cursor.col..self.cols() {
+                    self.cell_mut(row, col).reset();
                 }
             }
             1 => {
-                for col in 0..=self.cursor.col.min(self.cols - 1) {
-                    self.grid[row][col].reset();
+                for col in 0..=self.cursor.col.min(self.cols() - 1) {
+                    self.cell_mut(row, col).reset();
                 }
             }
             2 => {
@@ -437,16 +464,21 @@ impl ScreenBuffer {
     pub fn erase_chars(&mut self, n: usize) {
         let row = self.cursor.row;
         let col = self.cursor.col;
-        let end = (col + n).min(self.cols);
+        let end = (col + n).min(self.cols());
         for c in col..end {
-            self.grid[row][c].reset();
+            self.cell_mut(row, c).reset();
         }
     }
 
     fn clear_row(&mut self, row: usize) {
-        for col in 0..self.cols {
-            self.grid[row][col].reset();
+        for col in 0..self.cols() {
+            self.cell_mut(row, col).reset();
         }
+    }
+
+    fn clear_screen(&mut self) {
+        let template = Cell::default();
+        self.grid.clear_viewport(&template);
     }
 
     // --- Insert / Delete ---
@@ -460,13 +492,13 @@ impl ScreenBuffer {
         }
         let bottom = self.scroll_bottom;
         let n = n.min(bottom - row + 1);
+        let template = Cell::default();
 
-        for r in (row..=bottom).rev() {
-            if r >= row + n {
-                self.grid[r] = self.grid[r - n].clone();
-            } else {
-                self.grid[r] = vec![Cell::default(); self.cols];
-            }
+        // Use Grid's scroll_down within the region for efficiency.
+        // But we need to handle this specially since insert_lines is at cursor row.
+        for _ in 0..n {
+            let region = CellRange::from_line_cols(row as i32, 0, bottom as i32, self.cols() - 1);
+            self.grid.scroll_down(&region, 1, &template);
         }
     }
 
@@ -479,13 +511,11 @@ impl ScreenBuffer {
         }
         let bottom = self.scroll_bottom;
         let n = n.min(bottom - row + 1);
+        let template = Cell::default();
 
-        for r in row..=bottom {
-            if r + n <= bottom {
-                self.grid[r] = self.grid[r + n].clone();
-            } else {
-                self.grid[r] = vec![Cell::default(); self.cols];
-            }
+        for _ in 0..n {
+            let region = CellRange::from_line_cols(row as i32, 0, bottom as i32, self.cols() - 1);
+            self.grid.scroll_up(&region, 1, &template);
         }
     }
 
@@ -493,14 +523,19 @@ impl ScreenBuffer {
     pub fn insert_chars(&mut self, n: usize) {
         let row = self.cursor.row;
         let col = self.cursor.col;
-        let n = n.min(self.cols - col);
+        let n = n.min(self.cols() - col);
 
-        // Shift right.
-        for c in (col..self.cols).rev() {
+        if n == 0 {
+            return;
+        }
+
+        // Shift right by n within [col, cols).
+        // Iterate in reverse to avoid overwriting source cells before they're copied.
+        for c in (col..self.cols()).rev() {
             if c >= col + n {
-                self.grid[row][c] = self.grid[row][c - n];
+                *self.cell_mut(row, c) = *self.cell(row, c - n);
             } else {
-                self.grid[row][c] = Cell::default();
+                self.cell_mut(row, c).reset();
             }
         }
     }
@@ -509,13 +544,24 @@ impl ScreenBuffer {
     pub fn delete_chars(&mut self, n: usize) {
         let row = self.cursor.row;
         let col = self.cursor.col;
-        let n = n.min(self.cols - col);
+        let cols = self.cols();
+        let n = n.min(cols - col);
 
-        for c in col..self.cols {
-            if c + n < self.cols {
-                self.grid[row][c] = self.grid[row][c + n];
+        if n == 0 {
+            return;
+        }
+
+        // Copy cells that will remain first to avoid borrow conflict.
+        // Cell is Copy, so simple dereference works.
+        let cells: Vec<Cell> = (0..cols).map(|c| *self.cell(row, c)).collect();
+
+        // Shift left by n.
+        for c in col..cols {
+            let src_col = c + n;
+            if src_col < cols {
+                *self.cell_mut(row, c) = cells[src_col];
             } else {
-                self.grid[row][c] = Cell::default();
+                self.cell_mut(row, c).reset();
             }
         }
     }
@@ -524,20 +570,24 @@ impl ScreenBuffer {
 
     /// Reset the buffer to initial state.
     pub fn reset(&mut self) {
-        for row in 0..self.rows {
-            self.clear_row(row);
-        }
+        self.clear_screen();
         self.cursor = Cursor::default();
         self.pen = Pen::default();
         self.scroll_top = 0;
-        self.scroll_bottom = self.rows - 1;
-        self.tab_stops = default_tab_stops(self.cols);
+        self.scroll_bottom = self.rows() - 1;
+        self.tab_stops = default_tab_stops(self.cols());
+        self.scrollback.clear();
     }
 
     /// Extract the text content of a row as a string (trimming trailing spaces).
     pub fn row_text(&self, row: usize) -> String {
-        let text: String = self.grid[row].iter().map(|c| c.ch).collect();
-        text.trim_end().to_string()
+        let mut s = String::new();
+        if let Some(r) = self.grid.get(Line(row as i32)) {
+            for c in 0..self.cols() {
+                s.push(r[Column(c)].ch);
+            }
+        }
+        s.trim_end().to_string()
     }
 }
 

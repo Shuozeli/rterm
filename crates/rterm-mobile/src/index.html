@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>rterm</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Host list page -->
+        <div id="page-hosts" class="page">
+            <header>
+                <h1>rterm</h1>
+                <button id="btn-add-host" class="btn-icon" title="Add host">+</button>
+            </header>
+            <div id="host-list" class="host-list"></div>
+            <div id="host-empty" class="empty-state">
+                <p>No hosts configured.</p>
+                <p>Tap + to add one.</p>
+            </div>
+        </div>
+
+        <!-- Edit host page -->
+        <div id="page-edit" class="page hidden">
+            <header>
+                <button id="btn-back-edit" class="btn-text">Back</button>
+                <h1 id="edit-title">Add Host</h1>
+                <button id="btn-save-host" class="btn-text">Save</button>
+            </header>
+            <form id="host-form" class="form">
+                <input type="hidden" id="host-id">
+                <label>
+                    Name
+                    <input type="text" id="host-name" placeholder="prod-server" required>
+                </label>
+                <label>
+                    Hostname
+                    <input type="text" id="host-hostname" placeholder="10.0.0.5" required>
+                </label>
+                <label>
+                    Port
+                    <input type="number" id="host-port" value="22" min="1" max="65535">
+                </label>
+                <label>
+                    Username
+                    <input type="text" id="host-username" placeholder="deploy" required>
+                </label>
+                <label>
+                    Auth Type
+                    <select id="host-auth-type">
+                        <option value="password">Password</option>
+                        <option value="key">Key</option>
+                    </select>
+                </label>
+                <label id="password-field">
+                    Password
+                    <input type="password" id="host-password" placeholder="password">
+                </label>
+                <button type="button" id="btn-delete-host" class="btn-danger hidden">Delete Host</button>
+            </form>
+        </div>
+
+        <!-- Terminal page -->
+        <div id="page-terminal" class="page hidden">
+            <header>
+                <button id="btn-back-term" class="btn-text">&#x2329;</button>
+                <h1 id="term-title">rterm</h1>
+                <span id="term-status" class="status-indicator status-connecting">connecting</span>
+                <button id="btn-font-sm" class="btn-icon btn-sm" title="Smaller font">A-</button>
+                <button id="btn-font-lg" class="btn-icon btn-sm" title="Larger font">A+</button>
+            </header>
+            <div class="terminal-canvas-wrapper" id="canvas-wrapper">
+                <canvas id="terminal-canvas"></canvas>
+            </div>
+            <div class="accessory-bar">
+                <button data-key="Escape">Esc</button>
+                <button data-key="Tab">Tab</button>
+                <button data-mod="Ctrl" class="sticky" data-lockable="true">Ctrl</button>
+                <button data-mod="Alt" class="sticky" data-lockable="true">Alt</button>
+                <button data-key="|">|</button>
+                <button data-key="~">~</button>
+                <button data-key="Home">Home</button>
+                <button data-key="End">End</button>
+                <button data-key="ArrowUp">&#x25B2;</button>
+                <button data-key="ArrowDown">&#x25BC;</button>
+                <button data-key="ArrowLeft">&#x25C0;</button>
+                <button data-key="ArrowRight">&#x25B6;</button>
+                <button data-key="PageUp">PgUp</button>
+                <button data-key="PageDown">PgDn</button>
+                <button id="btn-mod-menu" class="sticky" data-lockable="true">Mod</button>
+            </div>
+            <!-- Modifier popover (hidden by default) -->
+            <div id="mod-popover" class="mod-popover hidden">
+                <button data-key="F1">F1</button>
+                <button data-key="F2">F2</button>
+                <button data-key="F3">F3</button>
+                <button data-key="F4">F4</button>
+                <button data-key="F5">F5</button>
+                <button data-key="F6">F6</button>
+                <button data-key="F7">F7</button>
+                <button data-key="F8">F8</button>
+                <button data-key="F9">F9</button>
+                <button data-key="F10">F10</button>
+                <button data-key="F11">F11</button>
+                <button data-key="F12">F12</button>
+                <button data-key="Insert">Ins</button>
+                <button data-key="Delete">Del</button>
+            </div>
+            <div class="terminal-input-bar">
+                <input type="text" id="terminal-input" placeholder="Type here..."
+                       autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/terminal.js"></script>
+</body>
+</html>

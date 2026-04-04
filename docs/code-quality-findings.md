@@ -1,128 +1,191 @@
-<!-- agent-updated: 2026-03-31T00:00:00Z -->
+<!-- agent-updated: 2026-04-04T00:00:00Z -->
 
 # Code Quality Findings
 
-This document records findings from the code audit of 2026-03-31. Previous resolved issues are retained at the bottom as historical record.
+This document records findings from the code audit of 2026-04-04. Previous findings from 2026-03-31 are preserved below in the Historical section.
 
 ---
 
-## 1. Formatting (Highest — CI Will Fail)
+## 1. Duplication
 
-### Many files unformatted
-- **Location:** `crates/rterm-cli/src/main.rs`, `crates/rterm-proto/src/lib.rs`, `crates/rterm-proto/src/generated/rterm_generated.rs`, `crates/rterm-relay/src/{config,lib,main,service,session_manager,tls}.rs`, `crates/rterm-relay/tests/e2e_test.rs`
-- **Problem:** `cargo fmt -- --check` exits non-zero. The pre-commit hook and CI both run `cargo fmt --check`, so any push with these files would be blocked.
-- **Fix:** Run `cargo fmt`. All files are now formatted. **DONE**
+### encode_vt_mouse duplicated in wt_handler and ws_handler
+- **Location:** `crates/rterm-relay/src/wt_handler.rs:204-251`
+- **Also at:** `crates/rterm-relay/src/ws_handler.rs:209-244`
+- **Problem:** Identical SGR mouse encoding logic exists in two files. Any change to mouse encoding must be made in both places.
+- **Fix:** Extract into a shared helper in `rterm-relay/src/` (e.g., `mouse_encoding.rs`) and import from both handlers.
 
----
-
-## 2. Unsafe Patterns (Non-test `unwrap()` / `expect()`)
-
-### `#[allow(clippy::type_complexity)]` bypasses clippy
-- **Location:** `crates/rterm-relay/src/managed_session.rs:47`
-- **Problem:** `ManagedSession::new` returns `Result<(Self, mpsc::Receiver<Vec<u8>>), Box<dyn Error>>`. Clippy flags the return type as complex but the fix here is not to suppress it, it is to introduce a named type alias.
-- **Fix:** Replace the `#[allow]` with a type alias: `type NewSessionResult = Result<(ManagedSession, mpsc::Receiver<Vec<u8>>), Box<dyn std::error::Error + Send + Sync>>;`
-- **Status:** PENDING
-
-### `expect()` in `tls.rs` certificate generation panics at startup
-- **Location:** `crates/rterm-relay/src/tls.rs:67,72,75,123`
-- **Problem:** `generate_fresh_cert` uses three `.expect()` calls for TLS operations that could fail (e.g., due to FIPS restrictions, OS entropy issues). `extract_cert_der` panics with an index out-of-bounds if `certs` is empty (line 124: `certs[0]`). These run at server startup; a panic here crashes the whole binary with no recovery path.
-- **Fix:** Return `Result` from `generate_fresh_cert` and `extract_cert_der`, propagate errors to `main`.
-- **Status:** PENDING
-
-### `expect()` in `main.rs` TLS server startup
-- **Location:** `crates/rterm-relay/src/main.rs:99,112`
-- **Problem:** `.expect("tls config")` and `.expect("bind h3")` panic inside `tokio::spawn` closures. A panic in a spawned task does not propagate to the parent — it silently crashes that protocol listener (gRPC H2 or H3) while the rest of the server continues running unnoticed.
-- **Fix:** Replace with `?` after converting the closures to `async fn` helpers that return `Result`.
-- **Status:** PENDING
-
-### `unwrap()` in non-test `https_server.rs` and `wt_server.rs` HTTP response builders
-- **Location:** `crates/rterm-relay/src/https_server.rs:82,118,123`, `crates/rterm-relay/src/wt_server.rs:117`, `crates/rterm-relay/src/static_files.rs:18,33`
-- **Problem:** `http::Response::builder()...body(()).unwrap()` — practically infallible, but any future header addition that fails would panic silently.
-- **Fix:** Replace with `.expect("valid HTTP response")` for clarity. Low priority.
-- **Status:** LOW PRIORITY
+### Wrapper re-exports in rterm-relay
+- **Location:** `crates/rterm-relay/src/session.rs`, `crates/rterm-relay/src/screen_diff.rs`
+- **Problem:** These re-export from `rterm-session` which already exports them directly. Three levels of indirection: `rterm_relay::session` → `rterm_service::session` → `rterm_session::session`.
+- **Fix:** Remove the re-exports from `rterm-relay/src/session.rs` and `rterm-relay/src/screen_diff.rs`. Callers should use `rterm_session` directly.
 
 ---
 
-## 3. Dead / No-op Code
+## 2. Dead Code / Unused
 
-### `relay_tx` created and immediately dropped in `session.rs`
-- **Location:** `crates/rterm-relay/src/session.rs:89,123`
-- **Problem:** In `run_session`, the input-forwarding task is built by creating `(relay_tx, relay_rx)`, swapping `relay_rx` into `client_rx`, spawning a task that reads from the original `client`, and then immediately `drop(relay_tx)` at line 123. The `relay_tx` is never sent any messages — it exists only to give the task a channel that closes immediately, unblocking the task's `recv()` when done. This is a confusing round-trip: `relay_tx` is dropped right after creation, causing `relay_rx.recv()` to return `None` immediately in the outer loop. The outer `tokio::select!` at line 128 then only polls `stdout_rx`, never `relay_rx`. This means the outer loop ignores resize events sent by the input task to `resize_tx`. The design works, but the `relay_tx/relay_rx` swap is dead complexity — the outer loop never reads `relay_rx`.
-- **Fix:** Remove the channel swap entirely. The outer loop only needs `stdout_rx`. The input task reads from the original `client_rx` directly, which is what happens logically after the swap anyway. Simplify to just `tokio::spawn` the input forwarding with the original `client_rx`.
-- **Status:** PENDING
+### GridIterator never used
+- **Location:** `crates/rterm-core/src/grid/mod.rs:376-402`
+- **Problem:** `GridIterator` struct with `Iterator` and `DoubleEndedIterator` impls has no callers.
+- **Fix:** Remove `GridIterator` if truly unused, or add a `#[cfg(test)]` guard if only used in tests.
 
-### `tls` field in `ListenerConfig` is read but never used
-- **Location:** `crates/rterm-relay/src/config.rs:17`
-- **Problem:** `ListenerConfig` has a `tls: bool` field deserialized from `rterm.toml`, but the relay always uses TLS for all listeners regardless of this flag. The field is deserialized (so parsing fails if absent) but never checked at runtime.
-- **Fix:** Either remove the field (simplify the config schema) or actually honor it (allow plaintext gRPC H2 for testing). The intent is unclear.
-- **Status:** PENDING
+### Underscore-prefixed variable never read
+- **Location:** `crates/rterm-core/src/grid/mod.rs:103`
+```rust
+let _region_end = region.end.line.0 as usize;
+```
+- **Problem:** Value computed but never used — suggests incomplete refactoring.
+- **Fix:** Remove the unused variable.
 
-### `network.rs` is a one-function module with no tests
-- **Location:** `crates/rterm-relay/src/network.rs:1-8`
-- **Problem:** `get_lan_ip()` runs `hostname -I` as a subprocess. It has no tests. Per CLAUDE.md: "Never 0%: Every module must have at least one test." Also this function is effectively unreachable for testing (runs a system command).
-- **Fix:** Add at least one smoke test that verifies the function returns `Some` or `None` without panicking on the current host. Or inline the call into `wt_server.rs` since it is called in one place.
-- **Status:** LOW PRIORITY
-
----
-
-## 4. Duplication
-
-### gRPC framing logic duplicated in `rterm-cli/src/main.rs` and `rterm-relay/tests/e2e_test.rs`
-- **Location:** `crates/rterm-cli/src/main.rs:51-54` and `crates/rterm-relay/tests/e2e_test.rs:61-64` and `crates/rterm-relay/tests/e2e_test.rs:94-97`
-- **Problem:** The 5-byte gRPC framing (1-byte compression flag + 4-byte big-endian length) is manually constructed in three places. Any protocol change (e.g., adding compression) must be updated in all three spots.
-- **Fix:** Extract a shared `encode_grpc_frame(payload: &[u8]) -> Vec<u8>` helper into `rterm-proto` or `rterm-cli` lib. The test file could import it from the CLI crate or proto crate.
-- **Status:** LOW PRIORITY
-
-### `plain_text` construction duplicated between `service.rs` and CLI
-- **Location:** `crates/rterm-relay/src/service.rs:108-116`
-- **Problem:** `GetSnapshotSvc::call` manually constructs `plain_text` by iterating over snapshot rows and trimming. However, `GetSnapshotResponse` already carries `plain_text` as a field. The construction logic here could be factored into a helper on `ScreenSnapshotData`.
-- **Fix:** Add a `to_plain_text()` method on `ScreenSnapshotData` in `rterm-proto` and call it from the service.
-- **Status:** LOW PRIORITY
-
----
-
-## 5. Logic / Correctness
-
-### `is_cert_valid()` ignores its `cert_pem` argument — uses file mtime instead
-- **Location:** `crates/rterm-relay/src/tls.rs:85`
-- **Problem:** The function is declared `fn is_cert_valid(_cert_pem: &[u8]) -> bool` but ignores the cert bytes entirely. It checks the file's modification time on disk instead. This means:
-  1. If the cert was copied from elsewhere (mtime newer than content creation), validity is wrong.
-  2. The function always opens the same hardcoded path regardless of the input, making it untestable and misleading.
-- **Fix:** Either parse the cert's `notAfter` field directly from `cert_pem` using `x509-cert` or `rcgen`, or rename the function to `is_cert_file_fresh()` and update the signature to take no argument.
-- **Status:** PENDING
-
-### `generate_session_name()` uses `RandomState` as RNG — not random
-- **Location:** `crates/rterm-relay/src/session_manager.rs:147-163`
-- **Problem:** `RandomState::new()` seeds a HashMap hasher which is not a CSPRNG. The seed is randomized per process startup (using OS randomness), but within a single process all calls use the same seed prefix. Calling `rand()` three times with `h.write_u8(0)` will produce the same value all three times (same hasher, same input). This means all three indices will be the same within one invocation, giving names like `swift-swift-N`. Worse, session names across a process run may be predictable.
-- **Fix:** Use `rand::random()` or `std::collections::hash_map::DefaultHasher` with different inputs, or simply use `uuid::Uuid::new_v4().to_string()`.
-- **Status:** PENDING
-
----
-
-## 6. Placeholder / Incomplete
-
-### `rterm-shell` is a `todo!()` crate
+### rterm-shell is entirely placeholder
 - **Location:** `crates/rterm-shell/src/lib.rs:1-3`
-- **Problem:** Entire crate is a single `todo!()` call. Zero tests. Registered in workspace `Cargo.toml`.
-- **Fix:** Acknowledged placeholder per CLAUDE.md. No action needed.
-- **Status:** SKIPPED (intentional placeholder)
-
-### `osc_dispatch` is a no-op stub in `terminal.rs`
-- **Location:** `crates/rterm-core/src/terminal.rs:438-440`
-- **Problem:** `osc_dispatch` handles OSC sequences (window title, hyperlinks, clipboard) with a comment `// TODO: handle OSC 0/2, OSC 8, OSC 52`. Window title (OSC 2) is a commonly used sequence in terminal sessions. Without it, the browser client never receives a title update.
-- **Fix:** Implement at minimum OSC 0/2 (set `title` in screen state) and surface it in `ScreenSnapshotData`. The infrastructure for the `title` field already exists in `ScreenSnapshotData`.
-- **Status:** OUT OF SCOPE for this audit (feature work)
+- **Problem:** Contains only `todo!("rterm-shell: native WebView wrapper + local PTY + WebSocket bridge")`.
+- **Fix:** Either implement or remove the crate from workspace.
 
 ---
 
-## 7. Architecture
+## 3. Silent Failures
 
-### `#[allow(clippy::type_complexity)]` on `ManagedSession::new`
-- **See section 2.** Named type alias would remove the suppression entirely.
+### try_send results silently dropped
+- **Location:** `crates/rterm-session/src/session.rs:104-107`
+```rust
+let _ = old_tx.try_send(ServerMsg::SessionDetached(...));
+```
+- **Problem:** If old client's channel is full, the `SessionDetached` notification is silently lost.
+- **Fix:** Log a warning when drop occurs, or use a different strategy (close notification, metrics).
+
+### try_send for PTY resize silently dropped
+- **Location:** `crates/rterm-session/src/session.rs:119` and `crates/rterm-session/src/session.rs:185`
+```rust
+let _ = self.pty_resize_tx.try_send((cols, rows));
+```
+- **Problem:** Both silently drop if channel is full — resize signals can be lost.
+- **Fix:** Consider logging or using a bounded sender with proper backpressure handling.
 
 ---
 
-## Summary Table
+## 4. No-Op Code
+
+### Unnecessary .map(|i| i) identity
+- **Location:** `crates/rterm-session/src/timeline.rs:290-295`
+```rust
+.binary_search_by_key(&event_index, |s| s.event_index)
+    .map(|i| i)  // <-- unnecessary map identity
+    .unwrap_or_else(|i| i.saturating_sub(1));
+```
+- **Problem:** `.map(|i| i)` is a no-op.
+- **Fix:** Remove `.map(|i| i)`.
+
+### Comment noise describing rejected approach
+- **Location:** `crates/rterm-core/src/grid/mod.rs:105-117`
+- **Problem:** Extensive comments describing a ring buffer optimization that was rejected.
+- **Fix:** Remove the comment block describing the abandoned approach.
+
+---
+
+## 5. Unsafe / Panic Patterns
+
+### unwrap() in non-test production code
+- **Location:** `crates/rterm-core/src/buffer.rs:116-117`, `crates/rterm-core/src/buffer.rs:122-123`, `crates/rterm-core/src/grid/mod.rs:338`
+```rust
+self.grid.cell(point).expect("cell out of bounds")
+```
+- **Problem:** `Cell::from_u32` in proto decode can fail, but these assume coordinates are always valid.
+- **Fix:** Handle the case where coordinates may be out of bounds — return an error or clamp.
+
+### Mixed unwrap_or vs ok().map() error handling
+- **Location:** `crates/rterm-proto/src/lib.rs:727-732`
+```rust
+let cmd = std::str::from_utf8(params[0]).unwrap_or("");
+std::str::from_u8(params[1]).ok().map(|s| s.to_string())
+```
+- **Problem:** Inconsistent error handling — one silently defaults, the other uses `ok().map()`.
+- **Fix:** Use consistent error handling.
+
+---
+
+## 6. Architecture Issues
+
+### rterm-service vs rterm-relay naming confusion
+- **Location:** `crates/rterm-service/src/lib.rs`
+- **Problem:** `rterm-service` is a thin wrapper that re-exports from `rterm_relay::service`. The crate names are confusing.
+- **Fix:** Either remove `rterm-service` as a separate crate, or give it a clearer purpose.
+
+### rterm-mobile in workspace but untracked
+- **Location:** `Cargo.toml` workspace members
+- **Problem:** `rterm-mobile/` in git status as untracked but listed in workspace.
+- **Fix:** Add to git tracking or remove from workspace members.
+
+---
+
+## 7. Message Encoding Gaps
+
+### ClientMsg session management messages encode as NONE
+- **Location:** `crates/rterm-proto/src/lib.rs:395-406`
+- **Problem:** `CreateSession`, `AttachSession`, `DestroySession`, `ListSessions` fall through to a catch-all that encodes as `NONE` body type.
+- **Fix:** Implement proper FlatBuffers encoding for each session management message type.
+
+### ServerMsg session management messages encode as NONE
+- **Location:** `crates/rterm-proto/src/lib.rs:537-547`
+- **Problem:** Same as above for server-side session messages.
+- **Fix:** Implement proper FlatBuffers encoding for each server session message type.
+
+---
+
+## 8. Config / Comment Issues
+
+### Chinese comment in config
+- **Location:** `crates/rterm-relay/src/config.rs:39`
+```rust
+/// Transport type for the WASM client connection (，决定客户端使用哪种传输协议).
+```
+- **Problem:** Chinese phrase mixed with English in public documentation.
+- **Fix:** Remove the Chinese portion or translate fully to English.
+
+---
+
+## Priority Summary (New Findings)
+
+| Priority | Issue |
+|----------|-------|
+| **High** | encode_vt_mouse duplication |
+| **High** | ClientMsg/ServerMsg session encoding gaps |
+| **High** | unwrap() in hot paths (buffer.rs, grid/mod.rs) |
+| **Medium** | try_send silent drops in session.rs |
+| **Medium** | Remove wrapper re-exports |
+| **Medium** | GridIterator dead code |
+| **Low** | timeline.rs .map(\|i\| i) no-op |
+| **Low** | Comment noise in grid/mod.rs |
+| **Low** | Chinese comment in config.rs |
+| **Low** | rterm-shell placeholder decision |
+
+---
+
+## Summary Table (All Findings)
+
+| # | Category | Issue | Severity | Status |
+|---|----------|-------|----------|--------|
+| 1 | Duplication | encode_vt_mouse in wt_handler and ws_handler | High | PENDING |
+| 2 | Encoding | ClientMsg/ServerMsg session messages encode as NONE | High | PENDING |
+| 3 | Unsafe | unwrap() in buffer.rs and grid/mod.rs | High | PENDING |
+| 4 | Silent fail | try_send drops in session.rs | Medium | PENDING |
+| 5 | Architecture | Remove wrapper re-exports in rterm-relay | Medium | PENDING |
+| 6 | Dead code | GridIterator never used | Medium | PENDING |
+| 7 | No-op | .map(\|i\| i) in timeline.rs | Low | PENDING |
+| 8 | Comment | Ring buffer comment noise in grid/mod.rs | Low | PENDING |
+| 9 | Config | Chinese comment in config.rs | Low | PENDING |
+| 10 | Placeholder | rterm-shell decision needed | Low | PENDING |
+| 11 | Architecture | rterm-service naming confusion | Low | PENDING |
+| 12 | Workspace | rterm-mobile untracked in workspace | Low | PENDING |
+
+---
+
+<!-- Historical findings from 2026-03-31 below -->
+
+---
+
+# Historical Findings (2026-03-31)
+
+## Summary Table (Previous)
 
 | # | Category | Issue | Severity | Status |
 |---|----------|-------|----------|--------|
@@ -142,14 +205,28 @@ This document records findings from the code audit of 2026-03-31. Previous resol
 
 ---
 
-## Historical Findings (Previous Audit — Resolved)
+## Historical Issue Details (2026-03-31)
 
-| Issue | Status |
-|-------|--------|
-| Tests outside `#[cfg(test)]` in buffer.rs | DONE |
-| Dead `PtySession` code in pty.rs | DONE |
-| `TerminalServer::default()` inconsistency | DONE |
-| `unwrap()` in `generate_cert`/`extract_cert_der` | DONE (previously) |
-| Grid row cloning (perf) | SKIPPED |
-| HTTP builder unwrap() (cosmetic) | SKIPPED |
-| WASM duplicate generated code | SKIPPED |
+### Issue 2: expect() in cert generation can panic at startup
+- **Location:** `crates/rterm-relay/src/tls.rs:67,72,75,123`
+- **Status:** PENDING
+
+### Issue 3: expect() in main.rs inside spawned tasks
+- **Location:** `crates/rterm-relay/src/main.rs:99,112`
+- **Status:** PENDING
+
+### Issue 7: tls field in ListenerConfig never used
+- **Location:** `crates/rterm-relay/src/config.rs:17`
+- **Status:** PENDING
+
+### Issue 9: gRPC framing duplicated in 3 places
+- **Location:** `crates/rterm-cli/src/main.rs:51-54`, `crates/rterm-relay/tests/e2e_test.rs:61-64,94-97`
+- **Status:** PENDING
+
+### Issue 10: unwrap() on HTTP response builders
+- **Location:** `crates/rterm-relay/src/https_server.rs:82,118,123`, `crates/rterm-relay/src/wt_server.rs:117`, `crates/rterm-relay/src/static_files.rs:18,33`
+- **Status:** LOW PRIORITY
+
+### Issue 11: network.rs has no tests
+- **Location:** `crates/rterm-relay/src/network.rs:1-8`
+- **Status:** LOW PRIORITY
