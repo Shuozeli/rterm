@@ -25,7 +25,7 @@ pub fn get_cert_hash_from_global() -> Option<Vec<u8>> {
     if hash_str.is_empty() {
         return None;
     }
-    web_sys::console::log_1(&format!("[rterm] cert hash from server: {}", hash_str).into());
+    log::info!("[rterm] cert hash from server: {}", hash_str);
     let atob_fn: js_sys::Function =
         js_sys::Reflect::get(&window, &"atob".into()).ok()?.unchecked_into();
     let decoded_js = atob_fn

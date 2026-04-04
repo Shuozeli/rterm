@@ -1,7 +1,7 @@
 /// Terminal application: TerminalApp struct, shared state, and the eframe::App update loop.
 use crate::connection;
 use crate::input::encode_vt_key;
-use crate::messages::{encode_key_input, encode_mouse_event, encode_paste_input};
+use crate::messages::{encode_key_input, encode_mouse_event, encode_paste_input, encode_reset_viewport, encode_scroll};
 use crate::protocol::encode_message;
 use crate::render::{paint_grid, DisplayGrid};
 use crate::selection;
@@ -80,10 +80,7 @@ impl eframe::App for TerminalApp {
                         s.connection_started = true;
                         drop(s);
 
-                        web_sys::console::log_1(
-                            &format!("[rterm] initial size: {}x{}", fit_cols, fit_rows)
-                                .into(),
-                        );
+                        log::info!("[rterm] initial size: {}x{}", fit_cols, fit_rows);
 
                         let shared_clone = Rc::clone(&self.shared);
                         let ctx2 = ctx.clone();
@@ -131,6 +128,8 @@ impl eframe::App for TerminalApp {
                         &self.shared,
                     );
                 }
+                // All scroll events go to the server via ClientScroll.
+                self.handle_scroll_events(&response);
 
                 // Keyboard input.
                 let events = ui.input(|i| i.events.clone());
@@ -158,13 +157,29 @@ impl eframe::App for TerminalApp {
                             modifiers,
                             ..
                         } => {
+                            // Check if in viewport mode (scrolled into history).
+                            let in_viewport_mode = {
+                                self.shared.borrow().grid.scroll_offset > 0
+                            };
+
                             if let Ok(mut s) = self.shared.try_borrow_mut() {
                                 s.grid.selection_start = None;
                                 s.grid.selection_end = None;
                             }
 
                             if let Some(bytes) = encode_vt_key(*key, modifiers, app_cursor_keys) {
-                                self.send_key(&bytes);
+                                // Send key to PTY.
+                                if let Ok(mut s) = self.shared.try_borrow_mut() {
+                                    if s.connected {
+                                        let ki = encode_key_input(&bytes);
+                                        s.send_queue.push_back(encode_message(&ki));
+                                    }
+                                    // If we were in viewport mode, also send ResetViewport to return to live.
+                                    if in_viewport_mode {
+                                        let msg = encode_reset_viewport();
+                                        s.send_queue.push_back(encode_message(&msg));
+                                    }
+                                }
                             }
                         }
                         _ => {}
@@ -219,19 +234,6 @@ impl TerminalApp {
                 self.send_mouse(row, col, button, 0, 1); // kind=Release=1
             }
         }
-
-        // Scroll.
-        let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
-        if scroll_delta != 0.0 {
-            if let Some(pos) = response.hover_pos() {
-                let (row, col) = pos_to_cell(pos);
-                if scroll_delta > 0.0 {
-                    self.send_mouse(row, col, 64, 0, 3); // ScrollUp=3
-                } else {
-                    self.send_mouse(row, col, 65, 0, 4); // ScrollDown=4
-                }
-            }
-        }
     }
 
     fn send_mouse(&self, row: u16, col: u16, button: u8, modifiers: u8, kind: u8) {
@@ -240,6 +242,27 @@ impl TerminalApp {
                 let msg = encode_mouse_event(row, col, button, modifiers, kind);
                 s.send_queue.push_back(encode_message(&msg));
             }
+        }
+    }
+
+    /// Handle scroll events: send ClientScroll to the server.
+    /// The server handles viewport updates and sends back ScreenSnapshot.
+    fn handle_scroll_events(&self, response: &egui::Response) {
+        let scroll_delta = response.ctx.input(|i| i.smooth_scroll_delta.y);
+        if scroll_delta == 0.0 {
+            return;
+        }
+
+        // direction: 1 = up/back (older), -1 = down/forward (newer).
+        let direction = if scroll_delta > 0.0 { 1 } else { -1 };
+        let lines = scroll_delta.abs() as u32;
+
+        if let Ok(mut s) = self.shared.try_borrow_mut() {
+            if !s.connected {
+                return;
+            }
+            let msg = encode_scroll(direction, lines.max(1));
+            s.send_queue.push_back(encode_message(&msg));
         }
     }
 }

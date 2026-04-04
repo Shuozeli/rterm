@@ -8,6 +8,11 @@ license = "MIT"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[features]
+default = ["transport-webtransport"]
+transport-webtransport = []
+transport-websocket = []
+
 [dependencies]
 flatbuffers = "25.12.19"
 egui = "0.31"
@@ -30,10 +35,12 @@ web-sys = { version = "0.3.92", features = [
     "Window",
     "Clipboard",
     "Navigator",
-    "console",
+    "WebSocket",
+    "MessageEvent",
 ] }
 js-sys = "0.3"
 log = "0.4"
+wasm-logger = "0.2"
 console_error_panic_hook = "0.1"
 
 [lints.rust]
