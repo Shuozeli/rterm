@@ -23,7 +23,7 @@ to any target: WASM, ARM, x86_64.
 - **gRPC is the universal boundary:** All inter-process communication uses gRPC.
   No FFI, no shared libraries, no .so/.dylib. Clean process boundaries.
 - **Rust everywhere except UI:** VT emulation, SSH, session management, gRPC
-  service — all Rust. Only the mobile UI layer (Flutter) is non-Rust.
+  service — all Rust. Only the mobile UI layer (Tauri + WebView) uses JavaScript.
 - **Transport-agnostic sessions:** A session is a Transport + VT emulator.
   The Transport trait abstracts PTY, SSH, or test fakes.
 - **Logical correctness first:** VT emulation correctness before GUI polish.
@@ -70,9 +70,9 @@ rterm/
     rterm-gui/           Desktop demo (egui, connects via gRPC)
     rterm-cli/           Automation CLI (connects via gRPC)
 
-  mobile/
-    Flutter app          Dart UI, connects via gRPC to rterm-agent (localhost)
-                         or rterm-relay (remote)
+  crates/rterm-mobile/
+    Tauri mobile app     Rust backend (SessionManager + SshPtySpawner)
+                         JS/HTML frontend in WebView
 ```
 
 ## The Transport Trait
@@ -117,29 +117,28 @@ Browser / rterm-cli / rterm-gui
 +------------------------------------------+
 ```
 
-### Client Mode (agent — for mobile SSH)
+### Client Mode (mobile SSH)
 
 ```
-Flutter app (or any gRPC client)
-        │
-        │ gRPC (localhost)
-        ▼
+Tauri WebView (JS frontend)
+        |
+        | Tauri invoke() commands
+        v
 +------------------------------------------+
-│ rterm-agent (runs on device)             │
-│                                          │
-│  rterm-service (same gRPC handlers)      │
-│       │                                  │
-│  rterm-session (same SessionManager)     │
-│       │                                  │
-│  Session = SshTransport + rterm-core     │
-│       │                                  │
-│  SshTransport ──── SSH ──── remote host  │
+| rterm-mobile (Tauri Rust backend)        |
+|                                          |
+|  AppState = Arc<SessionManager>          |
+|           + Arc<SshPtySpawner>            |
+|       |                                  |
+|  SshPtySpawner -> SshTransport            |
+|       |                                  |
+|  Session = SshTransport + rterm-core     |
+|       |                                  |
+|  SshTransport --- SSH --- remote host  |
 +------------------------------------------+
 ```
 
-**Flutter does not know or care** which mode it is talking to. Same gRPC API,
-same proto, same behavior. The user picks "SSH direct" or "relay server"
-in connection settings.
+
 
 ### Combined Mode (future)
 
@@ -203,7 +202,7 @@ service TerminalService {
 | rterm-wasm (browser) | WebTransport bidi stream (QUIC) | Browser terminal |
 | rterm-gui (desktop) | gRPC/H3 (QUIC) | Desktop demo |
 | rterm-cli | gRPC/H2 (TLS) | Automation |
-| Flutter app (mobile) | gRPC/H2 (localhost, plaintext) | Mobile SSH client |
+| Tauri mobile app (Rust+JS) | Tauri commands (in-process) | SSH client |
 
 ## Platform Architecture
 
@@ -224,19 +223,19 @@ rterm-gui connects to rterm-relay via gRPC/H3
   → egui renders cell grid natively
 ```
 
-### Mobile (Flutter)
+### Mobile (Tauri 2)
 
 ```
-rterm-agent runs as a local process on the device
-  → Manages SSH connections + VT emulation
-  → Exposes gRPC on localhost
+Tauri 2 app (Rust backend + WebView frontend)
+  → SshPtySpawner wraps SshTransport into PtyHandle channels
+  → AppState holds Arc<SessionManager>
+  → Tauri commands: create_session, send_keys, get_snapshot, resize_session
 
-Flutter app connects to localhost gRPC
-  → Session list, accessory key bar, settings (Dart)
-  → Terminal rendering (Flutter CustomPaint or WebView with egui)
+WebView hosts:
+  → HTML/CSS/JS: host list, settings, accessory bar
+  → rterm-wasm (future): terminal cell grid via egui in WebView
 
-Alternatively: Flutter connects directly to a remote rterm-relay
-  → Same gRPC API, no local agent needed
+SSH is handled entirely in-process — no separate agent binary needed.
 ```
 
 ## Data Flow
@@ -251,15 +250,15 @@ Keyboard → Client (VT encode) → gRPC/WebTransport → relay
   → gRPC/WebTransport → Client → render cells
 ```
 
-### Client mode (agent)
+### Client mode (mobile)
 
 ```
-Keyboard → Flutter → gRPC (localhost) → rterm-agent
-  → SshTransport.write() → SSH channel → remote host
+Keyboard → Tauri WebView → Tauri command (send_keys)
+  → SessionManager → SshTransport.write() → SSH channel → remote host
   → SSH channel → SshTransport.read()
   → Terminal.feed() (local VT emulation)
   → PrevScreen.diff() → ScreenUpdate
-  → gRPC (localhost) → Flutter → render cells
+  → Tauri command (get_snapshot) → WebView → render cells
 ```
 
 ## Extraction Plan

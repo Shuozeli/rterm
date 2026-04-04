@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod cell;
 pub mod color;
 pub mod display_grid;
+pub mod grid;
 pub mod terminal;
 
 pub use buffer::ScreenBuffer;

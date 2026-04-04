@@ -1,5 +1,5 @@
 use crate::buffer::{Pen, ScreenBuffer};
-use crate::cell::Flags;
+use crate::cell::{Cell, Flags};
 use crate::color::Color;
 
 /// Character set designation.
@@ -194,6 +194,16 @@ impl Terminal {
         } else {
             &mut self.primary
         }
+    }
+
+    /// Get scrollback lines from the primary screen buffer.
+    pub fn scrollback(&self) -> &[Vec<Cell>] {
+        self.primary.scrollback()
+    }
+
+    /// Get the number of lines in scrollback.
+    pub fn scrollback_len(&self) -> usize {
+        self.primary.scrollback_len()
     }
 
     /// Drain any pending response bytes (for DSR, DA, etc.).

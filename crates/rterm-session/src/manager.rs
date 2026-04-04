@@ -135,6 +135,23 @@ impl SessionManager {
         result
     }
 
+    /// Insert a pre-created ManagedSession and start its output loop.
+    pub async fn insert_session(
+        &self,
+        name: &str,
+        session: ManagedSession,
+        stdout_rx: tokio::sync::mpsc::Receiver<Vec<u8>>,
+    ) {
+        let session = Arc::new(Mutex::new(session));
+        let session_loop = Arc::clone(&session);
+        tokio::spawn(async move {
+            session_output_loop(session_loop, stdout_rx).await;
+        });
+        let mut sessions = self.sessions.lock().await;
+        sessions.insert(name.to_string(), Arc::clone(&session));
+        info!("session inserted: {}", name);
+    }
+
     /// Destroy a session by name.
     pub async fn destroy(&self, name: &str) -> Result<(), String> {
         let mut sessions = self.sessions.lock().await;

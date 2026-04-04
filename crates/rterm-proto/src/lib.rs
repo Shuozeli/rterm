@@ -7,6 +7,8 @@ pub use generated::rterm::protocol as fbs;
 /// Re-export flatbuffers for consumers.
 pub use flatbuffers;
 
+pub mod wire;
+
 use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
 
 // ============================================================================
@@ -65,6 +67,21 @@ pub struct ListSessions {
 }
 
 #[derive(Debug, Clone)]
+pub struct ScrollbackRequest {
+    pub offset: u32,
+    pub limit: u32,
+}
+
+/// Client scroll request (out-of-band, not a VT sequence).
+#[derive(Debug, Clone)]
+pub struct Scroll {
+    /// 1 = scroll up (toward older history), -1 = scroll down (toward newer).
+    pub direction: i8,
+    /// Number of lines to scroll.
+    pub lines: u32,
+}
+
+#[derive(Debug, Clone)]
 pub enum ClientMsg {
     KeyInput(KeyInput),
     PasteInput(PasteInput),
@@ -75,6 +92,9 @@ pub enum ClientMsg {
     DetachSession,
     DestroySession(DestroySession),
     ListSessions(ListSessions),
+    Scrollback(ScrollbackRequest),
+    Scroll(Scroll),
+    ResetViewport,
 }
 
 // ============================================================================
@@ -130,7 +150,7 @@ pub const ATTR_UNDERCURL: u16 = 1 << 12;
 pub const ATTR_DOTTED_UNDERLINE: u16 = 1 << 13;
 pub const ATTR_DASHED_UNDERLINE: u16 = 1 << 14;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CellData {
     pub ch: char,
     pub fg: u32,
@@ -138,14 +158,14 @@ pub struct CellData {
     pub flags: u16,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CellRangeData {
     pub row: u16,
     pub col_start: u16,
     pub cells: Vec<CellData>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct CursorData {
     pub row: u16,
     pub col: u16,
@@ -153,7 +173,7 @@ pub struct CursorData {
     pub style: u8,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ScreenUpdateData {
     pub changes: Vec<CellRangeData>,
     pub cursor: CursorData,
@@ -165,7 +185,7 @@ pub struct ScreenUpdateData {
     pub application_cursor_keys: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct ScreenSnapshotData {
     pub rows: Vec<CellRangeData>,
     pub cursor: CursorData,
@@ -175,6 +195,8 @@ pub struct ScreenSnapshotData {
     pub mouse_tracking_mode: u8,
     pub alt_screen_active: bool,
     pub application_cursor_keys: bool,
+    /// Viewport offset: how many rows are from scrollback history.
+    pub viewport_offset: u32,
 }
 
 #[derive(Debug, Clone)]
@@ -230,6 +252,13 @@ pub struct SessionListData {
 }
 
 #[derive(Debug, Clone)]
+pub struct ScrollbackData {
+    pub lines: Vec<CellRangeData>,
+    pub offset: u32,
+    pub total: u32,
+}
+
+#[derive(Debug, Clone)]
 pub enum ServerMsg {
     ScreenUpdate(ScreenUpdateData),
     ScreenSnapshot(ScreenSnapshotData),
@@ -241,6 +270,7 @@ pub enum ServerMsg {
     SessionDetached(SessionDetached),
     SessionDestroyed(SessionDestroyed),
     SessionList(SessionListData),
+    Scrollback(ScrollbackData),
 }
 
 // ============================================================================
@@ -313,6 +343,51 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 );
                 fbb.finish(msg, None);
             }
+            ClientMsg::Scrollback(s) => {
+                let sr = fbs::ScrollbackRequest::create(
+                    &mut fbb,
+                    &fbs::ScrollbackRequestArgs {
+                        offset: s.offset,
+                        limit: s.limit,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::ScrollbackRequest,
+                        body: Some(sr.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ClientMsg::Scroll(s) => {
+                let scroll = fbs::Scroll::create(
+                    &mut fbb,
+                    &fbs::ScrollArgs {
+                        direction: s.direction,
+                        lines: s.lines,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::Scroll,
+                        body: Some(scroll.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ClientMsg::ResetViewport => {
+                let rv = fbs::ResetViewport::create(&mut fbb, &fbs::ResetViewportArgs {});
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::ResetViewport,
+                        body: Some(rv.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
 
             _ => {
                 // Session management messages — encode as needed.
@@ -364,6 +439,23 @@ impl FlatBufferGrpcMessage for ClientMsg {
                     kind: m.kind().0,
                 }))
             }
+            fbs::ClientBody::ScrollbackRequest => {
+                let s = msg
+                    .body_as_scrollback_request()
+                    .ok_or("missing ScrollbackRequest")?;
+                Ok(ClientMsg::Scrollback(ScrollbackRequest {
+                    offset: s.offset(),
+                    limit: s.limit(),
+                }))
+            }
+            fbs::ClientBody::Scroll => {
+                let s = msg.body_as_scroll().ok_or("missing Scroll")?;
+                Ok(ClientMsg::Scroll(Scroll {
+                    direction: s.direction(),
+                    lines: s.lines(),
+                }))
+            }
+            fbs::ClientBody::ResetViewport => Ok(ClientMsg::ResetViewport),
             _ => Err("unknown ClientBody".into()),
         }
     }
@@ -419,6 +511,26 @@ impl FlatBufferGrpcMessage for ServerMsg {
                 );
                 fbb.finish(msg, None);
             }
+            ServerMsg::Scrollback(s) => {
+                let lines = encode_cell_ranges(&mut fbb, &s.lines);
+                let lines_vec = fbb.create_vector(&lines);
+                let sd = fbs::ScrollbackData::create(
+                    &mut fbb,
+                    &fbs::ScrollbackDataArgs {
+                        lines: Some(lines_vec),
+                        offset: s.offset,
+                        total: s.total,
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::ScrollbackData,
+                        body: Some(sd.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
             _ => {
                 // Session management messages — TODO: full encode.
                 let msg = fbs::ServerMessage::create(
@@ -460,6 +572,16 @@ impl FlatBufferGrpcMessage for ServerMsg {
                 }))
             }
             fbs::ServerBody::Bell => Ok(ServerMsg::Bell),
+            fbs::ServerBody::ScrollbackData => {
+                let s = msg
+                    .body_as_scrollback_data()
+                    .ok_or("missing ScrollbackData")?;
+                Ok(ServerMsg::Scrollback(ScrollbackData {
+                    lines: decode_cell_ranges(s.lines())?,
+                    offset: s.offset(),
+                    total: s.total(),
+                }))
+            }
             _ => Err("unknown ServerBody".into()),
         }
     }
@@ -554,6 +676,7 @@ fn encode_screen_snapshot(fbb: &mut flatbuffers::FlatBufferBuilder<'_>, ss: &Scr
             mouse_tracking_mode: ss.mouse_tracking_mode,
             alt_screen_active: ss.alt_screen_active,
             application_cursor_keys: ss.application_cursor_keys,
+            viewport_offset: ss.viewport_offset,
         },
     );
     let msg = fbs::ServerMessage::create(
@@ -630,6 +753,7 @@ fn decode_screen_snapshot(ss: &fbs::ScreenSnapshot<'_>) -> Result<ScreenSnapshot
         mouse_tracking_mode: ss.mouse_tracking_mode(),
         alt_screen_active: ss.alt_screen_active(),
         application_cursor_keys: ss.application_cursor_keys(),
+        viewport_offset: ss.viewport_offset(),
     })
 }
 
@@ -755,6 +879,7 @@ mod tests {
             mouse_tracking_mode: 0,
             alt_screen_active: false,
             application_cursor_keys: false,
+            viewport_offset: 0,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
@@ -893,6 +1018,7 @@ mod tests {
             mouse_tracking_mode: 0,
             alt_screen_active: false,
             application_cursor_keys: false,
+            viewport_offset: 0,
         });
         let decoded = ServerMsg::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
         match decoded {
@@ -1325,6 +1451,7 @@ impl FlatBufferGrpcMessage for GetSnapshotResponse {
                 mouse_tracking_mode: self.snapshot.mouse_tracking_mode,
                 alt_screen_active: self.snapshot.alt_screen_active,
                 application_cursor_keys: self.snapshot.application_cursor_keys,
+                viewport_offset: self.snapshot.viewport_offset,
             },
         );
 
@@ -1386,6 +1513,7 @@ impl FlatBufferGrpcMessage for GetSnapshotResponse {
             mouse_tracking_mode: snap.mouse_tracking_mode(),
             alt_screen_active: snap.alt_screen_active(),
             application_cursor_keys: snap.application_cursor_keys(),
+            viewport_offset: snap.viewport_offset(),
         };
 
         Ok(GetSnapshotResponse {

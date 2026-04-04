@@ -1,3 +1,4 @@
+use crate::mouse_encoding::encode_vt_mouse;
 use crate::pty::RealPtySpawner;
 use crate::session_manager::SessionManager;
 use grpc_codec_flatbuffers::FlatBufferGrpcMessage;
@@ -101,10 +102,54 @@ pub async fn handle_wt_session(
                 }
                 Ok(ClientMsg::Resize(r)) => {
                     let mut s = session.lock().await;
-                    s.cols = r.cols;
-                    s.rows = r.rows;
-                    s.terminal.resize(r.cols as usize, r.rows as usize);
-                    let _ = s.pty_resize_tx.send((r.cols, r.rows)).await;
+                    s.resize(r.cols, r.rows);
+                }
+
+                Ok(ClientMsg::MouseEvent(m)) => {
+                    // Forward mouse events to PTY when mouse tracking is enabled.
+                    // The WASM client sends scroll events as MouseEvent with buttons 64/65.
+                    let s = session.lock().await;
+                    if s.terminal.modes.mouse_tracking_mode > 0 {
+                        // Encode as VT mouse protocol and send to PTY.
+                        let bytes = encode_vt_mouse(&m);
+                        let _ = s.pty_stdin_tx.send(bytes).await;
+                    }
+                }
+
+                Ok(ClientMsg::Scrollback(r)) => {
+                    let s = session.lock().await;
+                    let scrollback = s.get_scrollback(r.offset as usize, r.limit as usize);
+                    // Send through the server_fwd channel so the spawned task writes it.
+                    let _ = server_fwd_tx.send(ServerMsg::Scrollback(scrollback)).await;
+                }
+
+                Ok(ClientMsg::Scroll(s)) => {
+                    let mut session = session.lock().await;
+                    // If alternate screen is active (vim, zellij, etc.), forward scroll as
+                    // up/down key presses so the app can handle its own scrolling.
+                    if session.terminal.is_alt_screen_active() {
+                        let key = if s.direction > 0 {
+                            b"\x1b[A".to_vec() // ArrowUp
+                        } else {
+                            b"\x1b[B".to_vec() // ArrowDown
+                        };
+                        let _ = session.pty_stdin_tx.send(key).await;
+                    } else {
+                        // Normal mode: scroll the viewport through scrollback history.
+                        let snapshot = session.scroll_viewport(s.direction, s.lines);
+                        let _ = server_fwd_tx
+                            .send(ServerMsg::ScreenSnapshot(snapshot))
+                            .await;
+                    }
+                }
+
+                Ok(ClientMsg::ResetViewport) => {
+                    let mut session = session.lock().await;
+                    session.reset_viewport();
+                    let snapshot = session.screen_snapshot();
+                    let _ = server_fwd_tx
+                        .send(ServerMsg::ScreenSnapshot(snapshot))
+                        .await;
                 }
 
                 Ok(_) => {}

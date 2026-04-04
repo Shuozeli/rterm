@@ -70,6 +70,31 @@ table ListSessions {
     tokens: [string];   // tokens the client holds (server matches by hash)
 }
 
+/// Request scrollback lines from the relay.
+table ScrollbackRequest {
+    offset: uint32;  // how many lines to scroll back from the top of history
+    limit: uint32;  // max lines to return
+}
+
+/// Scrollback lines returned by the relay.
+table ScrollbackData {
+    lines: [CellRange];  // rows of cell data
+    offset: uint32;     // offset within scrollback (starting line)
+    total: uint32;      // total scrollback lines available
+}
+
+/// Client requests a viewport scroll (out-of-band, not a VT sequence).
+/// direction: 1 = scroll up (toward older history), -1 = scroll down (toward newer).
+/// lines: number of lines to scroll.
+table Scroll {
+    direction: int8;
+    lines: uint32;
+}
+
+/// Client requests to return to live viewport (exit scrollback history mode).
+table ResetViewport {
+}
+
 union ClientBody {
     KeyInput,
     PasteInput,
@@ -80,6 +105,9 @@ union ClientBody {
     DetachSession,
     DestroySession,
     ListSessions,
+    ScrollbackRequest,
+    Scroll,
+    ResetViewport,
 }
 
 table ClientMessage {
@@ -144,6 +172,10 @@ table ScreenSnapshot {
     mouse_tracking_mode: uint8;
     alt_screen_active: bool;
     application_cursor_keys: bool;
+    /// Viewport offset: how many rows of the snapshot are from scrollback history.
+    /// The remaining rows (num_rows - viewport_offset) are the current screen.
+    /// Only non-zero when the snapshot represents a scrolled viewport, not the live screen.
+    viewport_offset: uint32;
 }
 
 
@@ -214,6 +246,7 @@ union ServerBody {
     SessionDetached,
     SessionDestroyed,
     SessionList,
+    ScrollbackData,
 }
 
 table ServerMessage {

@@ -127,13 +127,13 @@ pub mod rterm {
             since = "2.0.0",
             note = "Use associated constants instead. This will no longer be generated in 2021."
         )]
-        pub const ENUM_MAX_CLIENT_BODY: u8 = 9;
+        pub const ENUM_MAX_CLIENT_BODY: u8 = 12;
         #[deprecated(
             since = "2.0.0",
             note = "Use associated constants instead. This will no longer be generated in 2021."
         )]
         #[allow(non_camel_case_types)]
-        pub const ENUM_VALUES_CLIENT_BODY: [ClientBody; 10] = [
+        pub const ENUM_VALUES_CLIENT_BODY: [ClientBody; 13] = [
             ClientBody::NONE,
             ClientBody::KeyInput,
             ClientBody::PasteInput,
@@ -144,6 +144,9 @@ pub mod rterm {
             ClientBody::DetachSession,
             ClientBody::DestroySession,
             ClientBody::ListSessions,
+            ClientBody::ScrollbackRequest,
+            ClientBody::Scroll,
+            ClientBody::ResetViewport,
         ];
 
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -161,9 +164,12 @@ pub mod rterm {
             pub const DetachSession: Self = Self(7);
             pub const DestroySession: Self = Self(8);
             pub const ListSessions: Self = Self(9);
+            pub const ScrollbackRequest: Self = Self(10);
+            pub const Scroll: Self = Self(11);
+            pub const ResetViewport: Self = Self(12);
 
             pub const ENUM_MIN: u8 = 0;
-            pub const ENUM_MAX: u8 = 9;
+            pub const ENUM_MAX: u8 = 12;
             pub const ENUM_VALUES: &'static [Self] = &[
                 Self::NONE,
                 Self::KeyInput,
@@ -175,6 +181,9 @@ pub mod rterm {
                 Self::DetachSession,
                 Self::DestroySession,
                 Self::ListSessions,
+                Self::ScrollbackRequest,
+                Self::Scroll,
+                Self::ResetViewport,
             ];
             /// Returns the variant's name or "" if unknown.
             pub fn variant_name(self) -> Option<&'static str> {
@@ -189,6 +198,9 @@ pub mod rterm {
                     Self::DetachSession => Some("DetachSession"),
                     Self::DestroySession => Some("DestroySession"),
                     Self::ListSessions => Some("ListSessions"),
+                    Self::ScrollbackRequest => Some("ScrollbackRequest"),
+                    Self::Scroll => Some("Scroll"),
+                    Self::ResetViewport => Some("ResetViewport"),
                     _ => None,
                 }
             }
@@ -255,13 +267,13 @@ pub mod rterm {
             since = "2.0.0",
             note = "Use associated constants instead. This will no longer be generated in 2021."
         )]
-        pub const ENUM_MAX_SERVER_BODY: u8 = 10;
+        pub const ENUM_MAX_SERVER_BODY: u8 = 11;
         #[deprecated(
             since = "2.0.0",
             note = "Use associated constants instead. This will no longer be generated in 2021."
         )]
         #[allow(non_camel_case_types)]
-        pub const ENUM_VALUES_SERVER_BODY: [ServerBody; 11] = [
+        pub const ENUM_VALUES_SERVER_BODY: [ServerBody; 12] = [
             ServerBody::NONE,
             ServerBody::ScreenUpdate,
             ServerBody::ScreenSnapshot,
@@ -273,6 +285,7 @@ pub mod rterm {
             ServerBody::SessionDetached,
             ServerBody::SessionDestroyed,
             ServerBody::SessionList,
+            ServerBody::ScrollbackData,
         ];
 
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -291,9 +304,10 @@ pub mod rterm {
             pub const SessionDetached: Self = Self(8);
             pub const SessionDestroyed: Self = Self(9);
             pub const SessionList: Self = Self(10);
+            pub const ScrollbackData: Self = Self(11);
 
             pub const ENUM_MIN: u8 = 0;
-            pub const ENUM_MAX: u8 = 10;
+            pub const ENUM_MAX: u8 = 11;
             pub const ENUM_VALUES: &'static [Self] = &[
                 Self::NONE,
                 Self::ScreenUpdate,
@@ -306,6 +320,7 @@ pub mod rterm {
                 Self::SessionDetached,
                 Self::SessionDestroyed,
                 Self::SessionList,
+                Self::ScrollbackData,
             ];
             /// Returns the variant's name or "" if unknown.
             pub fn variant_name(self) -> Option<&'static str> {
@@ -321,6 +336,7 @@ pub mod rterm {
                     Self::SessionDetached => Some("SessionDetached"),
                     Self::SessionDestroyed => Some("SessionDestroyed"),
                     Self::SessionList => Some("SessionList"),
+                    Self::ScrollbackData => Some("ScrollbackData"),
                     _ => None,
                 }
             }
@@ -1835,6 +1851,522 @@ pub mod rterm {
                 ds.finish()
             }
         }
+        pub enum ScrollbackRequestOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        /// Request scrollback lines from the relay.
+        pub struct ScrollbackRequest<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ScrollbackRequest<'a> {
+            type Inner = ScrollbackRequest<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ScrollbackRequest<'a> {
+            pub const VT_OFFSET: ::flatbuffers::VOffsetT = 4;
+            pub const VT_LIMIT: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ScrollbackRequest { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ScrollbackRequestArgs,
+            ) -> ::flatbuffers::WIPOffset<ScrollbackRequest<'bldr>> {
+                let mut builder = ScrollbackRequestBuilder::new(_fbb);
+                builder.add_limit(args.limit);
+                builder.add_offset(args.offset);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn offset(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u32>(ScrollbackRequest::VT_OFFSET, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn limit(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u32>(ScrollbackRequest::VT_LIMIT, Some(0))
+                        .unwrap()
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ScrollbackRequest<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<u32>("offset", Self::VT_OFFSET, false)?
+                    .visit_field::<u32>("limit", Self::VT_LIMIT, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ScrollbackRequestArgs {
+            pub offset: u32,
+            pub limit: u32,
+        }
+        impl<'a> Default for ScrollbackRequestArgs {
+            #[inline]
+            fn default() -> Self {
+                ScrollbackRequestArgs {
+                    offset: 0,
+                    limit: 0,
+                }
+            }
+        }
+
+        pub struct ScrollbackRequestBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScrollbackRequestBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_offset(&mut self, offset: u32) {
+                self.fbb_
+                    .push_slot::<u32>(ScrollbackRequest::VT_OFFSET, offset, 0);
+            }
+            #[inline]
+            pub fn add_limit(&mut self, limit: u32) {
+                self.fbb_
+                    .push_slot::<u32>(ScrollbackRequest::VT_LIMIT, limit, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ScrollbackRequestBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ScrollbackRequestBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ScrollbackRequest<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ScrollbackRequest<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ScrollbackRequest");
+                ds.field("offset", &self.offset());
+                ds.field("limit", &self.limit());
+                ds.finish()
+            }
+        }
+        pub enum ScrollbackDataOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        /// Scrollback lines returned by the relay.
+        pub struct ScrollbackData<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ScrollbackData<'a> {
+            type Inner = ScrollbackData<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ScrollbackData<'a> {
+            pub const VT_LINES: ::flatbuffers::VOffsetT = 4;
+            pub const VT_OFFSET: ::flatbuffers::VOffsetT = 6;
+            pub const VT_TOTAL: ::flatbuffers::VOffsetT = 8;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ScrollbackData { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ScrollbackDataArgs<'args>,
+            ) -> ::flatbuffers::WIPOffset<ScrollbackData<'bldr>> {
+                let mut builder = ScrollbackDataBuilder::new(_fbb);
+                builder.add_total(args.total);
+                builder.add_offset(args.offset);
+                if let Some(x) = args.lines {
+                    builder.add_lines(x);
+                }
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn lines(
+                &self,
+            ) -> Option<::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>>
+            {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab.get::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange>>,
+                    >>(ScrollbackData::VT_LINES, None)
+                }
+            }
+            #[inline]
+            pub fn offset(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u32>(ScrollbackData::VT_OFFSET, Some(0))
+                        .unwrap()
+                }
+            }
+            #[inline]
+            pub fn total(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u32>(ScrollbackData::VT_TOTAL, Some(0))
+                        .unwrap()
+                }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ScrollbackData<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<::flatbuffers::ForwardsUOffset<
+                        ::flatbuffers::Vector<'_, ::flatbuffers::ForwardsUOffset<CellRange>>,
+                    >>("lines", Self::VT_LINES, false)?
+                    .visit_field::<u32>("offset", Self::VT_OFFSET, false)?
+                    .visit_field::<u32>("total", Self::VT_TOTAL, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ScrollbackDataArgs<'a> {
+            pub lines: Option<
+                ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'a, ::flatbuffers::ForwardsUOffset<CellRange<'a>>>,
+                >,
+            >,
+            pub offset: u32,
+            pub total: u32,
+        }
+        impl<'a> Default for ScrollbackDataArgs<'a> {
+            #[inline]
+            fn default() -> Self {
+                ScrollbackDataArgs {
+                    lines: None,
+                    offset: 0,
+                    total: 0,
+                }
+            }
+        }
+
+        pub struct ScrollbackDataBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScrollbackDataBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_lines(
+                &mut self,
+                lines: ::flatbuffers::WIPOffset<
+                    ::flatbuffers::Vector<'b, ::flatbuffers::ForwardsUOffset<CellRange<'b>>>,
+                >,
+            ) {
+                self.fbb_.push_slot_always::<::flatbuffers::WIPOffset<_>>(
+                    ScrollbackData::VT_LINES,
+                    lines,
+                );
+            }
+            #[inline]
+            pub fn add_offset(&mut self, offset: u32) {
+                self.fbb_
+                    .push_slot::<u32>(ScrollbackData::VT_OFFSET, offset, 0);
+            }
+            #[inline]
+            pub fn add_total(&mut self, total: u32) {
+                self.fbb_
+                    .push_slot::<u32>(ScrollbackData::VT_TOTAL, total, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ScrollbackDataBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ScrollbackDataBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ScrollbackData<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ScrollbackData<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ScrollbackData");
+                ds.field("lines", &self.lines());
+                ds.field("offset", &self.offset());
+                ds.field("total", &self.total());
+                ds.finish()
+            }
+        }
+        pub enum ScrollOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        /// Client requests a viewport scroll (out-of-band, not a VT sequence).
+        /// direction: 1 = scroll up (toward older history), -1 = scroll down (toward newer).
+        /// lines: number of lines to scroll.
+        pub struct Scroll<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for Scroll<'a> {
+            type Inner = Scroll<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> Scroll<'a> {
+            pub const VT_DIRECTION: ::flatbuffers::VOffsetT = 4;
+            pub const VT_LINES: ::flatbuffers::VOffsetT = 6;
+
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                Scroll { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                args: &'args ScrollArgs,
+            ) -> ::flatbuffers::WIPOffset<Scroll<'bldr>> {
+                let mut builder = ScrollBuilder::new(_fbb);
+                builder.add_lines(args.lines);
+                builder.add_direction(args.direction);
+                builder.finish()
+            }
+
+            #[inline]
+            pub fn direction(&self) -> i8 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<i8>(Scroll::VT_DIRECTION, Some(0)).unwrap() }
+            }
+            #[inline]
+            pub fn lines(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe { self._tab.get::<u32>(Scroll::VT_LINES, Some(0)).unwrap() }
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for Scroll<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?
+                    .visit_field::<i8>("direction", Self::VT_DIRECTION, false)?
+                    .visit_field::<u32>("lines", Self::VT_LINES, false)?
+                    .finish();
+                Ok(())
+            }
+        }
+        pub struct ScrollArgs {
+            pub direction: i8,
+            pub lines: u32,
+        }
+        impl<'a> Default for ScrollArgs {
+            #[inline]
+            fn default() -> Self {
+                ScrollArgs {
+                    direction: 0,
+                    lines: 0,
+                }
+            }
+        }
+
+        pub struct ScrollBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ScrollBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn add_direction(&mut self, direction: i8) {
+                self.fbb_
+                    .push_slot::<i8>(Scroll::VT_DIRECTION, direction, 0);
+            }
+            #[inline]
+            pub fn add_lines(&mut self, lines: u32) {
+                self.fbb_.push_slot::<u32>(Scroll::VT_LINES, lines, 0);
+            }
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ScrollBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ScrollBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<Scroll<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for Scroll<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("Scroll");
+                ds.field("direction", &self.direction());
+                ds.field("lines", &self.lines());
+                ds.finish()
+            }
+        }
+        pub enum ResetViewportOffset {}
+        #[derive(Copy, Clone, PartialEq)]
+
+        /// Client requests to return to live viewport (exit scrollback history mode).
+        pub struct ResetViewport<'a> {
+            pub _tab: ::flatbuffers::Table<'a>,
+        }
+
+        impl<'a> ::flatbuffers::Follow<'a> for ResetViewport<'a> {
+            type Inner = ResetViewport<'a>;
+            #[inline]
+            unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+                Self {
+                    _tab: unsafe { ::flatbuffers::Table::new(buf, loc) },
+                }
+            }
+        }
+
+        impl<'a> ResetViewport<'a> {
+            #[inline]
+            pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
+                ResetViewport { _tab: table }
+            }
+            #[allow(unused_mut)]
+            pub fn create<
+                'bldr: 'args,
+                'args: 'mut_bldr,
+                'mut_bldr,
+                A: ::flatbuffers::Allocator + 'bldr,
+            >(
+                _fbb: &'mut_bldr mut ::flatbuffers::FlatBufferBuilder<'bldr, A>,
+                _args: &'args ResetViewportArgs,
+            ) -> ::flatbuffers::WIPOffset<ResetViewport<'bldr>> {
+                let mut builder = ResetViewportBuilder::new(_fbb);
+                builder.finish()
+            }
+        }
+
+        impl ::flatbuffers::Verifiable for ResetViewport<'_> {
+            #[inline]
+            fn run_verifier(
+                v: &mut ::flatbuffers::Verifier,
+                pos: usize,
+            ) -> Result<(), ::flatbuffers::InvalidFlatbuffer> {
+                v.visit_table(pos)?.finish();
+                Ok(())
+            }
+        }
+        pub struct ResetViewportArgs {}
+        impl<'a> Default for ResetViewportArgs {
+            #[inline]
+            fn default() -> Self {
+                ResetViewportArgs {}
+            }
+        }
+
+        pub struct ResetViewportBuilder<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> {
+            fbb_: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            start_: ::flatbuffers::WIPOffset<::flatbuffers::TableUnfinishedWIPOffset>,
+        }
+        impl<'a: 'b, 'b, A: ::flatbuffers::Allocator + 'a> ResetViewportBuilder<'a, 'b, A> {
+            #[inline]
+            pub fn new(
+                _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
+            ) -> ResetViewportBuilder<'a, 'b, A> {
+                let start = _fbb.start_table();
+                ResetViewportBuilder {
+                    fbb_: _fbb,
+                    start_: start,
+                }
+            }
+            #[inline]
+            pub fn finish(self) -> ::flatbuffers::WIPOffset<ResetViewport<'a>> {
+                let o = self.fbb_.end_table(self.start_);
+                ::flatbuffers::WIPOffset::new(o.value())
+            }
+        }
+
+        impl ::core::fmt::Debug for ResetViewport<'_> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                let mut ds = f.debug_struct("ResetViewport");
+                ds.finish()
+            }
+        }
         pub enum ClientMessageOffset {}
         #[derive(Copy, Clone, PartialEq)]
 
@@ -2036,6 +2568,51 @@ pub mod rterm {
                     None
                 }
             }
+
+            #[inline]
+            #[allow(non_snake_case)]
+            pub fn body_as_scrollback_request(&self) -> Option<ScrollbackRequest<'a>> {
+                if self.body_type() == ClientBody::ScrollbackRequest {
+                    self.body().map(|t| {
+                        // Safety:
+                        // Created from a valid Table for this object
+                        // Which contains a valid union in this slot
+                        unsafe { ScrollbackRequest::init_from_table(t) }
+                    })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            #[allow(non_snake_case)]
+            pub fn body_as_scroll(&self) -> Option<Scroll<'a>> {
+                if self.body_type() == ClientBody::Scroll {
+                    self.body().map(|t| {
+                        // Safety:
+                        // Created from a valid Table for this object
+                        // Which contains a valid union in this slot
+                        unsafe { Scroll::init_from_table(t) }
+                    })
+                } else {
+                    None
+                }
+            }
+
+            #[inline]
+            #[allow(non_snake_case)]
+            pub fn body_as_reset_viewport(&self) -> Option<ResetViewport<'a>> {
+                if self.body_type() == ClientBody::ResetViewport {
+                    self.body().map(|t| {
+                        // Safety:
+                        // Created from a valid Table for this object
+                        // Which contains a valid union in this slot
+                        unsafe { ResetViewport::init_from_table(t) }
+                    })
+                } else {
+                    None
+                }
+            }
         }
 
         impl ::flatbuffers::Verifiable for ClientMessage<'_> {
@@ -2056,6 +2633,9 @@ pub mod rterm {
           ClientBody::DetachSession => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<DetachSession>>("ClientBody::DetachSession", pos),
           ClientBody::DestroySession => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<DestroySession>>("ClientBody::DestroySession", pos),
           ClientBody::ListSessions => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<ListSessions>>("ClientBody::ListSessions", pos),
+          ClientBody::ScrollbackRequest => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<ScrollbackRequest>>("ClientBody::ScrollbackRequest", pos),
+          ClientBody::Scroll => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<Scroll>>("ClientBody::Scroll", pos),
+          ClientBody::ResetViewport => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<ResetViewport>>("ClientBody::ResetViewport", pos),
           _ => Ok(()),
         }
      })?
@@ -2202,6 +2782,36 @@ pub mod rterm {
                     }
                     ClientBody::ListSessions => {
                         if let Some(x) = self.body_as_list_sessions() {
+                            ds.field("body", &x)
+                        } else {
+                            ds.field(
+                                "body",
+                                &"InvalidFlatbuffer: Union discriminant does not match value.",
+                            )
+                        }
+                    }
+                    ClientBody::ScrollbackRequest => {
+                        if let Some(x) = self.body_as_scrollback_request() {
+                            ds.field("body", &x)
+                        } else {
+                            ds.field(
+                                "body",
+                                &"InvalidFlatbuffer: Union discriminant does not match value.",
+                            )
+                        }
+                    }
+                    ClientBody::Scroll => {
+                        if let Some(x) = self.body_as_scroll() {
+                            ds.field("body", &x)
+                        } else {
+                            ds.field(
+                                "body",
+                                &"InvalidFlatbuffer: Union discriminant does not match value.",
+                            )
+                        }
+                    }
+                    ClientBody::ResetViewport => {
+                        if let Some(x) = self.body_as_reset_viewport() {
                             ds.field("body", &x)
                         } else {
                             ds.field(
@@ -2878,6 +3488,7 @@ pub mod rterm {
             pub const VT_MOUSE_TRACKING_MODE: ::flatbuffers::VOffsetT = 14;
             pub const VT_ALT_SCREEN_ACTIVE: ::flatbuffers::VOffsetT = 16;
             pub const VT_APPLICATION_CURSOR_KEYS: ::flatbuffers::VOffsetT = 18;
+            pub const VT_VIEWPORT_OFFSET: ::flatbuffers::VOffsetT = 20;
 
             #[inline]
             pub unsafe fn init_from_table(table: ::flatbuffers::Table<'a>) -> Self {
@@ -2894,6 +3505,7 @@ pub mod rterm {
                 args: &'args ScreenSnapshotArgs<'args>,
             ) -> ::flatbuffers::WIPOffset<ScreenSnapshot<'bldr>> {
                 let mut builder = ScreenSnapshotBuilder::new(_fbb);
+                builder.add_viewport_offset(args.viewport_offset);
                 if let Some(x) = args.title {
                     builder.add_title(x);
                 }
@@ -3003,6 +3615,20 @@ pub mod rterm {
                         .unwrap()
                 }
             }
+            /// Viewport offset: how many rows of the snapshot are from scrollback history.
+            /// The remaining rows (num_rows - viewport_offset) are the current screen.
+            /// Only non-zero when the snapshot represents a scrolled viewport, not the live screen.
+            #[inline]
+            pub fn viewport_offset(&self) -> u32 {
+                // Safety:
+                // Created from valid Table for this object
+                // which contains a valid value in this slot
+                unsafe {
+                    self._tab
+                        .get::<u32>(ScreenSnapshot::VT_VIEWPORT_OFFSET, Some(0))
+                        .unwrap()
+                }
+            }
         }
 
         impl ::flatbuffers::Verifiable for ScreenSnapshot<'_> {
@@ -3034,6 +3660,7 @@ pub mod rterm {
                         Self::VT_APPLICATION_CURSOR_KEYS,
                         false,
                     )?
+                    .visit_field::<u32>("viewport_offset", Self::VT_VIEWPORT_OFFSET, false)?
                     .finish();
                 Ok(())
             }
@@ -3051,6 +3678,7 @@ pub mod rterm {
             pub mouse_tracking_mode: u8,
             pub alt_screen_active: bool,
             pub application_cursor_keys: bool,
+            pub viewport_offset: u32,
         }
         impl<'a> Default for ScreenSnapshotArgs<'a> {
             #[inline]
@@ -3064,6 +3692,7 @@ pub mod rterm {
                     mouse_tracking_mode: 0,
                     alt_screen_active: false,
                     application_cursor_keys: false,
+                    viewport_offset: 0,
                 }
             }
         }
@@ -3132,6 +3761,11 @@ pub mod rterm {
                 );
             }
             #[inline]
+            pub fn add_viewport_offset(&mut self, viewport_offset: u32) {
+                self.fbb_
+                    .push_slot::<u32>(ScreenSnapshot::VT_VIEWPORT_OFFSET, viewport_offset, 0);
+            }
+            #[inline]
             pub fn new(
                 _fbb: &'b mut ::flatbuffers::FlatBufferBuilder<'a, A>,
             ) -> ScreenSnapshotBuilder<'a, 'b, A> {
@@ -3159,6 +3793,7 @@ pub mod rterm {
                 ds.field("mouse_tracking_mode", &self.mouse_tracking_mode());
                 ds.field("alt_screen_active", &self.alt_screen_active());
                 ds.field("application_cursor_keys", &self.application_cursor_keys());
+                ds.field("viewport_offset", &self.viewport_offset());
                 ds.finish()
             }
         }
@@ -4702,6 +5337,21 @@ pub mod rterm {
                     None
                 }
             }
+
+            #[inline]
+            #[allow(non_snake_case)]
+            pub fn body_as_scrollback_data(&self) -> Option<ScrollbackData<'a>> {
+                if self.body_type() == ServerBody::ScrollbackData {
+                    self.body().map(|t| {
+                        // Safety:
+                        // Created from a valid Table for this object
+                        // Which contains a valid union in this slot
+                        unsafe { ScrollbackData::init_from_table(t) }
+                    })
+                } else {
+                    None
+                }
+            }
         }
 
         impl ::flatbuffers::Verifiable for ServerMessage<'_> {
@@ -4723,6 +5373,7 @@ pub mod rterm {
           ServerBody::SessionDetached => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<SessionDetached>>("ServerBody::SessionDetached", pos),
           ServerBody::SessionDestroyed => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<SessionDestroyed>>("ServerBody::SessionDestroyed", pos),
           ServerBody::SessionList => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<SessionList>>("ServerBody::SessionList", pos),
+          ServerBody::ScrollbackData => v.verify_union_variant::<::flatbuffers::ForwardsUOffset<ScrollbackData>>("ServerBody::ScrollbackData", pos),
           _ => Ok(()),
         }
      })?
@@ -4879,6 +5530,16 @@ pub mod rterm {
                     }
                     ServerBody::SessionList => {
                         if let Some(x) = self.body_as_session_list() {
+                            ds.field("body", &x)
+                        } else {
+                            ds.field(
+                                "body",
+                                &"InvalidFlatbuffer: Union discriminant does not match value.",
+                            )
+                        }
+                    }
+                    ServerBody::ScrollbackData => {
+                        if let Some(x) = self.body_as_scrollback_data() {
                             ds.field("body", &x)
                         } else {
                             ds.field(

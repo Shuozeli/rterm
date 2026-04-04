@@ -52,6 +52,7 @@ pub fn snapshot(buffer: &ScreenBuffer) -> ScreenSnapshotData {
         mouse_tracking_mode: 0,
         alt_screen_active: false,
         application_cursor_keys: false,
+        viewport_offset: 0,
     }
 }
 

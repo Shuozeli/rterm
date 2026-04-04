@@ -1,0 +1,14 @@
+[[listener]]
+protocol = "webtransport"
+port = 4433
+bind = "100.95.116.72"
+
+[[listener]]
+protocol = "grpc-h2"
+port = 4434
+bind = "100.95.116.72"
+
+[[listener]]
+protocol = "web-socket"
+port = 4435
+bind = "100.95.116.72"

@@ -1,6 +1,6 @@
 /// Thin terminal renderer: maintains a cell grid from server ScreenUpdate messages
 /// and paints it using egui.
-use crate::messages::{CellData, ScreenData, ATTR_ALL_UNDERLINES, ATTR_BOLD, ATTR_DASHED_UNDERLINE,
+use crate::messages::{CellData, CellRange, ScreenData, ScrollbackData, ATTR_ALL_UNDERLINES, ATTR_BOLD, ATTR_DASHED_UNDERLINE,
     ATTR_DIM, ATTR_DOTTED_UNDERLINE, ATTR_DOUBLE_UNDERLINE, ATTR_HIDDEN,
     ATTR_INVERSE, ATTR_STRIKEOUT, ATTR_UNDERCURL, ATTR_UNDERLINE, ATTR_WIDE,
     ATTR_WIDE_SPACER, COLOR_DEFAULT};
@@ -24,6 +24,13 @@ pub struct DisplayGrid {
     pub mouse_tracking_mode: u8,
     pub alt_screen_active: bool,
     pub application_cursor_keys: bool,
+
+    // Scrollback state.
+    pub scroll_offset: u32,
+    pub scrollback_total: u32,
+    scrollback_lines: Vec<Vec<CellData>>,
+    // Viewport offset from the last ScreenSnapshot (non-zero = in scrolled viewport mode).
+    viewport_offset: u32,
 }
 
 impl DisplayGrid {
@@ -39,27 +46,83 @@ impl DisplayGrid {
             mouse_tracking_mode: 0,
             alt_screen_active: false,
             application_cursor_keys: false,
+
+            scroll_offset: 0,
+            scrollback_total: 0,
+            scrollback_lines: Vec::new(),
+            viewport_offset: 0,
         }
     }
 
     /// Apply a ScreenSnapshot (full screen replace).
+    /// When viewport_offset > 0, this is a viewport snapshot (from scroll) containing
+    /// viewport_offset scrollback rows followed by current screen rows.
     pub fn apply_snapshot(&mut self, data: &ScreenData) {
         let cols = data.cols as usize;
         let rows = data.rows as usize;
         let default_cell = CellData { ch: ' ', fg: COLOR_DEFAULT, bg: COLOR_DEFAULT, flags: 0 };
         self.cols = cols;
         self.rows = rows;
-        self.cells = vec![vec![default_cell; cols]; rows];
 
-        for cr in &data.changes {
-            let row = cr.row as usize;
-            for (i, cell) in cr.cells.iter().enumerate() {
-                let col = cr.col_start as usize + i;
-                if row < rows && col < cols {
-                    self.cells[row][col] = *cell;
+        self.viewport_offset = data.viewport_offset;
+
+        if data.viewport_offset > 0 {
+            // Viewport snapshot: first viewport_offset rows are scrollback, rest are current screen.
+            // The snapshot's "rows" field (changes) contains ALL visible rows.
+            let total_rows = data.changes.len();
+
+            // Build scrollback_lines from the scrollback portion.
+            let scrollback_count = data.viewport_offset as usize;
+            let screen_count = total_rows.saturating_sub(scrollback_count);
+
+            self.scrollback_lines.clear();
+            self.scrollback_lines.reserve(scrollback_count);
+            for i in 0..scrollback_count {
+                if i < data.changes.len() {
+                    let cr = &data.changes[i];
+                    let row_cells: Vec<CellData> = cr.cells.iter().copied().collect();
+                    self.scrollback_lines.push(row_cells);
+                }
+            }
+
+            // Build cells from the current screen portion.
+            self.cells = vec![vec![default_cell; cols]; rows];
+            for i in 0..screen_count {
+                let idx = scrollback_count + i;
+                if idx < data.changes.len() {
+                    let cr = &data.changes[idx];
+                    let row = cr.row as usize;
+                    if row < rows {
+                        for (j, cell) in cr.cells.iter().enumerate() {
+                            let col = cr.col_start as usize + j;
+                            if col < cols {
+                                self.cells[row][col] = *cell;
+                            }
+                        }
+                    }
+                }
+            }
+
+            self.scroll_offset = 0;
+            self.scrollback_total = data.viewport_offset;
+        } else {
+            // Normal snapshot (live view): all rows are current screen.
+            self.cells = vec![vec![default_cell; cols]; rows];
+            self.scrollback_lines.clear();
+            self.scroll_offset = 0;
+            self.scrollback_total = 0;
+
+            for cr in &data.changes {
+                let row = cr.row as usize;
+                for (i, cell) in cr.cells.iter().enumerate() {
+                    let col = cr.col_start as usize + i;
+                    if row < rows && col < cols {
+                        self.cells[row][col] = *cell;
+                    }
                 }
             }
         }
+
         self.cursor_row = data.cursor_row;
         self.cursor_col = data.cursor_col;
         self.cursor_visible = data.cursor_visible;
@@ -98,6 +161,38 @@ impl DisplayGrid {
         self.application_cursor_keys = data.application_cursor_keys;
     }
 
+    /// Apply scrollback data from the relay.
+    pub fn apply_scrollback(&mut self, data: &ScrollbackData) {
+        self.scrollback_total = data.total;
+        self.scroll_offset = data.offset;
+
+        // Convert ScrollbackData lines into Vec<Vec<CellData>>.
+        self.scrollback_lines.clear();
+        self.scrollback_lines.reserve(data.lines.len());
+        for line in &data.lines {
+            let row_cells: Vec<CellData> = line.cells.iter().copied().collect();
+            self.scrollback_lines.push(row_cells);
+        }
+    }
+
+    /// Scroll the view by `delta` lines (positive = scroll up/back, negative = scroll down/forward).
+    /// Returns true if the scroll changed.
+    pub fn scroll_by(&mut self, delta: i32) -> bool {
+        if self.scrollback_total == 0 {
+            return false;
+        }
+        let new_offset = if delta > 0 {
+            (self.scroll_offset + delta as u32).min(self.scrollback_total.saturating_sub(self.rows as u32))
+        } else {
+            self.scroll_offset.saturating_sub((-delta) as u32)
+        };
+        if new_offset == self.scroll_offset {
+            return false;
+        }
+        self.scroll_offset = new_offset;
+        true
+    }
+
     /// Resize the local grid immediately so viewport changes repaint without
     /// waiting for a round-trip snapshot from the server.
     pub fn resize(&mut self, cols: usize, rows: usize) {
@@ -125,7 +220,10 @@ impl DisplayGrid {
     }
 
     /// Get the cell that should be visible at (row, col) accounting for scroll offset.
-    /// This is the single source of truth for what the renderer shows.
+    /// When viewport_offset > 0, we're in viewport mode (from a scroll) and render
+    /// directly from the stored snapshot rows.
+    /// When scroll_offset > 0 in normal mode, rows show scrollback content.
+    /// Below the scrollback region, the current terminal screen is shown.
     pub fn visible_cell(&self, row: usize, col: usize) -> &CellData {
         static DEFAULT: CellData = CellData {
             ch: ' ',
@@ -134,8 +232,44 @@ impl DisplayGrid {
             flags: 0,
         };
 
-        if row < self.cells.len() && col < self.cols {
-            &self.cells[row][col]
+        if col >= self.cols {
+            return &DEFAULT;
+        }
+
+        // Viewport mode: render from the stored snapshot rows.
+        if self.viewport_offset > 0 {
+            if row < self.scrollback_lines.len() {
+                let line = &self.scrollback_lines[row];
+                if col < line.len() {
+                    return &line[col];
+                }
+            }
+            return &DEFAULT;
+        }
+
+        // Normal mode: scrollback + current screen.
+        if self.scroll_offset > 0 && row < self.scrollback_total as usize {
+            // Show scrollback content at the top.
+            let scrollback_row = self.scroll_offset as usize + row;
+            if scrollback_row < self.scrollback_lines.len() {
+                let line = &self.scrollback_lines[scrollback_row];
+                if col < line.len() {
+                    return &line[col];
+                }
+            }
+            // If scrollback doesn't have this row, return default.
+            return &DEFAULT;
+        }
+
+        // Show current terminal screen.
+        let screen_row = if self.scroll_offset > 0 {
+            row.saturating_sub(self.scrollback_total as usize)
+        } else {
+            row
+        };
+
+        if screen_row < self.cells.len() && screen_row < self.rows {
+            &self.cells[screen_row][col]
         } else {
             &DEFAULT
         }
@@ -472,6 +606,7 @@ mod tests {
             mouse_tracking_mode: 0,
             alt_screen_active: false,
             application_cursor_keys: false,
+            viewport_offset: 0,
         }
     }
 

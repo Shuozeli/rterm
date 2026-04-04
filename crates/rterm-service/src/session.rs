@@ -106,6 +106,11 @@ pub async fn run_session(
                     }
                 }
                 ClientMsg::MouseEvent(_) => {}
+                // Scrollback and scroll requests are handled by the relay's ManagedSession.
+                // The rterm-service session loop does not maintain scrollback.
+                ClientMsg::Scrollback(_) => {}
+                ClientMsg::Scroll(_) => {}
+                ClientMsg::ResetViewport => {}
                 // Session management messages are handled by the transport
                 // adapter before reaching the session loop.
                 ClientMsg::CreateSession(_)

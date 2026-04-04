@@ -56,6 +56,48 @@ pub fn encode_mouse_event(row: u16, col: u16, button: u8, modifiers: u8, kind: u
     fbb.finished_data().to_vec()
 }
 
+/// Encode a ScrollbackRequest ClientMessage.
+pub fn encode_scrollback_request(offset: u32, limit: u32) -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let sr = fbs::ScrollbackRequest::create(&mut fbb, &fbs::ScrollbackRequestArgs {
+        offset,
+        limit,
+    });
+    let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+        body_type: fbs::ClientBody::ScrollbackRequest,
+        body: Some(sr.as_union_value()),
+    });
+    fbb.finish(msg, None);
+    fbb.finished_data().to_vec()
+}
+
+/// Encode a Scroll ClientMessage (out-of-band scroll request).
+pub fn encode_scroll(direction: i8, lines: u32) -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let scroll = fbs::Scroll::create(&mut fbb, &fbs::ScrollArgs {
+        direction,
+        lines,
+    });
+    let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+        body_type: fbs::ClientBody::Scroll,
+        body: Some(scroll.as_union_value()),
+    });
+    fbb.finish(msg, None);
+    fbb.finished_data().to_vec()
+}
+
+/// Encode a ResetViewport ClientMessage (return to live viewport).
+pub fn encode_reset_viewport() -> Vec<u8> {
+    let mut fbb = FlatBufferBuilder::new();
+    let rv = fbs::ResetViewport::create(&mut fbb, &fbs::ResetViewportArgs {});
+    let msg = fbs::ClientMessage::create(&mut fbb, &fbs::ClientMessageArgs {
+        body_type: fbs::ClientBody::ResetViewport,
+        body: Some(rv.as_union_value()),
+    });
+    fbb.finish(msg, None);
+    fbb.finished_data().to_vec()
+}
+
 /// Decoded server message for the WASM renderer.
 pub enum ServerMsg {
     ScreenSnapshot(ScreenData),
@@ -63,9 +105,15 @@ pub enum ServerMsg {
     Exit(i32),
     Error(String),
     Bell,
+    Scrollback(ScrollbackData),
 }
 
-
+/// Scrollback data returned by the relay.
+pub struct ScrollbackData {
+    pub lines: Vec<CellRange>,
+    pub offset: u32,
+    pub total: u32,
+}
 
 pub struct ScreenData {
     pub changes: Vec<CellRange>,
@@ -78,6 +126,8 @@ pub struct ScreenData {
     pub mouse_tracking_mode: u8,
     pub alt_screen_active: bool,
     pub application_cursor_keys: bool,
+    /// Viewport offset: non-zero when this snapshot represents a scrolled viewport.
+    pub viewport_offset: u32,
 }
 
 pub struct CellRange {
@@ -132,6 +182,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 mouse_tracking_mode: ss.mouse_tracking_mode(),
                 alt_screen_active: ss.alt_screen_active(),
                 application_cursor_keys: ss.application_cursor_keys(),
+                viewport_offset: ss.viewport_offset(),
             }))
         }
         fbs::ServerBody::ScreenUpdate => {
@@ -147,6 +198,7 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
                 mouse_tracking_mode: su.mouse_tracking_mode(),
                 alt_screen_active: su.alt_screen_active(),
                 application_cursor_keys: su.application_cursor_keys(),
+                viewport_offset: 0,
             }))
         }
 

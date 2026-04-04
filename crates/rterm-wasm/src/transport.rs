@@ -13,9 +13,9 @@ pub struct WtReceiver {
     reader: web_sys::ReadableStreamDefaultReader,
 }
 
-/// Connect to rterm-relay and return split sender/receiver halves.
+/// Connect via WebTransport (QUIC/H3).
 ///
-/// `url` should be like `https://localhost:4433/wt`.
+/// `url` should be like `wss://localhost:4433/wt`.
 /// `cert_hash` is the SHA-256 hash of the server's certificate (for self-signed certs).
 pub async fn connect(
     url: &str,
@@ -24,10 +24,10 @@ pub async fn connect(
     let opts = web_sys::WebTransportOptions::new();
 
     if let Some(hash) = cert_hash {
-        let mut hash_obj = web_sys::WebTransportHash::new();
-        hash_obj.algorithm("sha-256");
+        let hash_obj = web_sys::WebTransportHash::new();
+        hash_obj.set_algorithm("sha-256");
         let uint8 = js_sys::Uint8Array::from(hash);
-        hash_obj.value(&uint8.buffer());
+        hash_obj.set_value(&uint8.buffer());
         opts.set_server_certificate_hashes(&[hash_obj]);
     }
 
@@ -53,11 +53,7 @@ pub async fn connect(
     let reader: web_sys::ReadableStreamDefaultReader =
         readable.get_reader().unchecked_into();
 
-    Ok((
-        WtSender { writer },
-        WtReceiver { reader },
-        transport,
-    ))
+    Ok((WtSender { writer }, WtReceiver { reader }, transport))
 }
 
 impl WtSender {

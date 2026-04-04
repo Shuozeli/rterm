@@ -11,6 +11,7 @@ members = [
     "crates/rterm-service",
     "crates/rterm-cli",
     "crates/rterm-agent",
+    "crates/rterm-mobile/src-tauri",
 ]
 
 # rterm-wasm is WASM-only, excluded from default workspace.

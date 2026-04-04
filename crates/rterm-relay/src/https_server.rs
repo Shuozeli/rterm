@@ -1,5 +1,6 @@
 /// Simple HTTPS server for serving the WASM page over TCP/TLS.
 /// This allows Chrome to accept the self-signed cert via the normal warning dialog.
+use crate::config::ClientTransport;
 use crate::static_files::{guess_content_type, resolve_path};
 use hyper::body::Incoming;
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -15,6 +16,7 @@ pub async fn serve_https(
     cert_pem: Vec<u8>,
     key_pem: Vec<u8>,
     cert_hash_b64: String,
+    _transport: ClientTransport,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let certs = rustls_pemfile::certs(&mut std::io::BufReader::new(&cert_pem[..]))
         .collect::<Result<Vec<_>, _>>()?;
@@ -96,8 +98,7 @@ async fn serve_static_hyper(
         Ok(data) => {
             let content_type = guess_content_type(&file_path);
 
-            // For HTML files, inject the cert hash as a global JS variable
-            // so the WASM client can use it for serverCertificateHashes.
+            // For HTML files, inject the cert hash as a global JS variable.
             let data = if content_type.starts_with("text/html") {
                 let html = String::from_utf8_lossy(&data);
                 let inject = format!(

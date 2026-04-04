@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-04-02T22:00:00Z -->
+<!-- agent-updated: 2026-04-02T23:15:00Z -->
 # rterm Tasks
 
 ## Task Dependency Graph
@@ -6,23 +6,29 @@
 ```
 Track A: VT Emulation              Track B: Crate Extraction → Mobile
 ─────────────────────              ──────────────────────────────────
-#1  Audit VT gaps                  #3  Extract rterm-transport
-      │                                  │           │
-      ▼                                  ▼           ▼
-#2  Fix P0/P1 VT gaps             #4  rterm-session  #6  SshTransport
+#1  Audit VT gaps                  #3  rterm-transport  ✅ done
+      │                                  │                 │
+      ▼                                  ▼                 ▼
+#2  Fix P0/P1 VT gaps             #4  rterm-session ✅  #6  SshTransport ✅
                                          │                 │
                                          ▼                 │
-                                   #5  rterm-service       │
+                                   #5  rterm-service ✅       │
                                          │                 │
                                          └────────┬────────┘
                                                   ▼
-                                         #7  rterm-agent binary
+                                         #7  rterm-agent ✅
                                                   │
                                                   ▼
-                                         #8  Flutter scaffold
+                                         #16 Tauri scaffold ✅
                                                   │
                                                   ▼
-                                         #9  Flutter terminal + UX
+                                         #17 Terminal rendering
+                                                  │
+                                                  ▼
+                                         #18 Mobile input UX
+                                                  │
+                                                  ▼
+                                         #19 SSH key mgmt + polish
 ```
 
 Tracks A and B are independent and can run in parallel.
@@ -158,7 +164,7 @@ pub struct Session {
 
 ### Task 5: Extract rterm-service crate
 
-**Status:** pending
+**Status:** done (2026-04-02)
 **Depends on:** Task 4
 
 **What moves from rterm-relay:**
@@ -183,7 +189,7 @@ relay provides PtyTransportFactory. agent provides SshTransportFactory.
 
 ### Task 6: Implement SshTransport using russh
 
-**Status:** pending
+**Status:** done (2026-04-02)
 **Depends on:** Task 3 (Transport trait)
 **New deps:** russh, russh-keys
 
@@ -240,39 +246,86 @@ then communicates exclusively via gRPC over localhost.
 
 ---
 
-### Task 8: Flutter scaffold
+### Task 16: Tauri mobile scaffold (SSH via Tauri commands)
 
-**Status:** pending
+**Status:** superseded (2026-04-03)
 **Depends on:** Task 7
 
-Minimal Flutter app under `mobile/`:
-- Host profile CRUD (save/edit/delete SSH hosts)
-- Start/stop rterm-agent binary from Dart
-- gRPC client connecting to agent on localhost
-- Create session, send text, display plain text output
-
-**Not in scope:** proper terminal rendering, accessory bar, SSH keys
+Pivoted to Flutter + WebView (see Task 20). Tauri scaffold废弃.
 
 ---
 
-### Task 9: Flutter terminal rendering + accessory key bar
+### Task 17: Terminal rendering in Tauri WebView
+
+**Status:** superseded (2026-04-03)
+**Depends on:** Task 16
+
+Pivoted to Flutter + WebView + rterm-wasm. No JS canvas needed (see Task 20).
+
+---
+
+### Task 18: Mobile input UX (accessory bar, sticky modifiers)
+
+**Status:** superseded (2026-04-03)
+**Depends on:** Task 17
+
+Pivoted to Flutter + WebView. egui handles input natively (see Task 20).
+
+---
+
+### Task 19: SSH key management, host profiles, polish
+
+**Status:** superseded (2026-04-03)
+**Depends on:** Task 18
+
+SSH key management in relay (SshAuth::Key) already implemented in rterm_transport.
+Pivoted to Flutter + WebView (see Task 20).
+
+---
+
+### Task 20: Flutter + WebView shell with rterm-wasm
+
+**Status:** in_progress
+**Depends on:** Task 7
+
+Flutter app (`mobile/`) hosts WebView loading rterm-wasm:
+- `TerminalScreen` — WebView widget, loads `https://<relay>/<session_name>`
+- `HostListScreen` — unchanged (shows saved hosts)
+- `HostEditScreen` — added `relayUrl` field per host
+- `SettingsScreen` — global relay URL fallback
+- Host profiles stored in SharedPreferences (JSON)
+- rterm-wasm connects via WebTransport to relay — no code changes needed
+
+**Status: DONE** — TerminalScreen (WebView), HostListScreen, HostEditScreen with relayUrl, SettingsScreen with relay URL config.
+
+**Remaining:**
+- Android build verification (APK builds successfully)
+- WebTransport works from Android WebView (needs HTTPS)
+- WASM build documented in build instructions
+
+---
+
+### Task 21: Android build + APK verification
 
 **Status:** pending
-**Depends on:** Task 8
+**Depends on:** Task 20
 
-**Terminal rendering** (CustomPaint or WebView+egui — TBD):
-- Monospace cell grid, 256 + truecolor, all Flags attributes
-- Cursor, wide chars, resize
+- `flutter build apk --debug` succeeds
+- APK installs on Android device/emulator
+- WebView loads rterm-wasm from relay URL
+- WebTransport connects to relay
 
-**Accessory key bar** (Flutter widget):
-- Esc, Tab, Ctrl (sticky), Alt (sticky), |, ~, /, -, arrows
-- Sticky: tap to arm, next key includes modifier, auto-disarm
-- Double-tap to lock
+---
 
-**Input:**
-- Pinch-to-zoom (paint scaling)
-- Space-bar cursor mode (long-press + drag = arrows)
-- Hardware keyboard auto-hide accessory bar
+### Task 22: WASM build instructions + CI
+
+**Status:** pending
+**Depends on:** Task 20
+
+- Document WASM build: `cd crates/rterm-wasm && RUSTFLAGS="--cfg web_sys_unstable_apis" trunk build`
+- Output to `dist/` — relay auto-discovers
+- Optional: add `wasm-pack` alternative build
+- Optional: CI job that builds WASM on push
 
 ---
 
