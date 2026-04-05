@@ -14,6 +14,7 @@ use rterm_core::Terminal;
 use rterm_gui::{TerminalGridConfig, encode_char, encode_key, terminal_grid};
 use rterm_proto::{ClientMsg, KeyInput, Resize, ServerMsg};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
@@ -145,9 +146,14 @@ async fn try_connect(
     // TODO: proper cert handling.
     let cert_pem = None; // Will fail if server uses self-signed cert without CA.
 
-    let channel = match H3Channel::connect(uri.clone(), cert_pem).await {
-        Ok(ch) => ch,
-        Err(e) => {
+    let channel = match tokio::time::timeout(
+        Duration::from_secs(10),
+        H3Channel::connect(uri.clone(), cert_pem),
+    )
+    .await
+    {
+        Ok(Ok(ch)) => ch,
+        Ok(Err(e)) => {
             let mut t = terminal.lock().unwrap();
             t.feed(format!("\x1b[31mFailed to connect: {}\x1b[0m\r\n", e).as_bytes());
             t.feed(b"\r\nRunning in static demo mode.\r\n");
@@ -159,6 +165,20 @@ async fn try_connect(
             );
             ctx.request_repaint();
             return Err(e.into());
+        }
+        Err(_) => {
+            // Timeout
+            let mut t = terminal.lock().unwrap();
+            t.feed(b"\x1b[31mConnection timed out after 10 seconds\x1b[0m\r\n");
+            t.feed(b"\r\nRunning in static demo mode.\r\n");
+            t.feed(b"\x1b[1;32mThis is green bold text.\x1b[0m\r\n");
+            t.feed(b"\x1b[38;5;208mThis is 256-color orange.\x1b[0m\r\n");
+            t.feed(b"\x1b[38;2;100;150;255mThis is RGB blue.\x1b[0m\r\n");
+            t.feed(
+                b"\x1b[4mUnderlined\x1b[0m \x1b[9mStrikethrough\x1b[0m \x1b[7mReversed\x1b[0m\r\n",
+            );
+            ctx.request_repaint();
+            return Err("connection timeout".into());
         }
     };
 

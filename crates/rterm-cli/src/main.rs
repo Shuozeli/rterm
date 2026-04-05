@@ -1,10 +1,11 @@
 use clap::{Parser, Subcommand};
-use grpc_client::{Channel, Grpc};
+use grpc_client::{Channel, Endpoint, Grpc};
 use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
 use grpc_core::Status;
 use http::uri::PathAndQuery;
 use rterm_proto::*;
 use std::path::PathBuf;
+use std::time::Duration;
 
 #[derive(Parser, Debug)]
 #[command(name = "rterm-cli")]
@@ -141,11 +142,18 @@ async fn make_grpc(endpoint: &str) -> Result<Grpc<Channel>, String> {
                 e
             )
         })?;
-        Channel::connect_with_ca(uri.clone(), &ca_pem)
+        Endpoint::new(uri.clone())
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .tls_with_ca(ca_pem)
+            .connect()
             .await
             .map_err(|e| format!("TLS connection failed: {e}"))?
     } else {
-        Channel::connect(uri.clone())
+        Endpoint::new(uri.clone())
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .connect()
             .await
             .map_err(|e| format!("connection failed: {e}"))?
     };

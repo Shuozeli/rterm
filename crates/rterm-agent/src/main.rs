@@ -20,6 +20,7 @@ use rterm_service::TerminalServer;
 use rterm_session::SessionManager;
 use rterm_transport::{PtyHandle, PtySpawner, SshAuth, SshConfig, SshTransport, Transport};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 use tracing::{error, info};
@@ -278,6 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     // Serve gRPC (plaintext H2 on localhost).
     if let Err(e) = Server::builder()
+        .timeout(Duration::from_secs(30))
         .serve_with_listener(listener, router)
         .await
     {

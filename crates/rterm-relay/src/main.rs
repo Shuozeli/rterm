@@ -8,6 +8,7 @@ use rterm_relay::ws_server::start_websocket_server;
 use rterm_relay::wt_server::start_webtransport_server;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::time::Duration;
 use tracing::{error, info};
 
 #[derive(Parser)]
@@ -111,7 +112,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let port = listener_cfg.port;
                 tokio::spawn(async move {
                     info!("gRPC HTTPS (H2) on port {}", port);
-                    let svc = match Server::builder().tls(&cert, &key) {
+                    let svc = match Server::builder()
+                        .timeout(Duration::from_secs(30))
+                        .tls(&cert, &key)
+                    {
                         Ok(s) => s,
                         Err(e) => {
                             error!("TLS config failed for gRPC H2 on port {}: {}", port, e);
