@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-04-02T23:15:00Z -->
+<!-- agent-updated: 2026-04-09T22:00:00Z -->
 # rterm Tasks
 
 ## Task Dependency Graph
@@ -19,16 +19,13 @@ Track A: VT Emulation              Track B: Crate Extraction → Mobile
                                          #7  rterm-agent ✅
                                                   │
                                                   ▼
-                                         #16 Tauri scaffold ✅
+                                         #20 Flutter + WebView ✅
                                                   │
                                                   ▼
-                                         #17 Terminal rendering
+                                         #21 Android build + APK
                                                   │
                                                   ▼
-                                         #18 Mobile input UX
-                                                  │
-                                                  ▼
-                                         #19 SSH key mgmt + polish
+                                         #22 WASM build + CI
 ```
 
 Tracks A and B are independent and can run in parallel.
@@ -285,7 +282,7 @@ Pivoted to Flutter + WebView (see Task 20).
 
 ### Task 20: Flutter + WebView shell with rterm-wasm
 
-**Status:** in_progress
+**Status:** done (2026-04-09)
 **Depends on:** Task 7
 
 Flutter app (`mobile/`) hosts WebView loading rterm-wasm:

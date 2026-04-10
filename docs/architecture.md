@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-04-02T22:00:00Z -->
+<!-- agent-updated: 2026-04-09T22:00:00Z -->
 # rterm Architecture
 
 ## Overview
@@ -23,7 +23,7 @@ to any target: WASM, ARM, x86_64.
 - **gRPC is the universal boundary:** All inter-process communication uses gRPC.
   No FFI, no shared libraries, no .so/.dylib. Clean process boundaries.
 - **Rust everywhere except UI:** VT emulation, SSH, session management, gRPC
-  service — all Rust. Only the mobile UI layer (Tauri + WebView) uses JavaScript.
+  service — all Rust. Mobile uses Flutter/Dart with native CustomPaint rendering.
 - **Transport-agnostic sessions:** A session is a Transport + VT emulator.
   The Transport trait abstracts PTY, SSH, or test fakes.
 - **Logical correctness first:** VT emulation correctness before GUI polish.
@@ -41,18 +41,18 @@ rterm/
     │                    Wire types: CellData, ScreenUpdate, ScreenSnapshot.
     │                    Codec: FlatBuffers encode/decode for all message types.
     │
-    rterm-transport/     I/O source abstraction (NEW, to be extracted)
+    rterm-transport/     I/O source abstraction
     │                    trait Transport { read, write, resize, close }
     │                    PtyTransport  — wraps portable-pty (server mode)
     │                    SshTransport  — wraps russh (client mode)
     │                    FakeTransport — in-memory channels (tests)
     │
-    rterm-session/       Session = Transport + VT + screen state (NEW, to be extracted)
+    rterm-session/       Session = Transport + VT + screen state
     │                    Session — owns Terminal + Transport, feeds bytes, diffs screen
     │                    SessionManager — named sessions, reaper, attach/detach
     │                    Automation — RunCommand, WaitForText, PressKeys logic
     │
-    rterm-service/       gRPC service layer (NEW, to be extracted)
+    rterm-service/       gRPC service layer
     │                    TerminalService — gRPC handlers, delegates to SessionManager
     │                    Works with ANY Transport (PTY or SSH)
     │
@@ -70,9 +70,9 @@ rterm/
     rterm-gui/           Desktop demo (egui, connects via gRPC)
     rterm-cli/           Automation CLI (connects via gRPC)
 
-  crates/rterm-mobile/
-    Tauri mobile app     Rust backend (SessionManager + SshPtySpawner)
-                         JS/HTML frontend in WebView
+  mobile/
+    Flutter app          Native Flutter (CustomPaint rendering)
+                         WebSocket client to relay on port 4435
 ```
 
 ## The Transport Trait
@@ -117,24 +117,21 @@ Browser / rterm-cli / rterm-gui
 +------------------------------------------+
 ```
 
-### Client Mode (mobile SSH)
+### Client Mode (mobile Flutter)
 
 ```
-Tauri WebView (JS frontend)
+Flutter App (Dart)
         |
-        | Tauri invoke() commands
+        | WebSocket connect
         v
 +------------------------------------------+
-| rterm-mobile (Tauri Rust backend)        |
+| rterm-relay (WebSocket server)           |
 |                                          |
-|  AppState = Arc<SessionManager>          |
-|           + Arc<SshPtySpawner>            |
+|  WsHandler -> ManagedSession             |
 |       |                                  |
-|  SshPtySpawner -> SshTransport            |
+|  ManagedSession -> PtySpawner            |
 |       |                                  |
-|  Session = SshTransport + rterm-core     |
-|       |                                  |
-|  SshTransport --- SSH --- remote host  |
+|  PtySpawner ─── PTY ─── /bin/bash        |
 +------------------------------------------+
 ```
 
@@ -202,7 +199,7 @@ service TerminalService {
 | rterm-wasm (browser) | WebTransport bidi stream (QUIC) | Browser terminal |
 | rterm-gui (desktop) | gRPC/H3 (QUIC) | Desktop demo |
 | rterm-cli | gRPC/H2 (TLS) | Automation |
-| Tauri mobile app (Rust+JS) | Tauri commands (in-process) | SSH client |
+| Flutter mobile app (Dart) | WebSocket (wss:// relay:4435) | Mobile terminal |
 
 ## Platform Architecture
 
@@ -223,19 +220,16 @@ rterm-gui connects to rterm-relay via gRPC/H3
   → egui renders cell grid natively
 ```
 
-### Mobile (Tauri 2)
+### Mobile (Flutter)
 
 ```
-Tauri 2 app (Rust backend + WebView frontend)
-  → SshPtySpawner wraps SshTransport into PtyHandle channels
-  → AppState holds Arc<SessionManager>
-  → Tauri commands: create_session, send_keys, get_snapshot, resize_session
+Flutter app (Dart + CustomPaint rendering)
+  → Native Flutter UI: host list, settings, terminal grid
+  → WebSocket client connects to rterm-relay on port 4435
+  → CustomPaint renders terminal cell grid directly
+  → No WebView, no WASM — pure Flutter native rendering
 
-WebView hosts:
-  → HTML/CSS/JS: host list, settings, accessory bar
-  → rterm-wasm (future): terminal cell grid via egui in WebView
-
-SSH is handled entirely in-process — no separate agent binary needed.
+Transport: WebSocket (wss:// relay:4435)
 ```
 
 ## Data Flow
@@ -250,33 +244,35 @@ Keyboard → Client (VT encode) → gRPC/WebTransport → relay
   → gRPC/WebTransport → Client → render cells
 ```
 
-### Client mode (mobile)
+### Client mode (mobile Flutter)
 
 ```
-Keyboard → Tauri WebView → Tauri command (send_keys)
-  → SessionManager → SshTransport.write() → SSH channel → remote host
-  → SSH channel → SshTransport.read()
-  → Terminal.feed() (local VT emulation)
+Keyboard → Flutter app (Dart)
+  → WebSocket send_keys → rterm-relay
+  → SessionManager → PtyTransport → PTY → shell
+  → PTY stdout → Terminal.feed() (server VT emulation)
   → PrevScreen.diff() → ScreenUpdate
-  → Tauri command (get_snapshot) → WebView → render cells
+  → WebSocket → Flutter app → CustomPaint render
 ```
 
-## Extraction Plan
+## Crate Structure (extracted)
 
-What moves out of rterm-relay into shared crates:
+The relay crate (`rterm-relay`) now re-exports from extracted crates:
 
-| Current location | Moves to | What |
-|-----------------|----------|------|
-| relay/managed_session.rs | rterm-session | Session + VT + screen state |
-| relay/session_manager.rs | rterm-session | Named session registry |
-| relay/screen_diff.rs | rterm-session | Screen diffing |
-| relay/service.rs (gRPC handlers) | rterm-service | TerminalService impl |
-| relay/service.rs (RunCommand etc) | rterm-session | Automation logic |
-| relay/pty.rs | rterm-transport | PtyTransport + trait |
-| (new) russh wrapper | rterm-transport | SshTransport |
-| relay/main.rs | stays | Thin launcher |
-| relay/wt_server.rs | stays | WebTransport (relay-specific) |
-| relay/https_server.rs | stays | HTTPS static files (relay-specific) |
+| Relay file | Actual implementation |
+|------------|----------------------|
+| relay/managed_session.rs | re-export from rterm-session |
+| relay/session_manager.rs | re-export from rterm-session |
+| relay/screen_diff.rs | re-export from rterm-session |
+| relay/service.rs | re-export from rterm-service |
+| relay/pty.rs | re-export from rterm-transport |
+
+| Crate | Purpose |
+|-------|---------|
+| rterm-transport | PtyTransport + SshTransport + trait |
+| rterm-session | Session + SessionManager + screen diffing |
+| rterm-service | gRPC TerminalService implementation |
+| rterm-relay | Stays: WebTransport, HTTPS static files, thin launcher |
 
 ## New Dependencies
 

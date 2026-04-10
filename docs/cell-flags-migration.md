@@ -1,4 +1,9 @@
-<!-- agent-updated: 2026-04-02T00:00:00Z -->
+<!-- agent-updated: 2026-04-09T22:00:00Z -->
+
+> **Migration status: COMPLETED** — This document is a historical record.
+> The `Flags` bitfield migration was implemented in `crates/rterm-core/src/cell.rs`.
+> `Cell` now uses `flags: Flags` (u16 bitflags) instead of `attrs: CellAttributes`.
+
 # Cell/Flags Migration: Alacritty-style Design
 
 Migrates rterm's `Cell`/`CellAttributes`/`Color` types to match alacritty's

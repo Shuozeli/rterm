@@ -5,8 +5,8 @@
 
 1. A correct, minimal terminal emulator built in Rust
 2. egui compiled to WASM is the universal renderer (no HTML, no JS)
-3. Runs on desktop (native WebView shell), browser, and mobile
-4. HTTP/3 (QUIC) as the transport layer. Native clients use gRPC/H3; WASM browser clients use WebTransport with length-prefixed FlatBuffers. No HTTP/2, no WebSocket, no fallbacks
+3. Runs on desktop (native shell), browser (WASM), and mobile (Flutter)
+4. HTTP/3 (QUIC) as the transport layer. Native clients use gRPC/H3; WASM browser clients use WebTransport; Mobile uses WebSocket. No HTTP/2, no fallbacks
 5. Custom font rendering with ligature support (rustybuzz + fontdue)
 6. xterm-compatible terminal standard
 7. Dogfoods flatbuffers-rs and pure-grpc-rs (fix bugs upstream as found)
@@ -14,7 +14,7 @@
 ## Non-Goals
 
 - Tabs, panes, splits (use tmux or your window manager)
-- HTTP/2, WebSocket, or any legacy transport
+- HTTP/2 or any legacy transport
 - Supporting legacy browsers (WebTransport required: Chrome 97+, Firefox 114+, Safari 18.2+)
 - Custom VT parser (use vte)
 - Kitty graphics protocol (initially)
@@ -71,11 +71,12 @@ Build the GUI. Start with basic text rendering.
 
 ### Phase 4: Native Shell (rterm-shell)
 Build the desktop app.
-- Minimal WebView wrapper (wry)
+- WebView wrapper (wry or tauter)
 - Embed WASM bundle as app assets
 - Local PTY + localhost gRPC/HTTP/3 server (quinn)
 - TOML config loading
 - Goal: launch rterm-shell, get a working terminal window
+- Mobile is Flutter (not rterm-shell)
 
 ### Phase 5: Custom Font Rendering
 Replace egui built-in text with custom glyph atlas.
@@ -114,10 +115,11 @@ Replace egui built-in text with custom glyph atlas.
 - Bidi streaming (gRPC) maps perfectly to terminal I/O
 - Dogfoods our own crates (flatbuffers-rs, pure-grpc-rs)
 
-### Why egui WASM in a WebView (not native egui)?
-- One WASM binary runs everywhere: browser, desktop WebView, mobile WebView
+### Why egui WASM (not native egui)?
+- One WASM binary runs everywhere: browser (WebTransport/WebSocket), desktop, mobile
 - Zero platform-specific rendering code
-- WebView is available on all platforms
+- Browser: WASM via WebTransport or WebSocket
+- Mobile: Flutter-native rendering via CustomPaint (not WebView)
 
 ### Why vte and not alacritty_terminal?
 - vte is the parser only; we build our own screen buffer

@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-03-30T02:00:00Z -->
+<!-- agent-updated: 2026-04-09T22:00:00Z -->
 
 # Session Management Design
 
@@ -51,6 +51,12 @@ Each WebTransport connection = one PTY session. No identity, no persistence, no 
 Why names + IDs: Names are for humans (`rterm attach dev`). IDs are for machines (unique, no collisions). Tokens are for auth (prove you own this session).
 
 ## Architecture
+
+> **Note:** Session management was moved from `rterm-relay` to the `rterm-session` crate.
+> - `crates/rterm-session/src/manager.rs` -- SessionManager
+> - `crates/rterm-session/src/session.rs` -- ManagedSession, session_output_loop
+> - `crates/rterm-relay/src/session_manager.rs` -- thin re-export for backward compat
+> - `crates/rterm-relay/src/managed_session.rs` -- thin re-export for backward compat
 
 ### Two-Layer State (inspired by zellij)
 
@@ -250,8 +256,8 @@ On restart:
 ## Implementation Phases
 
 ### Phase 1: SessionManager + ManagedSession
-- `session_manager.rs`: create, attach, detach, destroy, list, reaper
-- `managed_session.rs`: ManagedSession struct, session output loop task
+- `crates/rterm-session/src/manager.rs`: create, attach, detach, destroy, list, reaper
+- `crates/rterm-session/src/session.rs`: ManagedSession struct, session output loop task
 - New FlatBuffers messages + Rust types in rterm-proto
 - Unit tests with FakePtySpawner
 
@@ -298,10 +304,10 @@ On restart:
 |------|---------|
 | `rterm.fbs` | Add session management messages to ClientBody/ServerBody |
 | `rterm-proto/src/lib.rs` | Add Rust types + encode/decode for session messages |
-| `rterm-relay/src/session_manager.rs` | **New**: SessionManager (create/attach/detach/destroy/list/reaper) |
-| `rterm-relay/src/managed_session.rs` | **New**: ManagedSession + session output loop |
+| `crates/rterm-session/src/manager.rs` | **Moved**: SessionManager (create/attach/detach/destroy/list/reaper) — was `rterm-relay/src/session_manager.rs` |
+| `crates/rterm-session/src/session.rs` | **Moved**: ManagedSession + session output loop — was `rterm-relay/src/managed_session.rs` |
 | `rterm-relay/src/wt_handler.rs` | Accept Arc<SessionManager>, dispatch session commands |
 | `rterm-relay/src/main.rs` | Create SessionManager, start reaper, pass to handlers |
-| `rterm-relay/src/lib.rs` | Add new modules |
+| `crates/rterm-relay/src/lib.rs` | Re-exports from `rterm_session` for backward compat |
 | `rterm-wasm/src/lib.rs` | localStorage tokens, reconnection, session picker |
 | `rterm-wasm/src/messages.rs` | Encode/decode session message types |

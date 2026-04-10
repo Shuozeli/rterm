@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-04-04T00:00:00Z -->
+<!-- agent-updated: 2026-04-09T22:00:00Z -->
 
 # Code Quality Findings
 
@@ -160,12 +160,57 @@ std::str::from_u8(params[1]).ok().map(|s| s.to_string())
 
 ---
 
+## New Findings (2026-04-06)
+
+### High Priority
+
+#### 1. Silent Send Failures in wt_handler and ws_handler
+- **Location:** `crates/rterm-relay/src/wt_handler.rs:89,101,115,136,140,150`
+- **Also:** `crates/rterm-relay/src/ws_handler.rs:223,245,252,264`
+- **Problem:** `let _ = send(...)` silently ignores PTY send failures for KeyInput, PasteInput, MouseEvent
+- **Fix:** Log warnings or return errors
+
+#### 2. panic! in Protocol Decode
+- **Location:** `crates/rterm-proto/src/lib.rs:1044,1056,1072,1122,1158,1168,1231,1243,1270,1298,1597`
+- **Problem:** `panic!("expected KeyInput")` crashes entire session on malformed message
+- **Fix:** Return `Result::Err` instead of panic
+
+### Medium Priority
+
+#### 3. Mass Duplication (~200 lines) ws_handler vs wt_handler
+- **Location:** `wt_handler.rs` and `ws_handler.rs`
+- **Problem:** PasteInput handler, Scroll handler, ResetViewport handler, MouseEvent handler all nearly identical
+- **Fix:** Extract shared logic to `session.rs` helper functions
+
+#### 4. Mutex Panic Risk (lock().unwrap())
+- **Location:** `crates/rterm-relay/src/ws_handler.rs:69,104,277`
+- **Problem:** Can panic if lock is poisoned
+- **Fix:** Use `lock().await` or handle poison gracefully
+
+### Low Priority
+
+#### 5. Empty Match Arms `Ok(_) => {}`
+- **Location:** `wt_handler.rs:155`, `ws_handler.rs:268`
+- **Problem:** Unhandled ClientMsg variants silently ignored
+- **Fix:** Log unhandled variant or match exhaustively
+
+#### 6. Blanket #[allow(...)] Suppressions
+- **Location:** `rterm-proto/src/lib.rs:1`, `rterm-wasm/src/lib.rs:1`
+- **Problem:** Hides real warnings
+- **Fix:** Remove blanket suppression, add targeted suppressions
+
+#### 7. Empty Ok(_) => {} match arms
+- **Location:** `wt_handler.rs:155`, `ws_handler.rs:268`
+- **Fix:** Log or return Result
+
+---
+
 ## Summary Table (All Findings)
 
 | # | Category | Issue | Severity | Status |
 |---|----------|-------|----------|--------|
-| 1 | Duplication | encode_vt_mouse in wt_handler and ws_handler | High | PENDING |
-| 2 | Encoding | ClientMsg/ServerMsg session messages encode as NONE | High | PENDING |
+| 1 | Duplication | encode_vt_mouse in wt_handler and ws_handler | High | **FIXED** |
+| 2 | Encoding | ClientMsg/ServerMsg session messages encode as NONE | High | **FIXED** |
 | 3 | Unsafe | unwrap() in buffer.rs and grid/mod.rs | High | PENDING |
 | 4 | Silent fail | try_send drops in session.rs | Medium | PENDING |
 | 5 | Architecture | Remove wrapper re-exports in rterm-relay | Medium | PENDING |
@@ -176,6 +221,10 @@ std::str::from_u8(params[1]).ok().map(|s| s.to_string())
 | 10 | Placeholder | rterm-shell decision needed | Low | PENDING |
 | 11 | Architecture | rterm-service naming confusion | Low | PENDING |
 | 12 | Workspace | rterm-mobile untracked in workspace | Low | PENDING |
+| 13 | Silent fail | let _ = send() in wt_handler/ws_handler | High | **FIXED** |
+| 14 | Unsafe | panic! in protocol decode | High | PENDING |
+| 15 | Duplication | ws_handler vs wt_handler shared logic | Medium | **PARTIALLY FIXED** |
+| 16 | Unsafe | lock().unwrap() mutex panic risk | Medium | PENDING |
 
 ---
 
