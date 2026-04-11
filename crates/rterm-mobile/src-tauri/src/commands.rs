@@ -1,5 +1,6 @@
 use rterm_session::ManagedSession;
 use rterm_session::SessionManager;
+use rterm_transport::pty::ExecHandle;
 use rterm_transport::{PtyHandle, PtySpawner, SshAuth, SshConfig, SshTransport, Transport};
 use serde::Serialize;
 use std::sync::Arc;
@@ -145,6 +146,16 @@ impl PtySpawner for SshPtySpawner {
         };
 
         self.spawn_with_config("", config)
+    }
+
+    fn spawn_exec(
+        &self,
+        _command: &str,
+        _cwd: &str,
+        _cols: u16,
+        _rows: u16,
+    ) -> Result<ExecHandle, Box<dyn std::error::Error + Send + Sync>> {
+        Err("exec not supported over SSH".into())
     }
 }
 

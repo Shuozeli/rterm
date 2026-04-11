@@ -1,22 +1,29 @@
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
 use grpc_client::{Channel, Endpoint, Grpc};
 use grpc_codec_flatbuffers::{FlatBufferGrpcMessage, FlatBuffersCodec};
 use grpc_core::Status;
 use http::uri::PathAndQuery;
 use rterm_proto::*;
+use std::io::Write;
 use std::path::PathBuf;
 use std::time::Duration;
+use tokio::time::timeout;
+use tokio_stream::StreamExt;
 
 #[derive(Parser, Debug)]
 #[command(name = "rterm-cli")]
 #[command(about = "Playwright-style headless automation client for rterm", long_about = None)]
 struct Cli {
-    #[command(subcommand)]
-    command: Commands,
-
     /// RPC endpoint
     #[arg(short, long, default_value = "https://localhost:4433")]
     endpoint: String,
+
+    /// Session name (required for session commands)
+    #[arg(short, long)]
+    session: Option<String>,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -25,41 +32,50 @@ enum Commands {
     /// List active terminal sessions
     List,
 
-    /// Create a named session (explicit shell/size control)
+    /// Create a named session
     Create {
-        session: String,
         /// Shell to launch (empty → server default /bin/bash)
-        #[arg(short, long, default_value = "")]
+        #[arg(long, default_value = "")]
         shell: String,
+
         /// Terminal width in columns
-        #[arg(short, long, default_value_t = 220)]
+        #[arg(long, default_value_t = 220)]
         cols: u16,
+
         /// Terminal height in rows
-        #[arg(short, long, default_value_t = 50)]
+        #[arg(long, default_value_t = 50)]
         rows: u16,
     },
 
-    /// Destroy a named session (kill the PTY)
-    Kill { session: String },
+    /// Destroy a session (kill the PTY)
+    Kill,
 
     /// Resize a session's terminal
     Resize {
-        session: String,
-        #[arg(short, long)]
+        #[arg(long)]
         cols: u16,
-        #[arg(short, long)]
+
+        #[arg(long)]
         rows: u16,
     },
 
     // ── Input ───────────────────────────────────────────────────────────────
     /// Send UTF-8 text to a session (no newline appended)
-    Type { session: String, text: String },
+    Type {
+        /// Text to send
+        #[arg(required = true)]
+        text: String,
+    },
 
     /// Launch an interactive program (sends "<command>\n", returns immediately)
     ///
     /// Use this for TUIs (vim, less, htop) and REPLs (python3, node).
     /// Follow with `wait` to detect when the program has started.
-    Exec { session: String, command: String },
+    Exec {
+        /// Command to run
+        #[arg(required = true)]
+        command: String,
+    },
 
     /// Send named key presses (server resolves to correct PTY bytes per VT mode)
     ///
@@ -68,9 +84,8 @@ enum Commands {
     /// Ctrl+C, Ctrl+D, Ctrl+Z, Ctrl+L, Ctrl+A, Ctrl+E, Ctrl+U, Ctrl+W,
     /// F1–F12.
     ///
-    /// Example: rterm-cli press myses Escape Enter
+    /// Example: rterm-cli -s myses press Enter Escape
     Press {
-        session: String,
         /// One or more key names
         #[arg(required = true)]
         keys: Vec<String>,
@@ -78,38 +93,60 @@ enum Commands {
 
     /// Send raw PTY bytes using Rust escape syntax (\x03, \x1b[A, etc.)
     SendKeys {
-        session: String,
         /// Escape string, e.g. "\\x1b[A"
+        #[arg(required = true)]
         keys: String,
     },
 
-    // ── Output ──────────────────────────────────────────────────────────────
+    // ── Output ───────────────────────────────────────────────────────────────
     /// Print the current screen as plain text
-    GetText { session: String },
+    GetText,
 
     /// Print the current screen as a Rust debug struct
-    Snapshot { session: String },
+    Snapshot,
 
     /// Print the current screen as JSON
-    SnapshotJson { session: String },
+    SnapshotJson,
 
     /// Wait until a substring appears on screen (server polls every 100ms)
     Wait {
-        session: String,
+        /// Pattern to wait for
+        #[arg(required = true)]
         pattern: String,
-        #[arg(short, long, default_value_t = 5000)]
+
+        #[arg(long, default_value_t = 5000)]
         timeout_ms: u64,
     },
 
     /// Assert a substring is visible right now (exit 1 if not)
-    Assert { session: String, pattern: String },
+    Assert {
+        /// Pattern to check
+        #[arg(required = true)]
+        pattern: String,
+    },
 
     // ── Higher-level automation ──────────────────────────────────────────────
+    /// Run a shell command and stream stdout (no session required)
+    ExecCmd {
+        /// Command to run
+        #[arg(required = true)]
+        command: String,
+
+        /// Working directory
+        #[arg(long, default_value = ".")]
+        cwd: String,
+
+        #[arg(long, default_value_t = 30000)]
+        timeout_ms: u64,
+    },
+
     /// Run a shell command and return only the new output (blocks until done)
     Run {
-        session: String,
+        /// Command to run
+        #[arg(required = true)]
         command: String,
-        #[arg(short, long, default_value_t = 10000)]
+
+        #[arg(long, default_value_t = 10000)]
         timeout_ms: u64,
     },
 }
@@ -176,6 +213,24 @@ where
     grpc.unary(request, path, FlatBuffersCodec::<Req, Resp>::new())
         .await
         .map(|r| r.into_inner())
+}
+
+async fn call_server_streaming<Req, Resp>(
+    grpc: &mut Grpc<Channel>,
+    method: &str,
+    request: Req,
+) -> Result<impl StreamExt<Item = Result<Resp, Status>>, Status>
+where
+    Req: FlatBufferGrpcMessage,
+    Resp: FlatBufferGrpcMessage,
+{
+    let path: PathAndQuery = format!("/rterm.protocol.TerminalService/{}", method)
+        .parse()
+        .expect("valid path");
+    let resp = grpc
+        .server_streaming(request, path, FlatBuffersCodec::<Req, Resp>::new())
+        .await?;
+    Ok(resp.into_inner())
 }
 
 /// Parse Rust-style escape strings into raw bytes.
@@ -288,7 +343,17 @@ async fn main() {
         .await
         .unwrap_or_else(|e| die(format!("Error: {}", e)));
 
-    match cli.command {
+    // Handle commands that don't need session
+    let cmd = match cli.command {
+        Some(c) => c,
+        None => {
+            // No subcommand, print help
+            Cli::command().print_help().unwrap();
+            std::process::exit(0);
+        }
+    };
+
+    match cmd {
         Commands::List => {
             let resp = call::<UnaryListSessionsRequest, UnaryListSessionsResponse>(
                 &mut grpc,
@@ -309,19 +374,18 @@ async fn main() {
                     s.name, s.cols, s.rows, s.last_activity
                 );
             }
+            return;
         }
 
-        Commands::Create {
-            session,
-            shell,
-            cols,
-            rows,
-        } => {
+        Commands::Create { shell, cols, rows } => {
+            let session_name = cli
+                .session
+                .unwrap_or_else(|| die("Session name required: --session <name>"));
             let resp = call::<CreateSessionRequest, CreateSessionResponse>(
                 &mut grpc,
                 "CreateSession",
                 CreateSessionRequest {
-                    session_name: session,
+                    session_name,
                     shell,
                     cols,
                     rows,
@@ -333,9 +397,62 @@ async fn main() {
                 die(format!("Failed: {}", resp.error));
             }
             println!("Session created.");
+            return;
         }
 
-        Commands::Kill { session } => {
+        Commands::ExecCmd {
+            ref command,
+            ref cwd,
+            timeout_ms,
+        } => {
+            let mut stream = call_server_streaming::<ExecRequest, ExecResponse>(
+                &mut grpc,
+                "Exec",
+                ExecRequest {
+                    command: command.clone(),
+                    cwd: cwd.clone(),
+                    timeout_ms,
+                },
+            )
+            .await
+            .unwrap_or_else(|e| die(format!("RPC error: {}", e)));
+
+            let exit_code = loop {
+                match timeout(Duration::from_secs(5), stream.next()).await {
+                    Ok(Some(item)) => {
+                        let resp = item.unwrap_or_else(|e| die(format!("Stream error: {}", e)));
+                        if !resp.stdout.is_empty() {
+                            std::io::stdout()
+                                .write_all(&resp.stdout)
+                                .unwrap_or_else(|e| die(format!("Write error: {}", e)));
+                            std::io::stdout()
+                                .flush()
+                                .unwrap_or_else(|e| die(format!("Flush error: {}", e)));
+                        }
+                        // Final chunk signals completion
+                        if resp.exit_code != -1 {
+                            break resp.exit_code;
+                        }
+                    }
+                    // Stream ended or timeout (5s with no message) -> exit with code 124
+                    Ok(None) | Err(_) => {
+                        eprintln!("Stream ended without final exit code, exiting with 124");
+                        std::process::exit(124);
+                    }
+                }
+            };
+            std::process::exit(exit_code);
+        }
+
+        // All remaining commands require a session
+        _ if cli.session.is_none() => die("Session required: --session <name>"),
+        _ => {}
+    };
+
+    let session = cli.session.unwrap();
+
+    match cmd {
+        Commands::Kill => {
             let resp = call::<KillSessionRequest, KillSessionResponse>(
                 &mut grpc,
                 "KillSession",
@@ -351,11 +468,7 @@ async fn main() {
             println!("Session killed.");
         }
 
-        Commands::Resize {
-            session,
-            cols,
-            rows,
-        } => {
+        Commands::Resize { cols, rows } => {
             let resp = call::<ResizeSessionRequest, ResizeSessionResponse>(
                 &mut grpc,
                 "ResizeSession",
@@ -373,7 +486,7 @@ async fn main() {
             println!("Resized to {}x{}.", cols, rows);
         }
 
-        Commands::Type { session, text } => {
+        Commands::Type { text } => {
             let resp = call::<TypeRequest, TypeResponse>(
                 &mut grpc,
                 "TypeAction",
@@ -389,7 +502,7 @@ async fn main() {
             }
         }
 
-        Commands::Exec { session, command } => {
+        Commands::Exec { command } => {
             // Exec = type the command followed by Enter. Returns immediately.
             let text = format!("{}\n", command.trim_end_matches('\n'));
             let resp = call::<TypeRequest, TypeResponse>(
@@ -407,7 +520,7 @@ async fn main() {
             }
         }
 
-        Commands::Press { session, keys } => {
+        Commands::Press { keys } => {
             let resp = call::<PressKeysRequest, PressKeysResponse>(
                 &mut grpc,
                 "PressKeys",
@@ -423,7 +536,7 @@ async fn main() {
             }
         }
 
-        Commands::SendKeys { session, keys } => {
+        Commands::SendKeys { keys } => {
             let raw = parse_escape_str(&keys);
             let resp = call::<SendKeysRequest, SendKeysResponse>(
                 &mut grpc,
@@ -440,7 +553,7 @@ async fn main() {
             }
         }
 
-        Commands::GetText { session } => {
+        Commands::GetText => {
             let resp = call::<GetSnapshotRequest, GetSnapshotResponse>(
                 &mut grpc,
                 "GetSnapshot",
@@ -453,7 +566,7 @@ async fn main() {
             print!("{}", resp.plain_text);
         }
 
-        Commands::Snapshot { session } => {
+        Commands::Snapshot => {
             let resp = call::<GetSnapshotRequest, GetSnapshotResponse>(
                 &mut grpc,
                 "GetSnapshot",
@@ -466,7 +579,7 @@ async fn main() {
             println!("{:#?}", resp.snapshot);
         }
 
-        Commands::SnapshotJson { session } => {
+        Commands::SnapshotJson => {
             let resp = call::<GetSnapshotRequest, GetSnapshotResponse>(
                 &mut grpc,
                 "GetSnapshot",
@@ -480,7 +593,6 @@ async fn main() {
         }
 
         Commands::Wait {
-            session,
             pattern,
             timeout_ms,
         } => {
@@ -505,7 +617,7 @@ async fn main() {
             }
         }
 
-        Commands::Assert { session, pattern } => {
+        Commands::Assert { pattern } => {
             // Point-in-time check: timeout_ms=0 → server checks once and returns.
             let resp = call::<WaitForTextRequest, WaitForTextResponse>(
                 &mut grpc,
@@ -527,7 +639,6 @@ async fn main() {
         }
 
         Commands::Run {
-            session,
             command,
             timeout_ms,
         } => {
@@ -547,5 +658,9 @@ async fn main() {
                 die("[timed out]");
             }
         }
+
+        Commands::List => unreachable!(),
+        Commands::Create { .. } => unreachable!(),
+        Commands::ExecCmd { .. } => unreachable!(),
     }
 }

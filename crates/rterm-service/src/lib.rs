@@ -3,7 +3,7 @@ pub mod session;
 use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::body::Body;
 use grpc_core::{BoxFuture, Request, Response, Status, Streaming};
-use grpc_server::{Grpc, NamedService, StreamingService, UnaryService};
+use grpc_server::{Grpc, NamedService, ServerStreamingService, StreamingService, UnaryService};
 use rterm_proto::*;
 use rterm_session::SessionManager;
 use rterm_session::resolve_key;
@@ -532,6 +532,90 @@ impl UnaryService<RunCommandRequest> for RunCommandSvc {
     }
 }
 
+struct ExecSvc(Arc<dyn PtySpawner>);
+
+impl ServerStreamingService<ExecRequest> for ExecSvc {
+    type Response = ExecResponse;
+    type ResponseStream =
+        std::pin::Pin<Box<dyn Stream<Item = Result<ExecResponse, Status>> + Send>>;
+    type Future = BoxFuture<Result<Response<Self::ResponseStream>, Status>>;
+
+    fn call(&mut self, request: Request<ExecRequest>) -> Self::Future {
+        let spawner = Arc::clone(&self.0);
+        let req = request.into_inner();
+        Box::pin(async move {
+            let mut handle = spawner
+                .spawn_exec(&req.command, &req.cwd, 80, 24)
+                .map_err(|e| Status::internal(format!("spawn failed: {}", e)))?;
+
+            let timeout_ms = if req.timeout_ms == 0 {
+                30_000
+            } else {
+                req.timeout_ms
+            };
+            let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+            let stream = async_stream::stream! {
+                loop {
+                    tokio::select! {
+                        _ = tokio::time::sleep_until(deadline.into()) => {
+                            // Timeout reached
+                            yield Ok(ExecResponse {
+                                stdout: vec![],
+                                stderr: vec![],
+                                exit_code: -1,
+                                timed_out: true,
+                            });
+                            break;
+                        }
+
+                        chunk = handle.stdout_rx.recv() => {
+                            match chunk {
+                                Some(data) => {
+                                    yield Ok(ExecResponse {
+                                        stdout: data,
+                                        stderr: vec![],
+                                        exit_code: -1,
+                                        timed_out: false,
+                                    });
+                                }
+                                None => {
+                                    // No more stdout, wait for exit code
+                                    break;
+                                }
+                            }
+                        }
+
+                        code = &mut handle.exit_code_rx => {
+                            match code {
+                                Ok(exit_code) => {
+                                    yield Ok(ExecResponse {
+                                        stdout: vec![],
+                                        stderr: vec![],
+                                        exit_code,
+                                        timed_out: false,
+                                    });
+                                }
+                                Err(_) => {
+                                    yield Ok(ExecResponse {
+                                        stdout: vec![],
+                                        stderr: vec![],
+                                        exit_code: -1,
+                                        timed_out: false,
+                                    });
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+            };
+
+            Ok(Response::new(Box::pin(stream) as Self::ResponseStream))
+        })
+    }
+}
+
 impl tower_service::Service<http::Request<Body>> for TerminalServer {
     type Response = http::Response<Body>;
     type Error = Infallible;
@@ -610,6 +694,10 @@ impl tower_service::Service<http::Request<Body>> for TerminalServer {
                 let mut grpc =
                     Grpc::new(FlatBuffersCodec::<RunCommandResponse, RunCommandRequest>::default());
                 Ok(grpc.unary(RunCommandSvc(session_mgr, spawner), req).await)
+            }),
+            "/rterm.protocol.TerminalService/Exec" => Box::pin(async move {
+                let mut grpc = Grpc::new(FlatBuffersCodec::<ExecResponse, ExecRequest>::default());
+                Ok(grpc.server_streaming(ExecSvc(spawner), req).await)
             }),
             _ => Box::pin(async { Ok(Status::unimplemented("").into_http()) }),
         }

@@ -303,6 +303,9 @@ rpc_service TerminalService {
 
     // Higher-level
     RunCommand(RunCommandRequest): RunCommandResponse;
+
+    // Ephemeral command execution (SSH exec style)
+    Exec(ExecRequest): ExecResponse (streaming: "server");
 }
 
 // ── Automation message types (serialized with hand-rolled binary codec) ──────
@@ -340,6 +343,19 @@ table RunCommandRequest {
     timeout_ms: uint64;
 }
 table RunCommandResponse { output: string; timed_out: bool; }
+
+table ExecRequest {
+    command: string;      // Command to run (e.g., "ls -la")
+    cwd: string;         // Working directory (e.g., "/home/user")
+    timeout_ms: uint64;  // Max execution time (0 = 30s default)
+}
+
+table ExecResponse {
+    stdout: [ubyte];      // Chunk of stdout bytes (empty if no stdout this chunk)
+    stderr: [ubyte];      // Chunk of stderr bytes (always empty — PTY merges)
+    exit_code: int32;     // Only in FINAL chunk
+    timed_out: bool;      // Only in FINAL chunk
+}
 
 // FlatBuffers requirement: standard HTTP/2 needs a root type for standard message parsing,
 // though gRPC handles this per endpoint. We leave ClientMessage as default root for legacy parser.

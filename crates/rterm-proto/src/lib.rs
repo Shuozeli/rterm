@@ -389,14 +389,103 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 fbb.finish(msg, None);
             }
 
-            _ => {
-                // Session management messages — encode as needed.
-                // For now, create an empty message.
+            ClientMsg::CreateSession(cs) => {
+                let name = cs
+                    .name
+                    .as_ref()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| fbb.create_string(s));
+                let shell = cs
+                    .shell
+                    .as_ref()
+                    .filter(|s| !s.is_empty())
+                    .map(|s| fbb.create_string(s));
+                let flat = fbs::CreateSession::create(
+                    &mut fbb,
+                    &fbs::CreateSessionArgs {
+                        name,
+                        shell,
+                        cols: cs.cols,
+                        rows: cs.rows,
+                    },
+                );
                 let msg = fbs::ClientMessage::create(
                     &mut fbb,
                     &fbs::ClientMessageArgs {
-                        body_type: fbs::ClientBody::NONE,
-                        body: None,
+                        body_type: fbs::ClientBody::CreateSession,
+                        body: Some(flat.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+
+            ClientMsg::AttachSession(as_) => {
+                let session_id = fbb.create_string(&as_.session_id);
+                let token = fbb.create_string(&as_.token);
+                let flat = fbs::AttachSession::create(
+                    &mut fbb,
+                    &fbs::AttachSessionArgs {
+                        session_id: Some(session_id),
+                        token: Some(token),
+                        cols: as_.cols,
+                        rows: as_.rows,
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::AttachSession,
+                        body: Some(flat.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+
+            ClientMsg::DetachSession => {
+                let flat = fbs::DetachSession::create(&mut fbb, &fbs::DetachSessionArgs {});
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::DetachSession,
+                        body: Some(flat.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+
+            ClientMsg::DestroySession(ds) => {
+                let session_id = fbb.create_string(&ds.session_id);
+                let flat = fbs::DestroySession::create(
+                    &mut fbb,
+                    &fbs::DestroySessionArgs {
+                        session_id: Some(session_id),
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::DestroySession,
+                        body: Some(flat.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+
+            ClientMsg::ListSessions(ls) => {
+                let token_offsets: Vec<_> =
+                    ls.tokens.iter().map(|t| fbb.create_string(t)).collect();
+                let tokens_vec = fbb.create_vector(&token_offsets);
+                let flat = fbs::ListSessions::create(
+                    &mut fbb,
+                    &fbs::ListSessionsArgs {
+                        tokens: Some(tokens_vec),
+                    },
+                );
+                let msg = fbs::ClientMessage::create(
+                    &mut fbb,
+                    &fbs::ClientMessageArgs {
+                        body_type: fbs::ClientBody::ListSessions,
+                        body: Some(flat.as_union_value()),
                     },
                 );
                 fbb.finish(msg, None);
@@ -456,6 +545,46 @@ impl FlatBufferGrpcMessage for ClientMsg {
                 }))
             }
             fbs::ClientBody::ResetViewport => Ok(ClientMsg::ResetViewport),
+            fbs::ClientBody::CreateSession => {
+                let cs = msg
+                    .body_as_create_session()
+                    .ok_or("missing CreateSession")?;
+                Ok(ClientMsg::CreateSession(CreateSession {
+                    name: cs.name().map(|s| s.to_string()),
+                    shell: cs.shell().map(|s| s.to_string()),
+                    cols: cs.cols(),
+                    rows: cs.rows(),
+                }))
+            }
+            fbs::ClientBody::AttachSession => {
+                let as_ = msg
+                    .body_as_attach_session()
+                    .ok_or("missing AttachSession")?;
+                Ok(ClientMsg::AttachSession(AttachSession {
+                    session_id: as_.session_id().unwrap_or("").to_string(),
+                    token: as_.token().unwrap_or("").to_string(),
+                    cols: as_.cols(),
+                    rows: as_.rows(),
+                }))
+            }
+            fbs::ClientBody::DetachSession => Ok(ClientMsg::DetachSession),
+            fbs::ClientBody::DestroySession => {
+                let ds = msg
+                    .body_as_destroy_session()
+                    .ok_or("missing DestroySession")?;
+                Ok(ClientMsg::DestroySession(DestroySession {
+                    session_id: ds.session_id().unwrap_or("").to_string(),
+                }))
+            }
+            fbs::ClientBody::ListSessions => {
+                let ls = msg.body_as_list_sessions().ok_or("missing ListSessions")?;
+                Ok(ClientMsg::ListSessions(ListSessions {
+                    tokens: ls
+                        .tokens()
+                        .map(|v| v.iter().map(|t| t.to_string()).collect())
+                        .unwrap_or_default(),
+                }))
+            }
             _ => Err("unknown ClientBody".into()),
         }
     }
@@ -531,13 +660,119 @@ impl FlatBufferGrpcMessage for ServerMsg {
                 );
                 fbb.finish(msg, None);
             }
-            _ => {
-                // Session management messages — TODO: full encode.
+            ServerMsg::SessionCreated(s) => {
+                let session_id = fbb.create_string(&s.session_id);
+                let name = fbb.create_string(&s.name);
+                let token = fbb.create_string(&s.token);
+                let sc = fbs::SessionCreated::create(
+                    &mut fbb,
+                    &fbs::SessionCreatedArgs {
+                        session_id: Some(session_id),
+                        name: Some(name),
+                        token: Some(token),
+                    },
+                );
                 let msg = fbs::ServerMessage::create(
                     &mut fbb,
                     &fbs::ServerMessageArgs {
-                        body_type: fbs::ServerBody::NONE,
-                        body: None,
+                        body_type: fbs::ServerBody::SessionCreated,
+                        body: Some(sc.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ServerMsg::SessionAttached(s) => {
+                let session_id = fbb.create_string(&s.session_id);
+                let name = fbb.create_string(&s.name);
+                let sa = fbs::SessionAttached::create(
+                    &mut fbb,
+                    &fbs::SessionAttachedArgs {
+                        session_id: Some(session_id),
+                        name: Some(name),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::SessionAttached,
+                        body: Some(sa.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ServerMsg::SessionDetached(s) => {
+                let session_id = fbb.create_string(&s.session_id);
+                let reason = fbb.create_string(&s.reason);
+                let sd = fbs::SessionDetached::create(
+                    &mut fbb,
+                    &fbs::SessionDetachedArgs {
+                        session_id: Some(session_id),
+                        reason: Some(reason),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::SessionDetached,
+                        body: Some(sd.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ServerMsg::SessionDestroyed(s) => {
+                let session_id = fbb.create_string(&s.session_id);
+                let sd = fbs::SessionDestroyed::create(
+                    &mut fbb,
+                    &fbs::SessionDestroyedArgs {
+                        session_id: Some(session_id),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::SessionDestroyed,
+                        body: Some(sd.as_union_value()),
+                    },
+                );
+                fbb.finish(msg, None);
+            }
+            ServerMsg::SessionList(s) => {
+                let sessions: Vec<flatbuffers::WIPOffset<fbs::SessionInfo<'_>>> = s
+                    .sessions
+                    .iter()
+                    .map(|si| {
+                        let session_id = fbb.create_string(&si.session_id);
+                        let name = fbb.create_string(&si.name);
+                        let shell = fbb.create_string(&si.shell);
+                        let title = si.title.as_ref().map(|t| fbb.create_string(t));
+                        fbs::SessionInfo::create(
+                            &mut fbb,
+                            &fbs::SessionInfoArgs {
+                                session_id: Some(session_id),
+                                name: Some(name),
+                                shell: Some(shell),
+                                created_at: si.created_at,
+                                last_activity: si.last_activity,
+                                attached: si.attached,
+                                cols: si.cols,
+                                rows: si.rows,
+                                title,
+                            },
+                        )
+                    })
+                    .collect();
+                let sessions_vec = fbb.create_vector(&sessions);
+                let sl = fbs::SessionList::create(
+                    &mut fbb,
+                    &fbs::SessionListArgs {
+                        sessions: Some(sessions_vec),
+                    },
+                );
+                let msg = fbs::ServerMessage::create(
+                    &mut fbb,
+                    &fbs::ServerMessageArgs {
+                        body_type: fbs::ServerBody::SessionList,
+                        body: Some(sl.as_union_value()),
                     },
                 );
                 fbb.finish(msg, None);
@@ -581,6 +816,64 @@ impl FlatBufferGrpcMessage for ServerMsg {
                     offset: s.offset(),
                     total: s.total(),
                 }))
+            }
+            fbs::ServerBody::SessionCreated => {
+                let s = msg
+                    .body_as_session_created()
+                    .ok_or("missing SessionCreated")?;
+                Ok(ServerMsg::SessionCreated(SessionCreated {
+                    session_id: s.session_id().unwrap_or("").to_string(),
+                    name: s.name().unwrap_or("").to_string(),
+                    token: s.token().unwrap_or("").to_string(),
+                }))
+            }
+            fbs::ServerBody::SessionAttached => {
+                let s = msg
+                    .body_as_session_attached()
+                    .ok_or("missing SessionAttached")?;
+                Ok(ServerMsg::SessionAttached(SessionAttached {
+                    session_id: s.session_id().unwrap_or("").to_string(),
+                    name: s.name().unwrap_or("").to_string(),
+                }))
+            }
+            fbs::ServerBody::SessionDetached => {
+                let s = msg
+                    .body_as_session_detached()
+                    .ok_or("missing SessionDetached")?;
+                Ok(ServerMsg::SessionDetached(SessionDetached {
+                    session_id: s.session_id().unwrap_or("").to_string(),
+                    reason: s.reason().unwrap_or("").to_string(),
+                }))
+            }
+            fbs::ServerBody::SessionDestroyed => {
+                let s = msg
+                    .body_as_session_destroyed()
+                    .ok_or("missing SessionDestroyed")?;
+                Ok(ServerMsg::SessionDestroyed(SessionDestroyed {
+                    session_id: s.session_id().unwrap_or("").to_string(),
+                }))
+            }
+            fbs::ServerBody::SessionList => {
+                let s = msg.body_as_session_list().ok_or("missing SessionList")?;
+                let sessions = s
+                    .sessions()
+                    .map(|v| {
+                        v.iter()
+                            .map(|si| SessionInfo {
+                                session_id: si.session_id().unwrap_or("").to_string(),
+                                name: si.name().unwrap_or("").to_string(),
+                                shell: si.shell().unwrap_or("").to_string(),
+                                created_at: si.created_at(),
+                                last_activity: si.last_activity(),
+                                attached: si.attached(),
+                                cols: si.cols(),
+                                rows: si.rows(),
+                                title: si.title().map(|t| t.to_string()),
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                Ok(ServerMsg::SessionList(SessionListData { sessions }))
             }
             _ => Err("unknown ServerBody".into()),
         }
@@ -1694,6 +1987,10 @@ impl AutoWriter {
         self.0.extend_from_slice(&v.to_be_bytes());
     }
 
+    fn u32(&mut self, v: u32) {
+        self.0.extend_from_slice(&v.to_be_bytes());
+    }
+
     fn u64(&mut self, v: u64) {
         self.0.extend_from_slice(&v.to_be_bytes());
     }
@@ -2142,6 +2439,69 @@ impl FlatBufferGrpcMessage for RunCommandResponse {
         let mut r = AutoReader::new(data);
         Ok(RunCommandResponse {
             output: r.str()?,
+            timed_out: r.bool()?,
+        })
+    }
+}
+
+/// Ephemeral command execution (SSH exec style).
+/// Each `exec` spawns a fresh PTY, runs the command, streams output, returns exit code.
+#[derive(Debug, Clone)]
+pub struct ExecRequest {
+    pub command: String,
+    pub cwd: String,
+    /// Maximum execution time in milliseconds (0 = 30s default).
+    pub timeout_ms: u64,
+}
+
+impl FlatBufferGrpcMessage for ExecRequest {
+    fn encode_flatbuffer(&self) -> Vec<u8> {
+        let mut w = AutoWriter::new();
+        w.str(&self.command);
+        w.str(&self.cwd);
+        w.u64(self.timeout_ms);
+        w.finish()
+    }
+    fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
+        let mut r = AutoReader::new(data);
+        Ok(ExecRequest {
+            command: r.str()?,
+            cwd: r.str()?,
+            timeout_ms: r.u64()?,
+        })
+    }
+}
+
+/// Streaming response for Exec RPC.
+/// Each chunk has stdout bytes (empty if no stdout this chunk).
+/// The FINAL chunk has exit_code != -1 to signal completion.
+#[derive(Debug, Clone)]
+pub struct ExecResponse {
+    /// Chunk of stdout bytes (empty if no stdout this chunk).
+    pub stdout: Vec<u8>,
+    /// Chunk of stderr bytes (always empty — PTY merges stdout/stderr).
+    pub stderr: Vec<u8>,
+    /// Exit code. -1 means "not final chunk yet". >= 0 means final chunk.
+    pub exit_code: i32,
+    /// True if this was a timeout (only meaningful on final chunk with exit_code >= 0).
+    pub timed_out: bool,
+}
+
+impl FlatBufferGrpcMessage for ExecResponse {
+    fn encode_flatbuffer(&self) -> Vec<u8> {
+        let mut w = AutoWriter::new();
+        w.bytes(&self.stdout);
+        w.bytes(&self.stderr);
+        w.u32(self.exit_code as u32);
+        w.bool(self.timed_out);
+        w.finish()
+    }
+    fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
+        let mut r = AutoReader::new(data);
+        Ok(ExecResponse {
+            stdout: r.bytes()?,
+            stderr: r.bytes()?,
+            exit_code: r.u32()? as i32,
             timed_out: r.bool()?,
         })
     }

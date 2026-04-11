@@ -18,6 +18,7 @@ use clap::Parser;
 use grpc_server::{NamedService, Router, Server};
 use rterm_service::TerminalServer;
 use rterm_session::SessionManager;
+use rterm_transport::pty::ExecHandle;
 use rterm_transport::{PtyHandle, PtySpawner, SshAuth, SshConfig, SshTransport, Transport};
 use std::sync::Arc;
 use std::time::Duration;
@@ -238,6 +239,16 @@ impl PtySpawner for SshPtySpawner {
             stdout_rx,
             resize_tx,
         })
+    }
+
+    fn spawn_exec(
+        &self,
+        _command: &str,
+        _cwd: &str,
+        _cols: u16,
+        _rows: u16,
+    ) -> Result<ExecHandle, Box<dyn std::error::Error + Send + Sync>> {
+        Err("exec not supported over SSH".into())
     }
 }
 

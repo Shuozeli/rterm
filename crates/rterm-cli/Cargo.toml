@@ -6,10 +6,11 @@ license.workspace = true
 
 [dependencies]
 rterm-proto = { path = "../rterm-proto" }
-grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["tls"] }
-grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-client = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0", features = ["tls"] }
+grpc-core = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
 tokio = { version = "1", features = ["full"] }
+tokio-stream = "0.1"
 clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }

@@ -1,4 +1,4 @@
-<!-- agent-updated: 2026-03-31T00:00:00Z -->
+<!-- agent-updated: 2026-04-10T00:00:00Z -->
 # rterm Automation API
 
 Playwright-style headless terminal automation over gRPC. Every operation is a
@@ -55,6 +55,83 @@ reliably for non-interactive commands that return to the shell prompt.
 - REPLs (python3, node, psql)
 - Commands that swallow stdin before exiting
 - Any command that runs longer than `timeout_ms`
+
+---
+
+### 6. `exec` — Ephemeral command execution (streaming)
+
+Like SSH's `exec` channel: run a single command in a specified working directory,
+stream stdout/stderr back as it's produced, return exit code when done.
+
+**Unlike `run`** — no sentinel wrapping, no VT screen polling, no session persistence.
+Each `exec` is independent: spawn PTY → run command → stream output → exit.
+
+```
+rterm-cli exec --cwd /path/to/dir -- echo hello
+# Output streams to stdout in real-time
+# Exit code propagates to CLI exit code
+```
+
+**gRPC: server-streaming RPC** — chunks stream back as data arrives, not buffered until end.
+
+#### Request
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `command` | string | Command to run (e.g., `"ls -la"`) |
+| `cwd` | string | Working directory (e.g., `"/home/user"`) |
+| `timeout_ms` | uint64 | Max execution time (0 = 30s default) |
+
+#### Response (streamed chunks)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stdout` | [ubyte] | Chunk of stdout bytes (empty if no stdout this chunk) |
+| `stderr` | [ubyte] | Chunk of stderr bytes (always empty — see note) |
+| `exit_code` | int32 | Present only in FINAL chunk |
+| `timed_out` | bool | Present only in FINAL chunk |
+
+> **Note on stderr:** PTY naturally merges stdout and stderr into a single stream.
+> All output arrives via `stdout`. The `stderr` field is always empty. This is
+> standard PTY behavior — if you need stderr separation, redirect in the command
+> itself (e.g., `exec -- bash -c "cmd 2>/tmp/stderr"`).
+
+#### Internals
+
+```
+Client                          Server
+  │                               │
+  │──── ExecRequest ─────────────►│  {command: "ls -la", cwd: "/tmp"}
+  │                               │
+  │◄─── ExecResponse ─────────────│  {stdout: [0x6c, 0x73, ...]}  (first chunk)
+  │◄─── ExecResponse ─────────────│  {stdout: [...]}  (more chunks)
+  │◄─── ExecResponse ─────────────│  {stdout: [], exit_code: 0}  (final)
+  │                               │
+```
+
+1. `spawn_exec(command, cwd)` opens a new PTY pair
+2. Child spawned as `bash -c "cd <cwd> && <command>"`
+3. Background thread reads PTY master stdout, sends chunks via channel
+4. When child exits, exit code sent and channels closed
+5. Handler uses `tokio::time::timeout` — on timeout, child killed and final chunk sent with `timed_out: true`
+
+#### Timeout behavior
+
+| Scenario | Behavior |
+|----------|----------|
+| Command completes normally | Final chunk has `exit_code: N`, `timed_out: false` |
+| Command times out | Final chunk has `exit_code: -1`, `timed_out: true`, child killed |
+| PTY spawn failure | gRPC `Status::internal` error |
+| Client disconnects | PTY child dropped, resources cleaned up |
+
+#### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1-255 | Command exit code |
+| 124 | Timeout (standard `timeout` convention) |
+| -1 | Abnormal (killed, spawn failure) |
 
 ---
 
@@ -119,7 +196,11 @@ Exit codes:
 
 ---
 
-### 3. `exec` — Launch interactive program (non-blocking)
+### 3. `exec` — Launch interactive program in session (non-blocking)
+
+> **Note:** This `exec` is different from the ephemeral streaming `exec` (section 6).
+> This one runs a command *inside* the existing PTY session, leaving it running.
+> The streaming `exec` (section 6) spawns a fresh PTY for a single command.
 
 `run` is blocking and wraps commands with a sentinel, which is wrong for TUIs.
 `exec` sends the command + Enter but returns immediately, leaving the program
@@ -322,6 +403,45 @@ rterm-cli kill   e2e-timeout
 
 ---
 
+---
+
+## Integration test scenarios (streaming exec)
+
+### I. Streaming exec output
+
+Baseline. Confirms `exec` streams output in real-time and returns correct exit code.
+
+```bash
+rterm-cli exec --cwd /tmp -- echo hello
+# assert output contains "hello"
+# assert exit_code == 0
+
+rterm-cli exec --cwd /nonexistent -- ls
+# assert exit_code != 0 (non-zero exit)
+```
+
+### J. Streaming exec timeout
+
+Confirms timeout kills the process and returns correct exit code.
+
+```bash
+rterm-cli exec --cwd /tmp -- sleep 10 --timeout-ms 500
+# assert timed_out == true
+# assert exit_code == 124  (standard timeout exit code)
+```
+
+### K. Streaming exec with large output
+
+Confirms output is streamed progressively (not buffered until end).
+
+```bash
+rterm-cli exec --cwd /tmp -- yes | head -n 10000
+# assert output streams progressively, not all at once at end
+# assert exit_code == 0
+```
+
+---
+
 ## Test implementation plan
 
 ### Unit tests (no network, no PTY)
@@ -363,3 +483,12 @@ in-process first.
    before sending the command (`text_before`), then after the sentinel appears,
    filters out lines that existed in `text_before`, the sentinel line, and the
    echoed command line. Result is only the new output lines.
+
+5. **Exec streaming: merged stdout/stderr** — PTY naturally merges stdout and stderr
+   into a single stream. All output arrives via `stdout`. The `stderr` field in
+   `ExecResponse` is always empty. If true stderr separation is needed, the client
+   can redirect in the command itself (e.g., `bash -c "cmd 2>/tmp/stderr"`).
+
+6. **Exec streaming: raw bytes** — Output is streamed as raw `Vec<u8>` bytes,
+   not decoded strings. This gives clients flexibility to handle UTF-8 text,
+   binary output, or anything else.

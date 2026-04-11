@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::Transport;
 use crate::error::TransportError;
-use crate::pty::{PtyHandle, PtySpawner};
+use crate::pty::{ExecHandle, PtyHandle, PtySpawner};
 
 /// Control handle for verifying what the session sent to the PTY.
 pub struct FakePtyControl {
@@ -80,6 +80,49 @@ impl PtySpawner for FakePtySpawner {
             stdin_tx,
             stdout_rx,
             resize_tx,
+        })
+    }
+
+    fn spawn_exec(
+        &self,
+        _command: &str,
+        _cwd: &str,
+        _cols: u16,
+        _rows: u16,
+    ) -> Result<ExecHandle, Box<dyn std::error::Error + Send + Sync>> {
+        if self.fail {
+            return Err("fake PTY spawn failure".into());
+        }
+
+        let (stdout_tx, stdout_rx) = mpsc::channel(64);
+        let (exit_code_tx, exit_code_rx) = oneshot::channel();
+
+        // Send pre-loaded stdout data.
+        let data = self.stdout_data.clone();
+        tokio::spawn(async move {
+            for chunk in data {
+                if stdout_tx.send(chunk).await.is_err() {
+                    break;
+                }
+            }
+            // Simulate successful exit with code 0
+            let _ = exit_code_tx.send(0);
+        });
+
+        // For the fake, we create a kill channel where the receiver is dropped immediately.
+        // This means the thread will exit immediately when it checks the channel.
+        let (kill_tx, _) = oneshot::channel();
+
+        let thread = std::thread::spawn(move || {
+            // In the real implementation, this thread would listen on kill_rx and call kill()
+            // on the child. In the fake, we just exit immediately since there's no real child.
+        });
+
+        Ok(ExecHandle {
+            stdout_rx,
+            exit_code_rx,
+            kill_tx,
+            thread,
         })
     }
 }
