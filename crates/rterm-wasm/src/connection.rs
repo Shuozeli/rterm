@@ -1,7 +1,8 @@
 /// Connection management: WebTransport connect, send/recv loops, reconnection with backoff.
-/// The transport is determined at compile time via cargo features:
-/// - `transport-webtransport` (default): connects via WebTransport on port 4433, path /wt/{session}
-/// - `transport-websocket`: connects via WebSocket on port 4435, path /ws/{session}
+/// Supports runtime transport selection:
+/// - WebTransport (default): connects via WebTransport on port 4433, path /wt/{session}
+/// - WebSocket: connects via WebSocket on port 4435, path /ws/{session}
+/// Transport is selected via URL query parameter `?transport=ws` or `?transport=wt`
 use crate::app::Shared;
 use crate::messages::{decode_server_msg, encode_resize, ServerMsg};
 use crate::protocol::{encode_message, RecvBuffer};
@@ -10,84 +11,22 @@ use eframe::egui;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Compile-time transport configuration.
-#[cfg(feature = "transport-websocket")]
-const TRANSPORT_NAME: &str = "websocket";
-#[cfg(feature = "transport-websocket")]
-const TRANSPORT_PORT: u16 = 4435;
-#[cfg(feature = "transport-websocket")]
-const TRANSPORT_PATH_PREFIX: &str = "/ws";
-
-#[cfg(not(feature = "transport-websocket"))]
-const TRANSPORT_NAME: &str = "webtransport";
-#[cfg(not(feature = "transport-websocket"))]
-const TRANSPORT_PORT: u16 = 4433;
-#[cfg(not(feature = "transport-websocket"))]
-const TRANSPORT_PATH_PREFIX: &str = "/wt";
-
-/// Top-level connection loop with reconnection and exponential backoff.
-pub async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
-    let location = web_sys::window().map(|w| w.location());
-    let hostname = location
-        .as_ref()
-        .and_then(|l| l.hostname().ok())
-        .unwrap_or_else(|| "localhost".to_string());
-
-    // Extract session name from URL path: /dev -> "dev", / -> ""
-    let session_name = session::get_session_name_from_url();
-
-    // Build the relay URL based on compile-time transport feature.
-    let path = if session_name.is_empty() {
-        TRANSPORT_PATH_PREFIX.to_string()
-    } else {
-        format!("{}/{}", TRANSPORT_PATH_PREFIX, session_name)
-    };
-    let url = format!("wss://{}:{}{}", hostname, TRANSPORT_PORT, path);
-
-    let cert_hash =
-        session::get_cert_hash_from_global().or_else(session::get_cert_hash_from_url);
-
-    log::info!(
-        "[rterm] connecting to {} (transport: {}, session: {})",
-        url,
-        TRANSPORT_NAME,
-        if session_name.is_empty() {
-            "<auto>"
-        } else {
-            &session_name
-        }
-    );
-
-    // Reconnection loop with exponential backoff.
-    let mut backoff_ms = 1000u32;
-    loop {
-        match try_connect(&shared, &ctx, &url, cert_hash.as_deref()).await {
-            Ok(()) => {
-                // Session ended normally (PTY exited). Don't reconnect.
-                log::info!("[rterm] session ended");
-                break;
-            }
-            Err(e) => {
-                shared.borrow_mut().connected = false;
-                log::warn!(
-                    "[rterm] disconnected: {}. Reconnecting in {}ms...",
-                    e,
-                    backoff_ms
-                );
-                ctx.request_repaint();
-                sleep_ms(backoff_ms as i32).await;
-                backoff_ms = (backoff_ms * 2).min(30000); // max 30s
-            }
-        }
-    }
-}
-
-#[cfg(feature = "transport-websocket")]
 mod ws_conn {
-    use super::*;
+    use std::cell::RefCell;
     use std::collections::VecDeque;
+    use std::rc::Rc;
     use wasm_bindgen::prelude::*;
     use wasm_bindgen_futures::JsFuture;
+
+    async fn sleep_ms(ms: i32) {
+        let promise = js_sys::Promise::new(&mut |resolve, _| {
+            web_sys::window()
+                .unwrap()
+                .set_timeout_with_callback_and_timeout_and_arguments_0(&resolve, ms)
+                .unwrap();
+        });
+        let _ = wasm_bindgen_futures::JsFuture::from(promise).await;
+    }
 
     pub struct WsSender {
         ws: web_sys::WebSocket,
@@ -178,17 +117,229 @@ mod ws_conn {
     }
 }
 
-#[cfg(feature = "transport-websocket")]
-use ws_conn::*;
+mod wt_conn {
+    use wasm_bindgen::prelude::*;
+    use wasm_bindgen_futures::JsFuture;
+    use web_sys::WebTransport;
 
-#[cfg(feature = "transport-websocket")]
+    pub struct WtSender {
+        writer: web_sys::WritableStreamDefaultWriter,
+    }
+
+    pub struct WtReceiver {
+        reader: web_sys::ReadableStreamDefaultReader,
+    }
+
+    pub async fn connect_webtransport(
+        url: &str,
+        cert_hash: Option<&[u8]>,
+    ) -> Result<(WtSender, WtReceiver, WebTransport), String> {
+        let opts = web_sys::WebTransportOptions::new();
+
+        if let Some(hash) = cert_hash {
+            let hash_obj = web_sys::WebTransportHash::new();
+            hash_obj.set_algorithm("sha-256");
+            let uint8 = js_sys::Uint8Array::from(hash);
+            hash_obj.set_value(&uint8.buffer());
+            opts.set_server_certificate_hashes(&[hash_obj]);
+        }
+
+        let transport = WebTransport::new_with_options(url, &opts)
+            .map_err(|e| format!("WebTransport::new failed: {:?}", e))?;
+
+        JsFuture::from(transport.ready())
+            .await
+            .map_err(|e| format!("WebTransport ready failed: {:?}", e))?;
+
+        let bidi: web_sys::WebTransportBidirectionalStream =
+            JsFuture::from(transport.create_bidirectional_stream())
+                .await
+                .map_err(|e| format!("createBidirectionalStream failed: {:?}", e))?
+                .unchecked_into();
+
+        let writable: web_sys::WritableStream = bidi.writable().unchecked_into();
+        let readable: web_sys::ReadableStream = bidi.readable().unchecked_into();
+
+        let writer = writable
+            .get_writer()
+            .map_err(|e| format!("getWriter failed: {:?}", e))?;
+        let reader: web_sys::ReadableStreamDefaultReader =
+            readable.get_reader().unchecked_into();
+
+        Ok((WtSender { writer }, WtReceiver { reader }, transport))
+    }
+
+    impl WtSender {
+        pub async fn send(&self, data: &[u8]) -> Result<(), String> {
+            let uint8 = js_sys::Uint8Array::from(data);
+            JsFuture::from(self.writer.write_with_chunk(&uint8))
+                .await
+                .map_err(|e| format!("write failed: {:?}", e))?;
+            Ok(())
+        }
+    }
+
+    impl WtReceiver {
+        pub async fn recv(&self) -> Result<Option<Vec<u8>>, String> {
+            let result = JsFuture::from(self.reader.read())
+                .await
+                .map_err(|e| format!("read failed: {:?}", e))?;
+
+            let done = js_sys::Reflect::get(&result, &"done".into())
+                .map_err(|e| format!("reflect done: {:?}", e))?
+                .as_bool()
+                .unwrap_or(true);
+
+            if done {
+                return Ok(None);
+            }
+
+            let value = js_sys::Reflect::get(&result, &"value".into())
+                .map_err(|e| format!("reflect value: {:?}", e))?;
+
+            let uint8: js_sys::Uint8Array = value.unchecked_into();
+            Ok(Some(uint8.to_vec()))
+        }
+    }
+}
+
+enum Transport {
+    WebTransport,
+    WebSocket,
+}
+
+const TRANSPORT_STORAGE_KEY: &str = "rterm_transport";
+
+/// Get transport type from URL query parameter or sessionStorage.
+/// Saves transport selection to sessionStorage so it persists across redirects.
+fn get_transport_from_url() -> Transport {
+    let window = match web_sys::window() {
+        Some(w) => w,
+        None => return Transport::WebTransport,
+    };
+    let location = window.location();
+
+    // First check URL query parameter
+    if let Ok(search) = location.search() {
+        if !search.is_empty() {
+            if search.contains("transport=ws") || search.contains("transport=websocket") {
+                // Save to sessionStorage for persistence across redirects
+                if let Ok(Some(storage)) = window.session_storage() {
+                    let _ = storage.set_item(TRANSPORT_STORAGE_KEY, "websocket");
+                }
+                return Transport::WebSocket;
+            }
+            if search.contains("transport=wt") || search.contains("transport=webtransport") {
+                if let Ok(Some(storage)) = window.session_storage() {
+                    let _ = storage.set_item(TRANSPORT_STORAGE_KEY, "webtransport");
+                }
+                return Transport::WebTransport;
+            }
+        }
+    }
+
+    // Fall back to sessionStorage (in case we were redirected and lost query params)
+    if let Ok(Some(storage)) = window.session_storage() {
+        if let Ok(Some(val)) = storage.get_item(TRANSPORT_STORAGE_KEY) {
+            if val == "websocket" {
+                return Transport::WebSocket;
+            }
+        }
+    }
+
+    Transport::WebTransport
+}
+
+/// Top-level connection loop with reconnection and exponential backoff.
+pub async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
+    let location = web_sys::window().map(|w| w.location());
+    let hostname = location
+        .as_ref()
+        .and_then(|l| l.hostname().ok())
+        .unwrap_or_else(|| "localhost".to_string());
+
+    // Extract session name from URL path: /dev -> "dev", / -> ""
+    let session_name = session::get_session_name_from_url();
+
+    // Runtime transport selection
+    let transport = get_transport_from_url();
+
+    let (transport_name, port, path_prefix, url) = match transport {
+        Transport::WebTransport => {
+            let path = if session_name.is_empty() {
+                "/wt".to_string()
+            } else {
+                format!("/wt/{}", session_name)
+            };
+            ("webtransport", 4433u16, "/wt", format!("https://{}:4433{}", hostname, path))
+        }
+        Transport::WebSocket => {
+            let path = if session_name.is_empty() {
+                "/ws".to_string()
+            } else {
+                format!("/ws/{}", session_name)
+            };
+            ("websocket", 4435u16, "/ws", format!("wss://{}:4435{}", hostname, path))
+        }
+    };
+
+    let cert_hash =
+        session::get_cert_hash_from_global().or_else(session::get_cert_hash_from_url);
+
+    log::info!(
+        "[rterm] connecting to {} (transport: {}, session: {})",
+        url,
+        transport_name,
+        if session_name.is_empty() {
+            "<auto>"
+        } else {
+            &session_name
+        }
+    );
+
+    // Reconnection loop with exponential backoff.
+    let mut backoff_ms = 1000u32;
+    loop {
+        match try_connect(&shared, &ctx, &url, cert_hash.as_deref(), &transport).await {
+            Ok(()) => {
+                // Session ended normally (PTY exited). Don't reconnect.
+                log::info!("[rterm] session ended");
+                break;
+            }
+            Err(e) => {
+                shared.borrow_mut().connected = false;
+                log::warn!(
+                    "[rterm] disconnected: {}. Reconnecting in {}ms...",
+                    e,
+                    backoff_ms
+                );
+                ctx.request_repaint();
+                sleep_ms(backoff_ms as i32).await;
+                backoff_ms = (backoff_ms * 2).min(30000); // max 30s
+            }
+        }
+    }
+}
+
 async fn try_connect(
     shared: &Rc<RefCell<Shared>>,
     ctx: &egui::Context,
     url: &str,
-    _cert_hash: Option<&[u8]>,
+    cert_hash: Option<&[u8]>,
+    transport: &Transport,
 ) -> Result<(), String> {
-    let (sender, receiver) = connect_websocket(url).await?;
+    match transport {
+        Transport::WebTransport => try_connect_wt(shared, ctx, url, cert_hash).await,
+        Transport::WebSocket => try_connect_ws(shared, ctx, url).await,
+    }
+}
+
+async fn try_connect_ws(
+    shared: &Rc<RefCell<Shared>>,
+    ctx: &egui::Context,
+    url: &str,
+) -> Result<(), String> {
+    let (sender, receiver) = ws_conn::connect_websocket(url).await?;
     let sender = Rc::new(sender);
     let receiver = Rc::new(RefCell::new(receiver));
 
@@ -276,17 +427,13 @@ async fn try_connect(
     }
 }
 
-#[cfg(not(feature = "transport-websocket"))]
-use crate::transport;
-
-#[cfg(not(feature = "transport-websocket"))]
-async fn try_connect(
+async fn try_connect_wt(
     shared: &Rc<RefCell<Shared>>,
     ctx: &egui::Context,
     url: &str,
     cert_hash: Option<&[u8]>,
 ) -> Result<(), String> {
-    let (sender, receiver, _) = transport::connect(url, cert_hash).await?;
+    let (sender, receiver, _) = wt_conn::connect_webtransport(url, cert_hash).await?;
 
     log::info!("[rterm] WebTransport connected");
 

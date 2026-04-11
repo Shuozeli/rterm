@@ -24,7 +24,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - name: Install GTK dev libs
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev
+      - run: cargo clean
       - run: cargo clippy --workspace --tests -- -D warnings
 
   build-test:
@@ -33,9 +35,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - name: Install GTK dev libs
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev
       - name: Build
-        run: cargo build --workspace
+        run: |
+          # Wipe git checkouts to force fresh clone at locked revisions
+          rm -rf ~/.cargo/git/checkouts/pure-grpc-rs-433511865b91ca99
+          cargo build --workspace
       - name: Test (unit + integration)
         run: cargo test --workspace
 
@@ -45,7 +51,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - name: Install GTK dev libs
+        run: sudo apt-get update && sudo apt-get install -y libglib2.0-dev libgtk-3-dev libsoup-3.0-dev libwebkit2gtk-4.1-dev
+      - run: cargo clean
       - run: cargo doc --workspace --no-deps
 
   wasm:

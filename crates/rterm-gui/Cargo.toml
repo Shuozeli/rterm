@@ -12,9 +12,9 @@ egui = "0.31"
 [dev-dependencies]
 eframe = "0.31"
 rterm-proto = { path = "../rterm-proto" }
-grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
-grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-client = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0", features = ["h3"] }
+grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-core = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
 tokio = { version = "1", features = ["full"] }
 tokio-stream = "0.1"
 rcgen = "0.13"

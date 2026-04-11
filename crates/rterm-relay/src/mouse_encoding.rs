@@ -8,6 +8,27 @@
 
 use rterm_proto::MouseEvent;
 
+/// Encode a non-negative integer to decimal bytes, returning the count.
+/// Writes digits right-to-left into `buf` (which must have capacity).
+fn write_decimal(val: u16, buf: &mut [u8]) -> usize {
+    if val == 0 {
+        buf[0] = b'0';
+        return 1;
+    }
+    let mut v = val;
+    let mut len = 0;
+    while v > 0 {
+        buf[5 - len] = b'0' + (v % 10) as u8;
+        v /= 10;
+        len += 1;
+    }
+    // Shift digits to the start of the buffer.
+    for i in 0..len {
+        buf[i] = buf[5 - len + 1 + i];
+    }
+    len
+}
+
 /// Encode a MouseEvent as a VT mouse protocol sequence (SGR mode).
 pub fn encode_vt_mouse(event: &MouseEvent) -> Vec<u8> {
     // SGR mode (1006): CSI < Pb ; Px ; Py M for press, CSI < Pb ; Px ; Py m for release
@@ -39,19 +60,20 @@ pub fn encode_vt_mouse(event: &MouseEvent) -> Vec<u8> {
     buf.push(0x5b); // [
     buf.push(b'<');
 
-    // Encode button/modifiers
-    let button_str = format!("{}", final_button);
-    buf.extend_from_slice(button_str.as_bytes());
+    // Encode button/modifiers (max 2 digits for button 0-63)
+    let mut decimal_buf = [0u8; 6];
+    let len = write_decimal(final_button as u16, &mut decimal_buf);
+    buf.extend_from_slice(&decimal_buf[..len]);
     buf.push(b';');
 
     // Encode x
-    let x_str = format!("{}", x);
-    buf.extend_from_slice(x_str.as_bytes());
+    let len = write_decimal(x, &mut decimal_buf);
+    buf.extend_from_slice(&decimal_buf[..len]);
     buf.push(b';');
 
     // Encode y
-    let y_str = format!("{}", y);
-    buf.extend_from_slice(y_str.as_bytes());
+    let len = write_decimal(y, &mut decimal_buf);
+    buf.extend_from_slice(&decimal_buf[..len]);
 
     buf.push(suffix);
 

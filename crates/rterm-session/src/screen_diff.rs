@@ -103,14 +103,43 @@ impl PrevScreen {
     }
 
     /// Diff the current buffer against the previous state.
-    /// Returns a ScreenUpdate with only changed cells, or None if nothing changed.
+    /// Returns a ScreenUpdate with only changed cells, or a full update if dimensions changed.
     pub fn diff(&mut self, buffer: &ScreenBuffer) -> Option<ScreenUpdateData> {
         let cols = buffer.cols();
         let rows = buffer.rows();
 
-        // If dimensions changed, caller should send a full snapshot instead.
+        // If dimensions changed, resize internal state and return a full update.
         if cols != self.cols || rows != self.rows {
-            return None;
+            self.cols = cols;
+            self.rows = rows;
+            self.cells = vec![vec![(' ', COLOR_DEFAULT, COLOR_DEFAULT, 0u16); cols]; rows];
+            let full = snapshot(buffer);
+            let cursor = full.cursor.clone();
+            self.cursor_row = cursor.row;
+            self.cursor_col = cursor.col;
+            self.cursor_visible = cursor.visible;
+            // Update self.cells to match the buffer so next diff is correct.
+            for cr in &full.rows {
+                let row = cr.row as usize;
+                if row < rows {
+                    for (i, cell) in cr.cells.iter().enumerate() {
+                        let col = cr.col_start as usize + i;
+                        if col < cols {
+                            self.cells[row][col] = (cell.ch, cell.fg, cell.bg, cell.flags);
+                        }
+                    }
+                }
+            }
+            return Some(ScreenUpdateData {
+                changes: full.rows,
+                cursor,
+                cols: cols as u16,
+                rows: rows as u16,
+                title: None,
+                mouse_tracking_mode: 0,
+                alt_screen_active: false,
+                application_cursor_keys: false,
+            });
         }
 
         let mut changes = Vec::new();
@@ -256,5 +285,25 @@ mod tests {
         let ss = snapshot(t.screen());
         assert_eq!(ss.rows[0].cells[0].fg, pack_color_indexed(1)); // red
         assert_eq!(ss.rows[0].cells[0].ch, 'R');
+    }
+
+    #[test]
+    fn diff_returns_full_update_on_resize() {
+        let mut t = Terminal::new(10, 3);
+        t.feed(b"Hello");
+        let ss = snapshot(t.screen());
+        let mut prev = PrevScreen::new(10, 3);
+        prev.update_from_snapshot(&ss);
+
+        // Resize the terminal (simulated by creating a new terminal with different dimensions).
+        let mut t2 = Terminal::new(20, 5);
+        t2.feed(b"Goodbye");
+        let _ss2 = snapshot(t2.screen());
+
+        // diff should return Some even though dimensions changed.
+        let update = prev.diff(t2.screen()).unwrap();
+        assert!(!update.changes.is_empty());
+        assert_eq!(update.cols, 20);
+        assert_eq!(update.rows, 5);
     }
 }

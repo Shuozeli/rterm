@@ -15,9 +15,9 @@ rterm-proto = { path = "../rterm-proto" }
 rterm-transport = { path = "../rterm-transport" }
 rterm-session = { path = "../rterm-session" }
 rterm-service = { path = "../rterm-service" }
-grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-core = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-server = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }

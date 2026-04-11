@@ -3,6 +3,7 @@ use crate::screen_diff::{self, PrevScreen};
 use crate::timeline::Timeline;
 use rterm_proto::*;
 use rterm_transport::PtySpawner;
+use std::panic::AssertUnwindSafe;
 use std::time::Instant;
 use tokio::sync::mpsc;
 use tracing::info;
@@ -100,11 +101,18 @@ impl ManagedSession {
         rows: u16,
     ) -> ScreenSnapshotData {
         // Displace existing client if any.
-        if let Some(old_tx) = self.client_tx.take() {
-            let _ = old_tx.try_send(ServerMsg::SessionDetached(rterm_proto::SessionDetached {
-                session_id: self.name.clone(),
-                reason: "displaced by new client".into(),
-            }));
+        if let Some(old_tx) = self.client_tx.take()
+            && old_tx
+                .try_send(ServerMsg::SessionDetached(rterm_proto::SessionDetached {
+                    session_id: self.name.clone(),
+                    reason: "displaced by new client".into(),
+                }))
+                .is_err()
+        {
+            tracing::warn!(
+                "[session {}] failed to notify displaced client of detach (channel full)",
+                self.name
+            );
         }
 
         self.state = SessionState::Attached;
@@ -116,7 +124,12 @@ impl ManagedSession {
             self.cols = cols;
             self.rows = rows;
             self.terminal.resize(cols as usize, rows as usize);
-            let _ = self.pty_resize_tx.try_send((cols, rows));
+            if self.pty_resize_tx.try_send((cols, rows)).is_err() {
+                tracing::warn!(
+                    "[session {}] PTY resize send failed (channel full)",
+                    self.name
+                );
+            }
         }
 
         // Rebuild prev_screen for fresh diffing.
@@ -174,8 +187,14 @@ impl ManagedSession {
             update.alt_screen_active = self.terminal.is_alt_screen_active();
             update.application_cursor_keys = self.terminal.modes.application_cursor_keys;
             if let Some(tx) = &self.client_tx {
-                let _ = tx.try_send(ServerMsg::ScreenUpdate(update));
-                tracing::debug!("[session {}] sent ScreenUpdate to client", self.name);
+                if tx.try_send(ServerMsg::ScreenUpdate(update)).is_err() {
+                    tracing::debug!(
+                        "[session {}] client channel full, dropping ScreenUpdate (client lagging)",
+                        self.name
+                    );
+                } else {
+                    tracing::debug!("[session {}] sent ScreenUpdate to client", self.name);
+                }
             } else {
                 tracing::debug!(
                     "[session {}] client_tx is None, dropping ScreenUpdate",
@@ -190,7 +209,12 @@ impl ManagedSession {
         self.cols = cols;
         self.rows = rows;
         self.terminal.resize(cols as usize, rows as usize);
-        let _ = self.pty_resize_tx.try_send((cols, rows));
+        if self.pty_resize_tx.try_send((cols, rows)).is_err() {
+            tracing::warn!(
+                "[session {}] PTY resize send failed (channel full)",
+                self.name
+            );
+        }
     }
 
     /// Return the current screen as a full styled snapshot for rendering.
@@ -441,7 +465,15 @@ pub async fn session_output_loop(
     while let Some(data) = stdout_rx.recv().await {
         tracing::debug!("[session_output_loop] received {} bytes", data.len());
         let mut s = session.lock().await;
-        s.process_pty_output(&data);
+        // Issue #11: Wrap in catch_unwind to prevent mutex poisoning if
+        // process_pty_output panics (e.g., out-of-bounds screen access).
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            s.process_pty_output(&data);
+        }));
+        if result.is_err() {
+            tracing::error!("[session_output_loop] process_pty_output panicked, breaking loop");
+            break;
+        }
     }
     tracing::info!("[session_output_loop] stdout_rx closed");
 

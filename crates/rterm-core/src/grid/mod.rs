@@ -98,26 +98,8 @@ impl<T: GridCell + Clone> Grid<T> {
             return;
         }
 
-        let region_start = region.start.line.0 as usize;
-        let _region_end = region.end.line.0 as usize;
-
-        if region_start == 0 {
-            // Full viewport scroll — O(1) via ring buffer rotation
-            // For scroll_up (content moves UP, bottom lines discarded, top line goes to history):
-            // Use rotation. After rotate_left(n), zero decreases by n.
-            // This makes lines 0..(len-n) show what were lines n..len.
-            // But rotate doesn't clear the "new" lines at the bottom.
-            // Actually, rotate preserves all content. For true scroll_up where top line is lost,
-            // we need something different.
-            //
-            // The issue: ring buffer rotation is great for circular buffer management,
-            // but scroll_up in a terminal should SHIFT content, not rotate.
-            // For now, use the partial scroll path which correctly shifts.
-            self.scroll_region_up(region, n, template);
-        } else {
-            // Partial region scroll — O(n) via swapping
-            self.scroll_region_up(region, n, template);
-        }
+        // Always use the copy-based shift approach for correctness.
+        self.scroll_region_up(region, n, template);
     }
 
     fn scroll_region_up(&mut self, region: &CellRange, n: usize, template: &T)
@@ -368,35 +350,6 @@ impl CellRange {
             start: Point::new(Line(start_line), Column(start_col)),
             end: Point::new(Line(end_line), Column(end_col)),
         }
-    }
-}
-
-/// Bidirectional iterator over grid lines.
-pub struct GridIterator {
-    current: isize,
-    end: isize,
-}
-
-impl Iterator for GridIterator {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current >= self.end {
-            return None;
-        }
-        let item = self.current as usize;
-        self.current += 1;
-        Some(item)
-    }
-}
-
-impl DoubleEndedIterator for GridIterator {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        if self.current >= self.end {
-            return None;
-        }
-        self.end -= 1;
-        Some(self.end as usize)
     }
 }
 

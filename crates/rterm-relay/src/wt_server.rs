@@ -136,6 +136,9 @@ async fn handle_connection(
                     }
 
                     let path = req.uri().path().to_string();
+                    // Issue #15: If path is exactly "/wt/" or "/wt", strip_prefix returns
+                    // empty string. After trim_matches('/') it's still empty, which is
+                    // correct — we generate a session name in that case.
                     let session_name = path
                         .strip_prefix("/wt/")
                         .or_else(|| path.strip_prefix("/wt"))

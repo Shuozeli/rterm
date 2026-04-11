@@ -53,7 +53,7 @@ pub async fn serve_https(
             let service = hyper::service::service_fn(move |req: hyper::Request<Incoming>| {
                 let dir = Arc::clone(&dir);
                 let hash = Arc::clone(&hash);
-                async move { serve_static_hyper(&dir, req.uri().path(), &hash).await }
+                async move { serve_static_hyper(&dir, req.uri(), &hash).await }
             });
 
             let io = TokioIo::new(tls_stream);
@@ -67,21 +67,39 @@ pub async fn serve_https(
     }
 }
 
+/// Build a redirect location path, preserving query parameters from the original URI.
+/// Example: path="foo", query=Some("transport=ws") -> "/foo?transport=ws"
+fn build_redirect_location(path: &str, query: Option<&str>) -> String {
+    match query {
+        Some(q) => format!("/{}?{}", path, q),
+        None => format!("/{}", path),
+    }
+}
+
+/// Create a 302 redirect response with the given location header.
+fn redirect_response(
+    location: &str,
+) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, std::convert::Infallible> {
+    Ok(hyper::Response::builder()
+        .status(302)
+        .header("location", location)
+        .body(http_body_util::Full::new(bytes::Bytes::new()))
+        .expect("valid HTTP response"))
+}
+
 async fn serve_static_hyper(
     static_dir: &Path,
-    uri_path: &str,
+    uri: &hyper::Uri,
     cert_hash_b64: &str,
 ) -> Result<hyper::Response<http_body_util::Full<bytes::Bytes>>, std::convert::Infallible> {
+    let uri_path = uri.path();
     let file_path = resolve_path(uri_path, static_dir);
 
     // If root path "/" with no session name, redirect to an auto-generated session.
     if uri_path == "/" || uri_path.is_empty() {
         let name = crate::session_manager::generate_session_name();
-        return Ok(hyper::Response::builder()
-            .status(302)
-            .header("location", format!("/{}", name))
-            .body(http_body_util::Full::new(bytes::Bytes::new()))
-            .expect("valid HTTP response"));
+        let location = build_redirect_location(&name, uri.query());
+        return redirect_response(&location);
     }
 
     // SPA fallback: session name paths (e.g., /dev, /deploy) serve index.html.
@@ -135,7 +153,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("test.js"), b"console.log('hi')").unwrap();
 
-        let resp = serve_static_hyper(dir.path(), "/test.js", "hash123")
+        let uri = "/test.js".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "hash123")
             .await
             .unwrap();
         assert_eq!(resp.status(), 200);
@@ -151,9 +170,8 @@ mod tests {
     #[tokio::test]
     async fn serve_missing_file_returns_404() {
         let dir = tempfile::tempdir().unwrap();
-        let resp = serve_static_hyper(dir.path(), "/nonexistent.js", "hash")
-            .await
-            .unwrap();
+        let uri = "/nonexistent.js".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "hash").await.unwrap();
         assert_eq!(resp.status(), 404);
     }
 
@@ -166,7 +184,8 @@ mod tests {
         )
         .unwrap();
 
-        let resp = serve_static_hyper(dir.path(), "/index.html", "TESTHASH")
+        let uri = "/index.html".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "TESTHASH")
             .await
             .unwrap();
         assert_eq!(resp.status(), 200);
@@ -185,9 +204,8 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("app.js"), b"var x = '</head>';").unwrap();
 
-        let resp = serve_static_hyper(dir.path(), "/app.js", "hash")
-            .await
-            .unwrap();
+        let uri = "/app.js".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "hash").await.unwrap();
         let body = resp.into_body().collect().await.unwrap().to_bytes();
         assert!(!String::from_utf8_lossy(&body).contains("__RTERM_CERT_HASH__"));
     }
@@ -197,8 +215,30 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::write(dir.path().join("index.html"), b"<html><head></head></html>").unwrap();
 
-        let resp = serve_static_hyper(dir.path(), "/", "hash").await.unwrap();
+        let uri = "/".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "hash").await.unwrap();
         assert_eq!(resp.status(), 302);
         assert!(resp.headers().get("location").is_some());
+        let location = resp.headers().get("location").unwrap();
+        // Should redirect to /<session_name> with no query params
+        assert!(location.to_str().unwrap().starts_with("/"));
+    }
+
+    #[tokio::test]
+    async fn serve_root_redirect_preserves_query_params() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("index.html"), b"<html><head></head></html>").unwrap();
+
+        let uri = "/?transport=ws".parse::<hyper::Uri>().unwrap();
+        let resp = serve_static_hyper(dir.path(), &uri, "hash").await.unwrap();
+        assert_eq!(resp.status(), 302);
+        let location = resp.headers().get("location").unwrap();
+        let loc_str = location.to_str().unwrap();
+        // Should preserve query params
+        assert!(
+            loc_str.contains("?transport=ws"),
+            "query params not preserved: {}",
+            loc_str
+        );
     }
 }

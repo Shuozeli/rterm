@@ -1,6 +1,37 @@
 # rterm
 
-Terminal emulator in the browser via egui WASM + WebTransport, with server-side VT emulation.
+Terminal emulator with server-side VT emulation. Supports browser (WASM), mobile (Flutter), and CLI clients.
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Clients                                   │
+├─────────────┬─────────────┬─────────────┬───────────────────────┤
+│   Browser   │   Mobile    │    CLI      │   SSH Agent           │
+│  (WASM)    │  (Flutter)  │  (Rust)    │  (rterm-agent)        │
+└──────┬──────┴──────┬──────┴──────┬──────┴───────────┬───────────┘
+       │             │             │                  │
+       │ WebTransport│  WebSocket  │     gRPC         │ gRPC
+       │             │             │                  │
+┌──────▼─────────────▼─────────────▼──────────────────▼───────────┐
+│                      rterm-relay                                │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐ │
+│  │ WebTransport │  │  WebSocket  │  │   gRPC H2/H3         │ │
+│  │   Server     │  │    Server   │  │   (TerminalServer)   │ │
+│  └──────┬───────┘  └──────┬───────┘  └──────────┬───────────┘ │
+│         │                 │                      │             │
+│         └─────────────────┼──────────────────────┘             │
+│                           │                                    │
+│  ┌───────────────────────▼────────────────────────────────┐  │
+│  │              Session Manager (rterm-session)              │  │
+│  │   ┌─────────────┐  ┌─────────────┐  ┌────────────────┐  │  │
+│  │   │ PtySpawner  │  │Screen Diff  │  │ Terminal Core  │  │  │
+│  │   │ (PTY/SSH)  │  │             │  │ (VT100/VT220)  │  │  │
+│  │   └─────────────┘  └─────────────┘  └────────────────┘  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ## Crates
 
@@ -9,12 +40,58 @@ Terminal emulator in the browser via egui WASM + WebTransport, with server-side 
 - `rterm-transport` — Transport trait abstraction (PTY, SSH, fake) with PtySpawner
 - `rterm-session` — Session management (ManagedSession, SessionManager, screen diffing, automation)
 - `rterm-service` — gRPC service handlers (TerminalServer, unary + bidi streaming RPCs)
-- `rterm-relay` — HTTP/3 + WebTransport relay server (gRPC service, WebTransport handler)
+- `rterm-relay` — HTTP/3 + WebTransport relay server (WebSocket, WebTransport, gRPC handlers)
 - `rterm-gui` — egui terminal grid widget (colors, selection, scrolling) for native demo
 - `rterm-wasm` — Browser thin renderer (excluded from workspace, built with `trunk`)
 - `rterm-cli` — Automation CLI (Playwright-style terminal control via gRPC)
 - `rterm-agent` — SSH terminal agent: localhost gRPC server with SshPtySpawner
-- `rterm-shell` — Native WebView wrapper (placeholder)
+
+## Mobile App (Flutter)
+
+Located in `mobile/` — Native Flutter app for Android/iOS.
+
+**Architecture**: Flutter-native rendering via `CustomPaint`. No WASM/WebView.
+
+```
+mobile/
+├── lib/
+│   ├── main.dart                    # App entry point
+│   ├── models/                      # Data models (Cell, ScreenBuffer, HostProfile)
+│   ├── services/                    # WebSocket client, host storage
+│   ├── screens/                    # TerminalScreen, HostListScreen
+│   ├── widgets/                    # TerminalGrid (CustomPaint rendering)
+│   └── utils/                     # ScreenConverter (FlatBuffers → models)
+└── generated/                      # FlatBuffers generated code
+```
+
+**Connection Flow**:
+1. Connect to relay via WebSocket
+2. Send `Resize` message (terminal dimensions)
+3. Send `CreateSession` message
+4. Receive `ScreenSnapshot` and `ScreenUpdate` messages
+5. Render using Flutter `CustomPaint`
+
+**Build & Run**:
+```bash
+cd mobile
+
+# Build APK
+flutter build apk --debug
+
+# Run on device/emulator
+flutter run
+
+# The relay must be running with WebSocket support:
+# cargo run -p rterm-relay -- --ws-insecure --insecure
+```
+
+**Relay Configuration** (rterm.toml):
+```toml
+[[listener]]
+protocol = "web-socket"
+port = 4435
+bind = "0.0.0.0"  # Or specific IP
+```
 
 ## Build
 
@@ -26,7 +103,7 @@ cargo test --workspace           # 247 tests
 cd crates/rterm-wasm
 RUSTFLAGS="--cfg web_sys_unstable_apis" trunk build
 
-# Run relay (serves WASM + WebTransport on single port)
+# Run relay (serves WASM + WebTransport + WebSocket on single port)
 cargo run -p rterm-relay
 # Open https://localhost:4433/ in Chrome with --webtransport-developer-mode
 ```
@@ -75,6 +152,33 @@ Every component must be testable in isolation through dependency injection:
 - **CSI with intermediates (`>`, `<`, `?`, `!`) must NOT be dispatched as standard CSI.** Check intermediates before handling `m` (SGR), `h`/`l` (modes), etc.
 - **Parser must be persistent** across `feed()` calls — escape sequences split across network chunks must work.
 - **Synchronized output** (`CSI ?2026 h/l`) must suppress screen updates between begin/end markers.
+
+## Schema & Code Generation Rules
+
+**ALWAYS use the existing schema format's native code generator first.**
+
+- `.fbs` (FlatBuffers) → `flatc --dart` (Dart), `flatc -r -g` (Rust from `crates/rterm-proto/schema/`)
+- `.proto` → `protoc` (only if no `.fbs` exists for that schema)
+- **NEVER create a parallel `.proto` when a `.fbs` already defines the same schema** — this causes duplication and divergence.
+- **NEVER introduce protobuf for Dart if FlatBuffers Dart generation exists** — `flatc --dart` is the correct path.
+- When asked to generate code from a schema: (1) find the existing schema file, (2) use its native generator, (3) if the generator is missing, install/build it first.
+
+**Wrong pattern (what NOT to do):**
+```
+# BAD: creating .proto from scratch when .fbs already exists
+protoc --dart_out ... rterm.proto    # WRONG
+dart pub add protobuf grpc           # WRONG — wrong serialization format
+
+# CORRECT: generate Dart from existing .fbs
+flatc --dart -o mobile/lib/generated crates/rterm-proto/schema/rterm.fbs
+```
+
+## Task Scope Rules
+
+- When asked to add Dart code generation, first check existing schema files (`**/*.fbs`, `**/*.proto`) in the project.
+- When asked to add a new language binding, use the schema's existing code generator (e.g., `flatc --ts` for TypeScript from `.fbs`), not a different toolchain.
+- If the native generator for a target language doesn't exist, report it clearly and stop — do not substitute another format or toolchain.
+- **Before using any new package manager, library, or tool**: verify it doesn't duplicate something already in the project (e.g., adding `protobuf` when `flatbuffers` is already used).
 
 ## Git Rules
 

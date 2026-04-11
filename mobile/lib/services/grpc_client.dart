@@ -1,110 +1,220 @@
-/// Placeholder gRPC/FlatBuffers client for rterm-agent.
+/// gRPC/FlatBuffers client for rterm-relay.
 ///
-/// rterm-agent speaks gRPC with a FlatBuffers codec (not protobuf), so
-/// standard Dart gRPC generated stubs do not work directly. This file
-/// defines the interface and a placeholder implementation that logs calls.
-///
-/// Actual FlatBuffers integration (manual frame encoding or a REST/JSON
-/// wrapper on the agent side) is a separate task.
+/// Uses the generated TerminalServiceClient with FlatBuffers codec.
+/// Connect to rterm-relay on port 4434 (gRPC H2).
 library;
 
 import 'dart:async';
+import 'dart:io';
 
-/// Represents an active terminal session on the agent.
-class SessionInfo {
+import 'package:flat_buffers/flat_buffers.dart' as fb;
+import 'package:grpc/grpc.dart' as grpc;
+
+import '../generated/rterm_rterm.protocol_generated.dart';
+import '../generated/terminalservice_client.dart';
+
+/// Represents an active terminal session on the relay.
+class RelaySessionInfo {
   final String name;
+  final String? sessionId;
   final int cols;
   final int rows;
   final Duration idleTime;
 
-  const SessionInfo({
+  const RelaySessionInfo({
     required this.name,
+    this.sessionId,
     required this.cols,
     required this.rows,
     this.idleTime = Duration.zero,
   });
 
   @override
-  String toString() => '$name (${cols}x$rows, idle ${idleTime.inSeconds}s)';
+  String toString() => '$name (${cols}x$rows)';
 }
 
-/// Client interface for communicating with rterm-agent.
-///
-/// The agent exposes a gRPC service with FlatBuffers encoding. For the MVP
-/// scaffold, this is a placeholder that returns fake data so the UI flow
-/// can be demonstrated end-to-end.
+/// Client for communicating with rterm-relay via gRPC/FlatBuffers.
 class RtermClient {
   String? _host;
   int? _port;
   bool _connected = false;
+  TerminalServiceClient? _client;
+  grpc.ClientChannel? _channel;
 
   bool get isConnected => _connected;
   String? get host => _host;
   int? get port => _port;
 
-  /// Connect to the agent at [host]:[port].
-  Future<void> connect(String host, int port) async {
+  /// Connect to the relay at [host]:[port] (default: 4434 for gRPC H2).
+  Future<void> connect(String host, {int port = 4434}) async {
     _host = host;
     _port = port;
-    // TODO: establish real HTTP/2 or gRPC channel
+
+    _channel = grpc.ClientChannel(
+      InternetAddress(host, type: InternetAddressType.IPv4),
+      port: port,
+      options: const grpc.ChannelOptions(
+        credentials: grpc.ChannelCredentials.insecure(),
+      ),
+    );
+
+    _client = TerminalServiceClient(
+      _channel!,
+      options: grpc.CallOptions(timeout: const Duration(seconds: 30)),
+    );
+
     _connected = true;
   }
 
-  /// Disconnect from the agent.
+  /// Disconnect from the relay.
   Future<void> disconnect() async {
+    if (_channel != null) {
+      await _channel!.shutdown();
+      _channel = null;
+    }
+    _client = null;
     _connected = false;
     _host = null;
     _port = null;
   }
 
-  /// List active sessions on the agent.
-  Future<List<SessionInfo>> listSessions() async {
+  /// List active sessions on the relay.
+  Future<List<RelaySessionInfo>> listSessions() async {
     _ensureConnected();
-    // TODO: real gRPC call with FlatBuffers codec
-    return [];
+
+    // Build empty request
+    final builder = fb.Builder(deduplicateTables: false);
+    final requestOffset = UnaryListSessionsRequest.pack(builder, UnaryListSessionsRequestT());
+    builder.finish(requestOffset);
+    final request = UnaryListSessionsRequest(builder.buffer);
+
+    final response = await _client!.list_active_sessions(request);
+
+    return response.sessions?.map((s) {
+      return RelaySessionInfo(
+        name: s.name ?? 'unnamed',
+        sessionId: s.sessionId,
+        cols: s.cols,
+        rows: s.rows,
+      );
+    }).toList() ?? [];
   }
 
-  /// Create a new SSH session.
-  Future<SessionInfo> createSession({
+  /// Create a new session.
+  Future<RelaySessionInfo> createSession({
     required String name,
-    required String sshTarget,
+    String shell = '/bin/bash',
     int cols = 80,
     int rows = 24,
   }) async {
     _ensureConnected();
-    // TODO: real gRPC CreateSession with SSH target
-    return SessionInfo(name: name, cols: cols, rows: rows);
+
+    // Build CreateSession body
+    final createSessionBody = CreateSessionT(
+      name: name,
+      shell: shell,
+      cols: cols,
+      rows: rows,
+    );
+
+    // Build ClientMessage with CreateSession body
+    final clientMessage = ClientMessageT(
+      bodyType: ClientBodyTypeId.CreateSession,
+      body: createSessionBody,
+    );
+
+    // Serialize using FlatBuffers
+    final builder = fb.Builder(deduplicateTables: false);
+    final msgOffset = ClientMessage.pack(builder, clientMessage);
+    builder.finish(msgOffset);
+    final request = ClientMessage(builder.buffer);
+
+    await _client!.session(request);
+
+    return RelaySessionInfo(
+      name: name,
+      cols: cols,
+      rows: rows,
+    );
   }
 
-  /// Kill a session by name.
-  Future<void> killSession(String name) async {
+  /// Kill a session by ID.
+  Future<void> killSession(String sessionId) async {
     _ensureConnected();
-    // TODO: real gRPC KillSession
+
+    // Build DestroySession body
+    final destroyBody = DestroySessionT(sessionId: sessionId);
+
+    final clientMessage = ClientMessageT(
+      bodyType: ClientBodyTypeId.DestroySession,
+      body: destroyBody,
+    );
+
+    final builder = fb.Builder(deduplicateTables: false);
+    final msgOffset = ClientMessage.pack(builder, clientMessage);
+    builder.finish(msgOffset);
+    final request = ClientMessage(builder.buffer);
+
+    await _client!.session(request);
   }
 
-  /// Send raw keystrokes to a session.
-  Future<void> sendKeys(String session, String data) async {
+  /// Send keystrokes to a session.
+  Future<void> sendKeys(String session, List<int> data) async {
     _ensureConnected();
-    // TODO: real gRPC SendKeys / TypeText
-  }
 
-  /// Get a plain-text snapshot of the terminal screen.
-  Future<String> getSnapshot(String session) async {
-    _ensureConnected();
-    // TODO: real gRPC GetSnapshot
-    // Return placeholder content to demonstrate the UI
-    return 'user@host:~\$ ';
+    // Build KeyInput body
+    final keyInput = KeyInputT(data: data);
+
+    final clientMessage = ClientMessageT(
+      bodyType: ClientBodyTypeId.KeyInput,
+      body: keyInput,
+    );
+
+    final builder = fb.Builder(deduplicateTables: false);
+    final msgOffset = ClientMessage.pack(builder, clientMessage);
+    builder.finish(msgOffset);
+    final request = ClientMessage(builder.buffer);
+
+    await _client!.session(request);
   }
 
   /// Resize a session's terminal.
   Future<void> resizeSession(String session, int cols, int rows) async {
     _ensureConnected();
-    // TODO: real gRPC ResizeSession
+
+    // Build Resize body
+    final resizeBody = ResizeT(cols: cols, rows: rows);
+
+    final clientMessage = ClientMessageT(
+      bodyType: ClientBodyTypeId.Resize,
+      body: resizeBody,
+    );
+
+    final builder = fb.Builder(deduplicateTables: false);
+    final msgOffset = ClientMessage.pack(builder, clientMessage);
+    builder.finish(msgOffset);
+    final request = ClientMessage(builder.buffer);
+
+    await _client!.session(request);
+  }
+
+  /// Get a full screen snapshot for a session.
+  Future<GetSnapshotResponse> getSnapshot(String session) async {
+    _ensureConnected();
+
+    // Build GetSnapshotRequest using FlatBuffers T class
+    final requestT = GetSnapshotRequestT(sessionName: session);
+    final builder = fb.Builder(deduplicateTables: false);
+    final requestOffset = GetSnapshotRequest.pack(builder, requestT);
+    builder.finish(requestOffset);
+    final request = GetSnapshotRequest(builder.buffer);
+
+    return await _client!.get_snapshot(request);
   }
 
   void _ensureConnected() {
-    if (!_connected) {
-      throw StateError('Not connected to agent. Call connect() first.');
+    if (!_connected || _client == null) {
+      throw StateError('Not connected to relay. Call connect() first.');
     }
   }
 }

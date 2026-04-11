@@ -19,6 +19,12 @@ struct Cli {
     /// Must match how the WASM client was built (via cargo features).
     #[arg(long, default_value = "webtransport", value_parser = clap::value_parser!(ClientTransport))]
     transport: ClientTransport,
+    /// Run gRPC H2 server without TLS (for development on trusted networks).
+    #[arg(long, default_value = "false")]
+    insecure: bool,
+    /// Run WebSocket server without TLS (for development on trusted networks).
+    #[arg(long, default_value = "false")]
+    ws_insecure: bool,
 }
 
 #[tokio::main]
@@ -110,20 +116,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let cert = cert_pem.clone();
                 let key = key_pem.clone();
                 let port = listener_cfg.port;
+                let insecure = cli.insecure;
                 tokio::spawn(async move {
-                    info!("gRPC HTTPS (H2) on port {}", port);
-                    let svc = match Server::builder()
-                        .timeout(Duration::from_secs(30))
-                        .tls(&cert, &key)
-                    {
-                        Ok(s) => s,
-                        Err(e) => {
-                            error!("TLS config failed for gRPC H2 on port {}: {}", port, e);
-                            return;
+                    if insecure {
+                        info!("gRPC HTTP (H2, insecure) on port {}", port);
+                        let server = Server::builder().timeout(Duration::from_secs(30));
+                        if let Err(e) = server.serve(addr, router).await {
+                            error!("gRPC H2 server error on port {}: {}", port, e);
                         }
-                    };
-                    if let Err(e) = svc.serve(addr, router).await {
-                        error!("gRPC H2 server error on port {}: {}", port, e);
+                    } else {
+                        info!("gRPC HTTPS (H2) on port {}", port);
+                        let svc = match Server::builder()
+                            .timeout(Duration::from_secs(30))
+                            .tls(&cert, &key)
+                        {
+                            Ok(s) => s,
+                            Err(e) => {
+                                error!("TLS config failed for gRPC H2 on port {}: {}", port, e);
+                                return;
+                            }
+                        };
+                        if let Err(e) = svc.serve(addr, router).await {
+                            error!("gRPC H2 server error on port {}: {}", port, e);
+                        }
                     }
                 });
             }
@@ -154,10 +169,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 let key_pem = key_pem.clone();
                 let auth_tokens = config.auth_tokens.clone();
                 let session_mgr = Arc::clone(&session_mgr);
+                let insecure = cli.ws_insecure;
                 tokio::spawn(async move {
-                    if let Err(e) =
-                        start_websocket_server(addr, cert_pem, key_pem, auth_tokens, session_mgr)
-                            .await
+                    if let Err(e) = start_websocket_server(
+                        addr,
+                        cert_pem,
+                        key_pem,
+                        auth_tokens,
+                        session_mgr,
+                        insecure,
+                    )
+                    .await
                     {
                         error!(
                             "WebSocket server error on port {}: {}",

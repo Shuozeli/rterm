@@ -15,9 +15,9 @@ rterm-proto = { path = "../rterm-proto" }
 rterm-transport = { path = "../rterm-transport" }
 rterm-session = { path = "../rterm-session" }
 rterm-service = { path = "../rterm-service" }
-grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3", "tls"] }
-grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-core = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-server = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0", features = ["h3", "tls"] }
+grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
 portable-pty = "0.9"
 flatbuffers = "25.12.19"
 h3 = "0.0.8"
@@ -50,6 +50,6 @@ toml = "1.1.0"
 clap = { version = "4.6.0", features = ["derive"] }
 
 [dev-dependencies]
-grpc-client = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main", features = ["h3"] }
+grpc-client = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0", features = ["h3"] }
 reqwest = "0.13.2"
 tempfile = "3"

@@ -10,9 +10,10 @@ rterm-core = { path = "../rterm-core" }
 rterm-proto = { path = "../rterm-proto" }
 rterm-transport = { path = "../rterm-transport" }
 rterm-session = { path = "../rterm-session" }
-grpc-core = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-server = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
-grpc-codec-flatbuffers = { git = "https://github.com/shuozeli/pure-grpc-rs.git", branch = "main" }
+grpc-core = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-server = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }
+async-stream = "0.3"
 tokio = { version = "1", features = ["sync", "time", "rt"] }
 tokio-stream = "0.1"
 tower-service = "0.3"

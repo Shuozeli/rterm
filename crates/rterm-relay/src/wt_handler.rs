@@ -86,7 +86,9 @@ pub async fn handle_wt_session(
             Ok(Some(data)) => match ClientMsg::decode_flatbuffer(&data) {
                 Ok(ClientMsg::KeyInput(k)) => {
                     let s = session.lock().await;
-                    let _ = s.pty_stdin_tx.send(k.data).await;
+                    if s.pty_stdin_tx.send(k.data).await.is_err() {
+                        tracing::warn!("PTY stdin send failed for KeyInput");
+                    }
                 }
                 Ok(ClientMsg::PasteInput(p)) => {
                     let s = session.lock().await;
@@ -98,7 +100,9 @@ pub async fn handle_wt_session(
                     if s.terminal.bracketed_paste {
                         data.extend_from_slice(b"\x1b[201~");
                     }
-                    let _ = s.pty_stdin_tx.send(data).await;
+                    if s.pty_stdin_tx.send(data).await.is_err() {
+                        tracing::warn!("PTY stdin send failed for PasteInput");
+                    }
                 }
                 Ok(ClientMsg::Resize(r)) => {
                     let mut s = session.lock().await;
@@ -112,7 +116,9 @@ pub async fn handle_wt_session(
                     if s.terminal.modes.mouse_tracking_mode > 0 {
                         // Encode as VT mouse protocol and send to PTY.
                         let bytes = encode_vt_mouse(&m);
-                        let _ = s.pty_stdin_tx.send(bytes).await;
+                        if s.pty_stdin_tx.send(bytes).await.is_err() {
+                            tracing::warn!("PTY stdin send failed for MouseEvent");
+                        }
                     }
                 }
 
@@ -120,7 +126,13 @@ pub async fn handle_wt_session(
                     let s = session.lock().await;
                     let scrollback = s.get_scrollback(r.offset as usize, r.limit as usize);
                     // Send through the server_fwd channel so the spawned task writes it.
-                    let _ = server_fwd_tx.send(ServerMsg::Scrollback(scrollback)).await;
+                    if server_fwd_tx
+                        .send(ServerMsg::Scrollback(scrollback))
+                        .await
+                        .is_err()
+                    {
+                        tracing::warn!("server_fwd send failed for Scrollback");
+                    }
                 }
 
                 Ok(ClientMsg::Scroll(s)) => {
@@ -133,13 +145,19 @@ pub async fn handle_wt_session(
                         } else {
                             b"\x1b[B".to_vec() // ArrowDown
                         };
-                        let _ = session.pty_stdin_tx.send(key).await;
+                        if session.pty_stdin_tx.send(key).await.is_err() {
+                            tracing::warn!("PTY stdin send failed for Scroll");
+                        }
                     } else {
                         // Normal mode: scroll the viewport through scrollback history.
                         let snapshot = session.scroll_viewport(s.direction, s.lines);
-                        let _ = server_fwd_tx
+                        if server_fwd_tx
                             .send(ServerMsg::ScreenSnapshot(snapshot))
-                            .await;
+                            .await
+                            .is_err()
+                        {
+                            tracing::warn!("server_fwd send failed for ScreenSnapshot");
+                        }
                     }
                 }
 
@@ -147,12 +165,18 @@ pub async fn handle_wt_session(
                     let mut session = session.lock().await;
                     session.reset_viewport();
                     let snapshot = session.screen_snapshot();
-                    let _ = server_fwd_tx
+                    if server_fwd_tx
                         .send(ServerMsg::ScreenSnapshot(snapshot))
-                        .await;
+                        .await
+                        .is_err()
+                    {
+                        tracing::warn!("server_fwd send failed for ResetViewport");
+                    }
                 }
 
-                Ok(_) => {}
+                Ok(unhandled) => {
+                    tracing::debug!("unhandled ClientMsg variant: {:?}", unhandled);
+                }
                 Err(e) => debug!("decode error: {}", e),
             },
             Ok(None) => break,
