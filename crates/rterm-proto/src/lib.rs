@@ -2506,3 +2506,68 @@ impl FlatBufferGrpcMessage for ExecResponse {
         })
     }
 }
+
+/// Streaming exec inside an existing session (agent + user share the same view).
+/// Output is extracted from the session's screen buffer and streamed as text delta.
+#[derive(Debug, Clone)]
+pub struct SessionExecRequest {
+    pub session_name: String,
+    pub command: String,
+    pub cols: u16,
+    pub rows: u16,
+    /// Maximum execution time in milliseconds (0 = 30s default).
+    pub timeout_ms: u64,
+}
+
+impl FlatBufferGrpcMessage for SessionExecRequest {
+    fn encode_flatbuffer(&self) -> Vec<u8> {
+        let mut w = AutoWriter::new();
+        w.str(&self.session_name);
+        w.str(&self.command);
+        w.u16(self.cols);
+        w.u16(self.rows);
+        w.u64(self.timeout_ms);
+        w.finish()
+    }
+    fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
+        let mut r = AutoReader::new(data);
+        Ok(SessionExecRequest {
+            session_name: r.str()?,
+            command: r.str()?,
+            cols: r.u16()?,
+            rows: r.u16()?,
+            timeout_ms: r.u64()?,
+        })
+    }
+}
+
+/// Streaming response for SessionExec RPC.
+/// Each chunk has output text delta since the last chunk.
+/// The FINAL chunk has exit_code >= 0 to signal completion.
+#[derive(Debug, Clone)]
+pub struct SessionExecResponse {
+    /// Delta: new output text since last response.
+    pub output: String,
+    /// Exit code. -1 means "not final chunk yet". >= 0 means final chunk.
+    pub exit_code: i32,
+    /// True if this was a timeout (only meaningful on final chunk).
+    pub timed_out: bool,
+}
+
+impl FlatBufferGrpcMessage for SessionExecResponse {
+    fn encode_flatbuffer(&self) -> Vec<u8> {
+        let mut w = AutoWriter::new();
+        w.str(&self.output);
+        w.u32(self.exit_code as u32);
+        w.bool(self.timed_out);
+        w.finish()
+    }
+    fn decode_flatbuffer(data: &[u8]) -> Result<Self, String> {
+        let mut r = AutoReader::new(data);
+        Ok(SessionExecResponse {
+            output: r.str()?,
+            exit_code: r.u32()? as i32,
+            timed_out: r.bool()?,
+        })
+    }
+}

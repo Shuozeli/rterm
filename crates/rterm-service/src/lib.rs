@@ -616,6 +616,155 @@ impl ServerStreamingService<ExecRequest> for ExecSvc {
     }
 }
 
+struct SessionExecSvc(Arc<SessionManager>, Arc<dyn PtySpawner>);
+
+impl ServerStreamingService<SessionExecRequest> for SessionExecSvc {
+    type Response = SessionExecResponse;
+    type ResponseStream =
+        std::pin::Pin<Box<dyn Stream<Item = Result<SessionExecResponse, Status>> + Send>>;
+    type Future = BoxFuture<Result<Response<Self::ResponseStream>, Status>>;
+
+    fn call(&mut self, request: Request<SessionExecRequest>) -> Self::Future {
+        let session_mgr = Arc::clone(&self.0);
+        let spawner = Arc::clone(&self.1);
+        let req = request.into_inner();
+        Box::pin(async move {
+            // Get or create the session.
+            let cols = if req.cols == 0 { 80 } else { req.cols };
+            let rows = if req.rows == 0 { 24 } else { req.rows };
+            let session = match session_mgr
+                .get_or_create(&req.session_name, cols, rows, spawner.as_ref())
+                .await
+            {
+                Ok(s) => s,
+                Err(e) => {
+                    let stream = async_stream::stream! {
+                        yield Ok(SessionExecResponse {
+                            output: format!("error: {}", e),
+                            exit_code: -1,
+                            timed_out: false,
+                        });
+                    };
+                    return Ok(Response::new(Box::pin(stream) as Self::ResponseStream));
+                }
+            };
+
+            // Use a unique sentinel so we can detect command completion.
+            let sentinel = format!(
+                "RTERM_DONE_{:x}",
+                RUN_CMD_COUNTER.fetch_add(1, Ordering::Relaxed)
+            );
+            let wrapped = format!(
+                "{}; echo \"{}\"\n",
+                req.command.trim_end_matches('\n'),
+                sentinel
+            );
+
+            // Snapshot the screen before sending so we can strip pre-existing content.
+            let text_before = {
+                let lock = session.lock().await;
+                lock.plain_text()
+            };
+            let lines_before: Vec<String> = text_before.lines().map(|s| s.to_string()).collect();
+            let mut last_text = text_before.clone();
+
+            let stdin_tx = {
+                let lock = session.lock().await;
+                lock.pty_stdin_tx.clone()
+            };
+            if stdin_tx.send(wrapped.into_bytes()).await.is_err() {
+                let stream = async_stream::stream! {
+                    yield Ok(SessionExecResponse {
+                        output: "error: PTY closed".into(),
+                        exit_code: -1,
+                        timed_out: false,
+                    });
+                };
+                return Ok(Response::new(Box::pin(stream) as Self::ResponseStream));
+            }
+
+            let timeout_ms = if req.timeout_ms == 0 {
+                30_000
+            } else {
+                req.timeout_ms
+            };
+            let deadline = Instant::now() + Duration::from_millis(timeout_ms);
+
+            let stream = async_stream::stream! {
+                loop {
+                    tokio::select! {
+                        _ = tokio::time::sleep_until(deadline.into()) => {
+                            // Timeout reached
+                            yield Ok(SessionExecResponse {
+                                output: String::new(),
+                                exit_code: -1,
+                                timed_out: true,
+                            });
+                            break;
+                        }
+
+                        _ = sleep(Duration::from_millis(50)) => {
+                            let text = {
+                                let lock = session.lock().await;
+                                lock.plain_text()
+                            };
+
+                            if text.contains(&sentinel) {
+                                // Command completed. Extract output delta.
+                                let command_prefix = req.command.trim();
+                                let mut output_lines = Vec::new();
+                                for line in text.lines() {
+                                    let trimmed = line.trim();
+                                    if !trimmed.is_empty()
+                                        && !trimmed.contains(&sentinel)
+                                        && !trimmed.contains(command_prefix)
+                                        && !lines_before.iter().any(|s| s.as_str() == line)
+                                    {
+                                        output_lines.push(line);
+                                    }
+                                }
+                                let output = output_lines.join("\n");
+                                yield Ok(SessionExecResponse {
+                                    output,
+                                    exit_code: 0,
+                                    timed_out: false,
+                                });
+                                break;
+                            }
+
+                            // Stream delta since last check.
+                            if text.len() > last_text.len() {
+                                let new_text = &text[last_text.len()..];
+                                let mut delta_lines = Vec::new();
+                                for line in new_text.lines() {
+                                    let trimmed = line.trim();
+                                    if !trimmed.is_empty() && !trimmed.contains(&sentinel) {
+                                        let line_in_before = lines_before.iter().any(|s| s.as_str() == line);
+                                        if !line_in_before {
+                                            delta_lines.push(line);
+                                        }
+                                    }
+                                }
+                                let delta = delta_lines.join("\n");
+                                if !delta.is_empty() {
+                                    yield Ok(SessionExecResponse {
+                                        output: delta,
+                                        exit_code: -1,
+                                        timed_out: false,
+                                    });
+                                }
+                                last_text = text;
+                            }
+                        }
+                    }
+                }
+            };
+
+            Ok(Response::new(Box::pin(stream) as Self::ResponseStream))
+        })
+    }
+}
+
 impl tower_service::Service<http::Request<Body>> for TerminalServer {
     type Response = http::Response<Body>;
     type Error = Infallible;
@@ -698,6 +847,14 @@ impl tower_service::Service<http::Request<Body>> for TerminalServer {
             "/rterm.protocol.TerminalService/Exec" => Box::pin(async move {
                 let mut grpc = Grpc::new(FlatBuffersCodec::<ExecResponse, ExecRequest>::default());
                 Ok(grpc.server_streaming(ExecSvc(spawner), req).await)
+            }),
+            "/rterm.protocol.TerminalService/SessionExec" => Box::pin(async move {
+                let mut grpc = Grpc::new(
+                    FlatBuffersCodec::<SessionExecResponse, SessionExecRequest>::default(),
+                );
+                Ok(grpc
+                    .server_streaming(SessionExecSvc(session_mgr, spawner), req)
+                    .await)
             }),
             _ => Box::pin(async { Ok(Status::unimplemented("").into_http()) }),
         }

@@ -306,6 +306,9 @@ rpc_service TerminalService {
 
     // Ephemeral command execution (SSH exec style)
     Exec(ExecRequest): ExecResponse (streaming: "server");
+
+    // Streaming exec inside an existing session (agent + user share view)
+    SessionExec(SessionExecRequest): SessionExecResponse (streaming: "server");
 }
 
 // ── Automation message types (serialized with hand-rolled binary codec) ──────
@@ -354,7 +357,21 @@ table ExecResponse {
     stdout: [ubyte];      // Chunk of stdout bytes (empty if no stdout this chunk)
     stderr: [ubyte];      // Chunk of stderr bytes (always empty — PTY merges)
     exit_code: int32;     // Only in FINAL chunk
-    timed_out: bool;      // Only in FINAL chunk
+    timed_out: bool;     // Only in FINAL chunk
+}
+
+table SessionExecRequest {
+    session_name: string; // Session to run in (created if doesn't exist)
+    command: string;      // Command to run (e.g., "ls -la")
+    cols: uint16;         // Terminal columns (default 80)
+    rows: uint16;         // Terminal rows (default 24)
+    timeout_ms: uint64;  // Max execution time (0 = 30s default)
+}
+
+table SessionExecResponse {
+    output: string;       // Delta: new output since last response
+    exit_code: int32;     // Only in FINAL chunk
+    timed_out: bool;     // Only in FINAL chunk
 }
 
 // FlatBuffers requirement: standard HTTP/2 needs a root type for standard message parsing,
