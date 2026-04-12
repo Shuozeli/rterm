@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="./">
+  <title>JS Test</title>
+</head>
+<body>
+  <h1 style="color:red;">This is HTML - is it visible?</h1>
+  <canvas id="c" width="400" height="200" style="border:2px solid blue;"></canvas>
+  <script>
+    console.log("Inline JS running!");
+    var c = document.getElementById('c');
+    var ctx = c.getContext('2d');
+    ctx.fillStyle = 'red';
+    ctx.fillRect(0, 0, 400, 200);
+    ctx.fillStyle = 'green';
+    ctx.fillRect(50, 50, 100, 100);
+    ctx.fillStyle = 'white';
+    ctx.font = '20px monospace';
+    ctx.fillText('Inline JS Canvas Works!', 60, 100);
+    console.log("Inline JS drawing complete!");
+  </script>
+</body>
+</html>

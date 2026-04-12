@@ -1,6 +1,7 @@
-/// FlatBuffers message encoding/decoding for the WASM client (v2 typed protocol).
+//! FlatBuffers message encoding/decoding for the WASM client (v2 typed protocol).
 use crate::generated::rterm::protocol as fbs;
 use flatbuffers::FlatBufferBuilder;
+use rterm_render::{DisplayCell, DisplayCellRange, ScreenData, ScrollbackData};
 
 /// Encode a Resize ClientMessage.
 pub fn encode_resize(cols: u16, rows: u16) -> Vec<u8> {
@@ -39,8 +40,6 @@ pub fn encode_paste_input(text: &str) -> Vec<u8> {
     fbb.finish(msg, None);
     fbb.finished_data().to_vec()
 }
-
-
 
 /// Encode a MouseEvent ClientMessage.
 pub fn encode_mouse_event(row: u16, col: u16, button: u8, modifiers: u8, kind: u8) -> Vec<u8> {
@@ -108,61 +107,6 @@ pub enum ServerMsg {
     Scrollback(ScrollbackData),
 }
 
-/// Scrollback data returned by the relay.
-pub struct ScrollbackData {
-    pub lines: Vec<CellRange>,
-    pub offset: u32,
-    pub total: u32,
-}
-
-pub struct ScreenData {
-    pub changes: Vec<CellRange>,
-    pub cursor_row: u16,
-    pub cursor_col: u16,
-    pub cursor_visible: bool,
-    pub cursor_style: u8,
-    pub cols: u16,
-    pub rows: u16,
-    pub mouse_tracking_mode: u8,
-    pub alt_screen_active: bool,
-    pub application_cursor_keys: bool,
-    /// Viewport offset: non-zero when this snapshot represents a scrolled viewport.
-    pub viewport_offset: u32,
-}
-
-pub struct CellRange {
-    pub row: u16,
-    pub col_start: u16,
-    pub cells: Vec<CellData>,
-}
-
-#[derive(Clone, Copy)]
-pub struct CellData {
-    pub ch: char,
-    pub fg: u32,
-    pub bg: u32,
-    pub flags: u16,
-}
-
-// Attribute bitflags (must match rterm-core::cell::Flags bit layout).
-pub const ATTR_INVERSE: u16 = 0x0001;
-pub const ATTR_BOLD: u16 = 0x0002;
-pub const ATTR_ITALIC: u16 = 0x0004;
-pub const ATTR_UNDERLINE: u16 = 0x0008;
-pub const ATTR_WIDE: u16 = 0x0020;
-pub const ATTR_WIDE_SPACER: u16 = 0x0040;
-pub const ATTR_DIM: u16 = 0x0080;
-pub const ATTR_HIDDEN: u16 = 0x0100;
-pub const ATTR_STRIKEOUT: u16 = 0x0200;
-pub const ATTR_DOUBLE_UNDERLINE: u16 = 0x0800;
-pub const ATTR_UNDERCURL: u16 = 0x1000;
-pub const ATTR_DOTTED_UNDERLINE: u16 = 0x2000;
-pub const ATTR_DASHED_UNDERLINE: u16 = 0x4000;
-pub const ATTR_ALL_UNDERLINES: u16 =
-    ATTR_UNDERLINE | ATTR_DOUBLE_UNDERLINE | ATTR_UNDERCURL | ATTR_DOTTED_UNDERLINE | ATTR_DASHED_UNDERLINE;
-
-pub const COLOR_DEFAULT: u32 = 0xFFFFFFFF;
-
 /// Decode a ServerMessage from FlatBuffers bytes.
 pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
     let msg = flatbuffers::root::<fbs::ServerMessage>(data)
@@ -217,18 +161,18 @@ pub fn decode_server_msg(data: &[u8]) -> Result<ServerMsg, String> {
 
 fn decode_cell_ranges(
     ranges: Option<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<fbs::CellRange<'_>>>>,
-) -> Result<Vec<CellRange>, String> {
+) -> Result<Vec<DisplayCellRange>, String> {
     let ranges = ranges.ok_or("missing ranges")?;
     Ok(ranges.iter().map(|cr| {
         let cells = cr.cells().map(|cells| {
-            cells.iter().map(|c| CellData {
+            cells.iter().map(|c| DisplayCell {
                 ch: char::from_u32(c.ch()).unwrap_or(' '),
                 fg: c.fg(),
                 bg: c.bg(),
                 flags: c.flags(),
             }).collect()
         }).unwrap_or_default();
-        CellRange {
+        DisplayCellRange {
             row: cr.row(),
             col_start: cr.col_start(),
             cells,

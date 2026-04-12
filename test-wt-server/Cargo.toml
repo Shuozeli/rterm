@@ -1,0 +1,23 @@
+[package]
+name = "test-wt-server"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+h3 = "0.0.8"
+h3-quinn = { version = "0.0.10", features = ["datagram"] }
+h3-webtransport = "0.1.2"
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls", "ring"] }
+rustls = { version = "0.23", default-features = false, features = ["std", "ring"] }
+rustls-pemfile = "2"
+rcgen = { version = "0.13", features = ["pem", "ring"] }
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+http = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
+time = "0.3"
+sha2 = "0.10"
+base64 = "0.22"

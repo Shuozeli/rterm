@@ -7,10 +7,11 @@ license.workspace = true
 
 [dependencies]
 rterm-core = { path = "../rterm-core" }
-egui = "0.31"
+rterm-render = { path = "../rterm-render" }
+egui = "0.34"
 
 [dev-dependencies]
-eframe = "0.31"
+eframe = "0.34"
 rterm-proto = { path = "../rterm-proto" }
 grpc-client = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0", features = ["h3"] }
 grpc-codec-flatbuffers = { git = "https://github.com/Shuozeli/pure-grpc-rs.git", rev = "df879e0" }

@@ -11,7 +11,7 @@ use grpc_client::{Grpc, H3Channel};
 use grpc_codec_flatbuffers::FlatBuffersCodec;
 use grpc_core::Request;
 use rterm_core::Terminal;
-use rterm_gui::{TerminalGridConfig, encode_char, encode_key, terminal_grid};
+use rterm_gui::{TerminalGridConfig, encode_char, encode_key, render_screen_buffer};
 use rterm_proto::{ClientMsg, KeyInput, Resize, ServerMsg};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -79,13 +79,13 @@ impl TerminalApp {
 }
 
 impl eframe::App for TerminalApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(self.config.default_bg))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 let terminal = self.terminal.lock().unwrap();
                 let sel = rterm_gui::Selection::default();
-                let _grid = terminal_grid(ui, terminal.screen(), &self.config, &sel);
+                let _grid = render_screen_buffer(ui, terminal.screen(), &self.config, &sel);
 
                 // Handle keyboard input.
                 {
@@ -127,7 +127,7 @@ impl eframe::App for TerminalApp {
             });
 
         // Repaint continuously for terminal updates.
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
     }
 }
 

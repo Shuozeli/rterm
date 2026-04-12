@@ -1,3 +1,7 @@
+//! WebTransport session handler.
+//!
+//! Uses WebTransport's bidirectional streams with our 4-byte length-prefixed framing.
+
 use crate::mouse_encoding::encode_vt_mouse;
 use crate::pty::RealPtySpawner;
 use crate::session_manager::SessionManager;
@@ -7,9 +11,9 @@ use h3_webtransport::server::WebTransportSession;
 use rterm_proto::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
-/// Handle a WebTransport session.
+/// WebTransport session handler.
 /// `session_name` is extracted from the URL path by the caller.
 pub async fn handle_wt_session(
     wt_session: WebTransportSession<h3_quinn::Connection, bytes::Bytes>,
@@ -62,12 +66,9 @@ pub async fn handle_wt_session(
     write_message(&mut send, &encoded).await?;
 
     // If PTY already exited, send Exit.
-    {
-        let s = session.lock().await;
-        if let Some(code) = s.pty_exited {
-            let encoded = ServerMsg::Exit(Exit { code }).encode_flatbuffer();
-            write_message(&mut send, &encoded).await?;
-        }
+    if let Some(code) = session.lock().await.pty_exited {
+        let encoded = ServerMsg::Exit(Exit { code }).encode_flatbuffer();
+        write_message(&mut send, &encoded).await?;
     }
 
     // Task: forward server messages to WebTransport.
@@ -87,95 +88,90 @@ pub async fn handle_wt_session(
                 Ok(ClientMsg::KeyInput(k)) => {
                     let s = session.lock().await;
                     if s.pty_stdin_tx.send(k.data).await.is_err() {
-                        tracing::warn!("PTY stdin send failed for KeyInput");
+                        warn!("PTY stdin send failed for KeyInput");
                     }
                 }
                 Ok(ClientMsg::PasteInput(p)) => {
-                    let s = session.lock().await;
                     let mut data = Vec::new();
-                    if s.terminal.bracketed_paste {
+                    let terminal = session.lock().await;
+                    if terminal.terminal.bracketed_paste {
                         data.extend_from_slice(b"\x1b[200~");
                     }
+                    drop(terminal);
                     data.extend_from_slice(p.text.as_bytes());
-                    if s.terminal.bracketed_paste {
+                    let terminal = session.lock().await;
+                    if terminal.terminal.bracketed_paste {
                         data.extend_from_slice(b"\x1b[201~");
                     }
-                    if s.pty_stdin_tx.send(data).await.is_err() {
-                        tracing::warn!("PTY stdin send failed for PasteInput");
+                    if terminal.pty_stdin_tx.send(data).await.is_err() {
+                        warn!("PTY stdin send failed for PasteInput");
                     }
                 }
                 Ok(ClientMsg::Resize(r)) => {
                     let mut s = session.lock().await;
                     s.resize(r.cols, r.rows);
                 }
-
                 Ok(ClientMsg::MouseEvent(m)) => {
-                    // Forward mouse events to PTY when mouse tracking is enabled.
-                    // The WASM client sends scroll events as MouseEvent with buttons 64/65.
-                    let s = session.lock().await;
-                    if s.terminal.modes.mouse_tracking_mode > 0 {
-                        // Encode as VT mouse protocol and send to PTY.
+                    let terminal = session.lock().await;
+                    if terminal.terminal.modes.mouse_tracking_mode > 0 {
                         let bytes = encode_vt_mouse(&m);
-                        if s.pty_stdin_tx.send(bytes).await.is_err() {
-                            tracing::warn!("PTY stdin send failed for MouseEvent");
+                        drop(terminal);
+                        if session.lock().await.pty_stdin_tx.send(bytes).await.is_err() {
+                            warn!("PTY stdin send failed for MouseEvent");
                         }
                     }
                 }
-
                 Ok(ClientMsg::Scrollback(r)) => {
                     let s = session.lock().await;
                     let scrollback = s.get_scrollback(r.offset as usize, r.limit as usize);
-                    // Send through the server_fwd channel so the spawned task writes it.
+                    drop(s);
                     if server_fwd_tx
                         .send(ServerMsg::Scrollback(scrollback))
                         .await
                         .is_err()
                     {
-                        tracing::warn!("server_fwd send failed for Scrollback");
+                        warn!("server_fwd send failed for Scrollback");
                     }
                 }
-
                 Ok(ClientMsg::Scroll(s)) => {
-                    let mut session = session.lock().await;
-                    // If alternate screen is active (vim, zellij, etc.), forward scroll as
-                    // up/down key presses so the app can handle its own scrolling.
-                    if session.terminal.is_alt_screen_active() {
+                    let mut terminal = session.lock().await;
+                    if terminal.terminal.is_alt_screen_active() {
                         let key = if s.direction > 0 {
-                            b"\x1b[A".to_vec() // ArrowUp
+                            b"\x1b[A".to_vec()
                         } else {
-                            b"\x1b[B".to_vec() // ArrowDown
+                            b"\x1b[B".to_vec()
                         };
-                        if session.pty_stdin_tx.send(key).await.is_err() {
-                            tracing::warn!("PTY stdin send failed for Scroll");
+                        drop(terminal);
+                        if session.lock().await.pty_stdin_tx.send(key).await.is_err() {
+                            warn!("PTY stdin send failed for Scroll");
                         }
                     } else {
-                        // Normal mode: scroll the viewport through scrollback history.
-                        let snapshot = session.scroll_viewport(s.direction, s.lines);
+                        let snapshot = terminal.scroll_viewport(s.direction, s.lines);
+                        drop(terminal);
                         if server_fwd_tx
                             .send(ServerMsg::ScreenSnapshot(snapshot))
                             .await
                             .is_err()
                         {
-                            tracing::warn!("server_fwd send failed for ScreenSnapshot");
+                            warn!("server_fwd send failed for ScreenSnapshot");
                         }
                     }
                 }
-
                 Ok(ClientMsg::ResetViewport) => {
                     let mut session = session.lock().await;
                     session.reset_viewport();
                     let snapshot = session.screen_snapshot();
+                    drop(session);
                     if server_fwd_tx
                         .send(ServerMsg::ScreenSnapshot(snapshot))
                         .await
                         .is_err()
                     {
-                        tracing::warn!("server_fwd send failed for ResetViewport");
+                        warn!("server_fwd send failed for ResetViewport");
                     }
                 }
-
                 Ok(unhandled) => {
-                    tracing::debug!("unhandled ClientMsg variant: {:?}", unhandled);
+                    debug!("unhandled ClientMsg variant: {:?}", unhandled);
                 }
                 Err(e) => debug!("decode error: {}", e),
             },
@@ -208,6 +204,14 @@ where
         Err(e) => return Err(format!("read length: {}", e)),
     }
     let len = u32::from_be_bytes(len_buf) as usize;
+    // Max frame size: 1MB. Prevents memory exhaustion from malicious frames.
+    const MAX_FRAME_SIZE: usize = 1024 * 1024;
+    if len > MAX_FRAME_SIZE {
+        return Err(format!(
+            "frame too large: {} bytes (max {})",
+            len, MAX_FRAME_SIZE
+        ));
+    }
     let mut payload = vec![0u8; len];
     recv.read_exact(&mut payload)
         .await

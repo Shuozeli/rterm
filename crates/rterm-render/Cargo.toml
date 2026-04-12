@@ -1,0 +1,9 @@
+[package]
+name = "rterm-render"
+description = "Shared terminal rendering: DisplayGrid, paint_grid, and color utilities for egui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+egui = "0.34"

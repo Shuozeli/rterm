@@ -90,7 +90,7 @@ mod ws_conn {
             let listener = Closure::once(move |_: web_sys::Event| {
                 resolve.call0(&JsValue::NULL);
             });
-            ws.add_event_listener_with_callback(event_name, listener.as_ref().unchecked_ref());
+            let _ = ws.add_event_listener_with_callback(event_name, listener.as_ref().unchecked_ref());
             listener.forget();
         })
     }
@@ -279,7 +279,7 @@ pub async fn run_connection(shared: Rc<RefCell<Shared>>, ctx: egui::Context) {
             } else {
                 format!("/ws/{}", session_name)
             };
-            ("websocket", 4435u16, "/ws", format!("wss://{}:4435{}", hostname, path))
+            ("websocket", 4435u16, "/ws", format!("ws://{}:4435{}", hostname, path))
         }
     };
 
@@ -433,7 +433,9 @@ async fn try_connect_wt(
     url: &str,
     cert_hash: Option<&[u8]>,
 ) -> Result<(), String> {
-    let (sender, receiver, _) = wt_conn::connect_webtransport(url, cert_hash).await?;
+    // Keep WebTransport alive - it must not be dropped while streams are in use.
+    let (sender, receiver, transport) = wt_conn::connect_webtransport(url, cert_hash).await?;
+    let transport = Rc::new(transport);
 
     log::info!("[rterm] WebTransport connected");
 
@@ -469,9 +471,13 @@ async fn try_connect_wt(
         }
     });
 
-    // Receive loop.
+    // Receive loop - keep transport alive while receiving.
+    let receiver = Rc::new(receiver);
+    let transport_recv = Rc::clone(&transport);
     let mut recv_buf = RecvBuffer::new();
     loop {
+        // Use the transport in the loop to ensure it stays alive.
+        let _ = &transport_recv;
         match receiver.recv().await {
             Ok(Some(data)) => {
                 recv_buf.push(&data);

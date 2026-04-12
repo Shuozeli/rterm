@@ -5,5 +5,5 @@ pub mod input;
 
 pub use colors::to_egui_color;
 pub use egui_harness::{EguiRenderHarness, RenderedGrid};
-pub use grid::{GridResult, Selection, TerminalGridConfig, terminal_grid};
+pub use grid::{GridResult, Selection, TerminalGridConfig, render_screen_buffer};
 pub use input::{encode_char, encode_key};

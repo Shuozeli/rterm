@@ -2,3 +2,7 @@
 **/target
 .env
 dist/
+
+# Private keys and certificates (local dev)
+mobile/web/web/key.pem
+mobile/web/web/cert.pem

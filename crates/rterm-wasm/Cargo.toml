@@ -12,9 +12,9 @@ crate-type = ["cdylib", "rlib"]
 default = []
 
 [dependencies]
+rterm-render = { path = "../rterm-render" }
+eframe = { version = "0.34", default-features = false, features = ["glow", "web_screen_reader"] }
 flatbuffers = "25.12.19"
-egui = "0.31"
-eframe = { version = "0.31", default-features = false, features = ["glow", "web_screen_reader"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 web-sys = { version = "0.3.92", features = [

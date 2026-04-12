@@ -4,6 +4,7 @@ members = [
     "crates/rterm-proto",
     "crates/rterm-core",
     "crates/rterm-gui",
+    "crates/rterm-render",
     "crates/rterm-shell",
     "crates/rterm-relay",
     "crates/rterm-transport",

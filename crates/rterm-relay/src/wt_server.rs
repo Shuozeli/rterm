@@ -158,7 +158,11 @@ async fn handle_connection(
                     return Ok(());
                 }
 
-                debug!("rejecting: {} {}", req.method(), req.uri());
+                debug!(
+                    "rejecting: {} {} (path only, query redacted)",
+                    req.method(),
+                    req.uri().path()
+                );
                 let mut stream = stream;
                 let resp = http::Response::builder()
                     .status(404)

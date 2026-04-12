@@ -58,10 +58,10 @@ impl TerminalApp {
 }
 
 impl eframe::App for TerminalApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default()
             .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-            .show(ctx, |ui| {
+            .show_inside(ui, |ui| {
                 let s = self.shared.borrow();
                 let (response, cell_size, fit_cols, fit_rows) =
                     paint_grid(ui, &s.grid, self.font_size);
@@ -83,7 +83,7 @@ impl eframe::App for TerminalApp {
                         log::info!("[rterm] initial size: {}x{}", fit_cols, fit_rows);
 
                         let shared_clone = Rc::clone(&self.shared);
-                        let ctx2 = ctx.clone();
+                        let ctx2 = ui.ctx().clone();
                         wasm_bindgen_futures::spawn_local(async move {
                             connection::run_connection(shared_clone, ctx2).await;
                         });
@@ -107,7 +107,7 @@ impl eframe::App for TerminalApp {
                             s.send_queue.push_back(encode_message(&resize));
                         }
                     }
-                    ctx.request_repaint();
+                    ui.ctx().request_repaint();
                 }
 
                 // Read terminal modes for input handling.
@@ -187,7 +187,7 @@ impl eframe::App for TerminalApp {
                 }
             });
 
-        ctx.request_repaint();
+        ui.ctx().request_repaint();
     }
 }
 

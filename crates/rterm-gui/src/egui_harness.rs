@@ -6,7 +6,7 @@
 ///
 /// This catches rendering bugs (wrong scroll direction, wrong row mapping,
 /// off-by-one errors) that data-model-only tests miss.
-use crate::grid::{Selection, TerminalGridConfig, terminal_grid};
+use crate::grid::{Selection, TerminalGridConfig, render_screen_buffer};
 use egui::{Pos2, Rect, Shape, Vec2};
 use rterm_core::buffer::ScreenBuffer;
 use std::collections::HashMap;
@@ -125,21 +125,21 @@ impl EguiRenderHarness {
 
         // We need to run two frames: first to let egui initialize fonts/layout,
         // second to get stable rendering.
-        let _ = self.ctx.run(raw_input.clone(), |ctx| {
+        let _ = self.ctx.run_ui(raw_input.clone(), |ui| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-                .show(ctx, |ui| {
-                    terminal_grid(ui, buffer, &config, &selection);
+                .show_inside(ui, |ui| {
+                    render_screen_buffer(ui, buffer, &config, &selection);
                 });
         });
 
         // Second frame captures the actual paint output.
         let mut captured_cell_size = Vec2::ZERO;
-        let output = self.ctx.run(raw_input, |ctx| {
+        let output = self.ctx.run_ui(raw_input, |ui| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE.fill(egui::Color32::BLACK))
-                .show(ctx, |ui| {
-                    let result = terminal_grid(ui, buffer, &config, &selection);
+                .show_inside(ui, |ui| {
+                    let result = render_screen_buffer(ui, buffer, &config, &selection);
                     captured_cell_size = result.cell_size;
                 });
         });

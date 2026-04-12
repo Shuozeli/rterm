@@ -1,0 +1,11 @@
+name: rterm_web
+description: Dart web terminal client for rterm
+version: 0.1.0
+environment:
+  sdk: '>=3.0.0'
+
+dependencies:
+  web: '>=1.0.0'
+  js_interop: ^0.0.1
+  flat_buffers: ^25.9.23
+  crypto: ^3.0.3
