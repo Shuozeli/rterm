@@ -410,6 +410,7 @@ async fn try_connect_ws(
                 }
                 Ok(ServerMsg::Exit(_)) => {
                     s.connected = false;
+                    drop(s);
                     ctx.request_repaint();
                     return Ok(());
                 }
@@ -423,7 +424,11 @@ async fn try_connect_ws(
                 }
             }
         }
+        // Always repaint after processing data.
+        drop(s);
         ctx.request_repaint();
+        // Always yield to let UI paint before next recv.
+        sleep_ms(1).await;
     }
 }
 
@@ -480,6 +485,7 @@ async fn try_connect_wt(
         let _ = &transport_recv;
         match receiver.recv().await {
             Ok(Some(data)) => {
+                log::debug!("[rterm] recv {} bytes", data.len());
                 recv_buf.push(&data);
                 let mut s = loop {
                     match shared.try_borrow_mut() {
@@ -488,11 +494,19 @@ async fn try_connect_wt(
                     }
                 };
                 while let Some(msg_bytes) = recv_buf.try_read_message() {
+                    log::debug!("[rterm] decoded msg {} bytes", msg_bytes.len());
                     match decode_server_msg(&msg_bytes) {
-                        Ok(ServerMsg::ScreenSnapshot(sd)) => s.grid.apply_snapshot(&sd),
-                        Ok(ServerMsg::ScreenUpdate(sd)) => s.grid.apply_update(&sd),
+                        Ok(ServerMsg::ScreenSnapshot(sd)) => {
+                            log::debug!("[rterm] ScreenSnapshot");
+                            s.grid.apply_snapshot(&sd);
+                        }
+                        Ok(ServerMsg::ScreenUpdate(sd)) => {
+                            log::debug!("[rterm] ScreenUpdate");
+                            s.grid.apply_update(&sd);
+                        }
                         Ok(ServerMsg::Exit(_)) => {
                             s.connected = false;
+                            drop(s);
                             ctx.request_repaint();
                             return Ok(());
                         }
@@ -500,15 +514,23 @@ async fn try_connect_wt(
                             log::error!("[rterm] error: {}", msg);
                         }
                         Ok(ServerMsg::Bell) => {}
-                        Ok(ServerMsg::Scrollback(sd)) => s.grid.apply_scrollback(&sd),
+                        Ok(ServerMsg::Scrollback(sd)) => {
+                            s.grid.apply_scrollback(&sd);
+                        }
                         Err(e) => {
                             log::error!("[rterm] decode error: {}", e);
                         }
                     }
                 }
+                drop(s);
+                // Always repaint when we've processed data (complete or partial).
+                // This ensures the UI updates even if buffer has incomplete messages waiting for more data.
                 ctx.request_repaint();
+                // Yield to let UI paint before next recv.
+                sleep_ms(1).await;
             }
             Ok(None) => {
+                log::warn!("[rterm] WebTransport stream closed");
                 shared.borrow_mut().connected = false;
                 ctx.request_repaint();
                 return Err("connection closed".into());
