@@ -260,6 +260,91 @@ async fn get_snapshot(client: &Client, session_name: &str) -> GetSnapshotRespons
     .await
 }
 
+/// Reads all frames from a server-streaming gRPC response.
+/// Returns vector of decoded FlatBuffer messages.
+async fn read_server_streaming<Resp>(
+    client: &Client,
+    method: &str,
+    request_bytes: Vec<u8>,
+) -> Vec<Resp>
+where
+    Resp: FlatBufferGrpcMessage,
+{
+    let url = format!("{}/{}", SERVER_URL, method);
+    let grpc_payload = encode_grpc_frame(&request_bytes);
+
+    let resp = client
+        .post(&url)
+        .header("content-type", "application/grpc")
+        .body(grpc_payload)
+        .send()
+        .await
+        .expect("HTTP req failed completely");
+
+    assert!(
+        resp.status().is_success(),
+        "HTTP streaming req returned failed status: {:?}",
+        resp.status()
+    );
+
+    let bytes = resp.bytes().await.unwrap();
+    let mut result = Vec::new();
+    let mut offset = 0;
+
+    while offset < bytes.len() {
+        if bytes.len() - offset < 5 {
+            break;
+        }
+        let frame = decode_grpc_frame_at(&bytes, offset);
+        if frame.is_empty() {
+            break;
+        }
+        if let Ok(msg) = Resp::decode_flatbuffer(&frame) {
+            result.push(msg);
+        }
+        offset += 5 + frame.len();
+    }
+
+    result
+}
+
+/// Decodes a single gRPC frame from a byte slice at a given offset.
+/// Returns the payload bytes (without the 5-byte gRPC header).
+fn decode_grpc_frame_at(bytes: &[u8], offset: usize) -> Vec<u8> {
+    // gRPC framing: 1 byte flags + 4 bytes length (big-endian)
+    if offset + 5 > bytes.len() {
+        return Vec::new();
+    }
+    let length = u32::from_be_bytes([
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+        bytes[offset + 4],
+    ]) as usize;
+    if offset + 5 + length > bytes.len() {
+        return Vec::new();
+    }
+    bytes[offset + 5..offset + 5 + length].to_vec()
+}
+
+async fn session_exec(
+    client: &Client,
+    session_name: &str,
+    command: &str,
+    cols: u16,
+    rows: u16,
+    timeout_ms: u64,
+) -> Vec<SessionExecResponse> {
+    let req = SessionExecRequest {
+        session_name: session_name.into(),
+        command: command.into(),
+        cols,
+        rows,
+        timeout_ms,
+    };
+    read_server_streaming(client, "SessionExec", req.encode_flatbuffer()).await
+}
+
 #[tokio::test]
 #[ignore = "requires Docker; run with `cargo test -- --ignored`"]
 async fn test_docker_e2e_automation_scenarios() {
@@ -470,5 +555,121 @@ async fn test_docker_e2e_automation_scenarios() {
         list_resp.sessions.len(),
         0,
         "expected no live sessions after cleanup"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires Docker; run with `cargo test -- --ignored`"]
+async fn test_docker_e2e_session_exec_streaming() {
+    let _harness = DockerHarness::new();
+
+    let client = reqwest::Client::builder()
+        .danger_accept_invalid_certs(true)
+        .build()
+        .unwrap();
+
+    wait_for_server(&client).await;
+
+    // Scenario A: SessionExec streams output in chunks before final exit code.
+    create_session(&client, "exec-streaming", 80, 24).await;
+
+    let responses = session_exec(
+        &client,
+        "exec-streaming",
+        "printf 'line1\\nline2\\nline3\\n' && echo done",
+        80,
+        24,
+        10_000,
+    )
+    .await;
+
+    // Should receive at least one response with output before the final one.
+    assert!(
+        !responses.is_empty(),
+        "expected at least one streaming response"
+    );
+
+    // Concatenate all non-final output chunks.
+    let mut all_output = String::new();
+    let mut got_final = false;
+    for resp in &responses {
+        if resp.exit_code != -1 {
+            got_final = true;
+            assert!(!resp.timed_out, "session exec unexpectedly timed out");
+        }
+        all_output.push_str(&resp.output);
+    }
+
+    assert!(
+        got_final,
+        "expected a final response with exit_code set, got {:?}",
+        responses
+    );
+    assert!(
+        all_output.contains("line1")
+            && all_output.contains("line2")
+            && all_output.contains("line3"),
+        "missing expected output lines: {:?}",
+        all_output
+    );
+    assert!(
+        all_output.contains("done") || all_output.contains("line3"),
+        "session exec output missing expected content: {:?}",
+        all_output
+    );
+
+    kill_session(&client, "exec-streaming").await;
+
+    // Scenario B: SessionExec timeout.
+    create_session(&client, "exec-timeout", 80, 24).await;
+
+    let timeout_responses = session_exec(
+        &client,
+        "exec-timeout",
+        "sleep 30",
+        80,
+        24,
+        500, // 500ms timeout
+    )
+    .await;
+
+    assert!(
+        !timeout_responses.is_empty(),
+        "expected at least one response even on timeout"
+    );
+    let final_resp = timeout_responses.last().unwrap();
+    assert!(
+        final_resp.timed_out,
+        "expected timed_out=true on final response"
+    );
+
+    kill_session(&client, "exec-timeout").await;
+
+    // Scenario C: SessionExec in non-existent session creates a new one implicitly.
+    // (SessionExecRequest.session_name is used to either attach or create)
+    let responses = session_exec(
+        &client,
+        "exec-new-session",
+        "echo hello-from-new",
+        80,
+        24,
+        10_000,
+    )
+    .await;
+
+    assert!(
+        !responses.is_empty(),
+        "expected streaming responses for new session exec"
+    );
+    let final_resp = responses.last().unwrap();
+    assert!(
+        !final_resp.timed_out,
+        "exec in new session should not timeout"
+    );
+    let all_output: String = responses.iter().map(|r| r.output.as_str()).collect();
+    assert!(
+        all_output.contains("hello-from-new"),
+        "expected hello-from-new in output: {:?}",
+        all_output
     );
 }

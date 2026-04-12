@@ -1664,6 +1664,86 @@ mod tests {
         assert_eq!(decoded.output, "line1\nline2\nline3");
         assert!(!decoded.timed_out);
     }
+
+    #[test]
+    fn round_trip_session_exec_request() {
+        let msg = SessionExecRequest {
+            session_name: "my-session".into(),
+            command: "ls -la".into(),
+            cols: 120,
+            rows: 40,
+            timeout_ms: 30000,
+        };
+        let decoded = SessionExecRequest::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        assert_eq!(decoded.session_name, "my-session");
+        assert_eq!(decoded.command, "ls -la");
+        assert_eq!(decoded.cols, 120);
+        assert_eq!(decoded.rows, 40);
+        assert_eq!(decoded.timeout_ms, 30000);
+    }
+
+    #[test]
+    fn round_trip_session_exec_request_defaults() {
+        // timeout_ms=0 means 30s default, cols/rows=0 means 80x24
+        let msg = SessionExecRequest {
+            session_name: "s".into(),
+            command: "echo hi".into(),
+            cols: 0,
+            rows: 0,
+            timeout_ms: 0,
+        };
+        let decoded = SessionExecRequest::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        assert_eq!(decoded.timeout_ms, 0);
+        assert_eq!(decoded.cols, 0);
+        assert_eq!(decoded.rows, 0);
+    }
+
+    #[test]
+    fn round_trip_session_exec_response() {
+        // Streaming chunk (not final)
+        let chunk = SessionExecResponse {
+            output: "hello\n".into(),
+            exit_code: -1,
+            timed_out: false,
+        };
+        let d = SessionExecResponse::decode_flatbuffer(&chunk.encode_flatbuffer()).unwrap();
+        assert_eq!(d.output, "hello\n");
+        assert_eq!(d.exit_code, -1);
+        assert!(!d.timed_out);
+
+        // Final chunk with exit code 0
+        let final_ok = SessionExecResponse {
+            output: "done".into(),
+            exit_code: 0,
+            timed_out: false,
+        };
+        let d = SessionExecResponse::decode_flatbuffer(&final_ok.encode_flatbuffer()).unwrap();
+        assert_eq!(d.output, "done");
+        assert_eq!(d.exit_code, 0);
+        assert!(!d.timed_out);
+
+        // Final chunk with timeout
+        let final_timeout = SessionExecResponse {
+            output: String::new(),
+            exit_code: -1,
+            timed_out: true,
+        };
+        let d = SessionExecResponse::decode_flatbuffer(&final_timeout.encode_flatbuffer()).unwrap();
+        assert!(d.timed_out);
+        assert_eq!(d.exit_code, -1);
+    }
+
+    #[test]
+    fn round_trip_session_exec_response_multiline() {
+        let msg = SessionExecResponse {
+            output: "total 42\ndrwxr-xr-x  5 user group 4096 Apr 12 10:00 .".into(),
+            exit_code: -1,
+            timed_out: false,
+        };
+        let decoded = SessionExecResponse::decode_flatbuffer(&msg.encode_flatbuffer()).unwrap();
+        assert!(decoded.output.contains("total 42"));
+        assert!(decoded.output.contains("drwxr-xr-x"));
+    }
 }
 #[derive(Debug, Clone)]
 pub struct GetSnapshotRequest {
