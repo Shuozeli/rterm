@@ -1,0 +1,15 @@
+# Default rterm-relay configuration for Docker deployment.
+# Exposes gRPC H2 on 8080 and WebSocket on 8081 (both insecure).
+# No auth tokens = open access.
+
+static_dir = "/opt/rterm/dist"
+
+[[listener]]
+protocol = "grpc-h2"
+port = 8080
+bind = "0.0.0.0"
+
+[[listener]]
+protocol = "web-socket"
+port = 8081
+bind = "0.0.0.0"

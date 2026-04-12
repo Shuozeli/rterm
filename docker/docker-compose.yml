@@ -1,0 +1,18 @@
+services:
+  rterm-relay:
+    build: .
+    image: rterm-relay:latest
+    container_name: rterm-relay
+    ports:
+      - "8080:8080"   # gRPC H2 (insecure)
+      - "8081:8081"   # WebSocket (insecure)
+      - "9090:9090"   # Health check
+    environment:
+      - RTERM_SHELL=/bin/bash
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped

@@ -1,0 +1,7 @@
+target/
+.git/
+.vscode/
+**/tests/
+**/benches/
+*.md
+Cargo.lock

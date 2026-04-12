@@ -9,6 +9,7 @@ use rterm_relay::wt_server::start_webtransport_server;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tracing::{error, info};
 
 #[derive(Parser)]
@@ -63,7 +64,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     info!("Serving static files from: {}", static_dir.display());
 
     // Create the session manager.
-    let session_mgr = Arc::new(SessionManager::new("/bin/bash"));
+    let shell = std::env::var("RTERM_SHELL").unwrap_or_else(|_| "/bin/bash".to_string());
+    let session_mgr = Arc::new(SessionManager::new(&shell));
 
     // Start the timeout reaper (every 60 seconds, kill sessions detached > 30 min).
     let reaper_mgr = Arc::clone(&session_mgr);
@@ -190,6 +192,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             }
         }
     }
+
+    // Health check server on port 9090 (configurable via RTERM_HEALTH_PORT).
+    let health_port: u16 = std::env::var("RTERM_HEALTH_PORT")
+        .unwrap_or_else(|_| "9090".to_string())
+        .parse()
+        .unwrap_or(9090);
+    tokio::spawn(async move {
+        let listener = match tokio::net::TcpListener::bind(format!("0.0.0.0:{}", health_port)).await
+        {
+            Ok(l) => l,
+            Err(e) => {
+                tracing::error!("Health server failed to bind port {}: {}", health_port, e);
+                return;
+            }
+        };
+        tracing::info!("Health server listening on http://0.0.0.0:{}", health_port);
+        loop {
+            match listener.accept().await {
+                Ok((mut stream, _)) => {
+                    let response = b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 15\r\n\r\n{\"status\":\"ok\"}";
+                    let _ = stream.write_all(response).await;
+                }
+                Err(e) => {
+                    tracing::warn!("Health server accept error: {}", e);
+                }
+            }
+        }
+    });
 
     // Park the main thread
     std::future::pending::<()>().await;
