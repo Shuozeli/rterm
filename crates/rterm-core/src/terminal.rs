@@ -656,11 +656,9 @@ impl vte::Perform for Terminal {
             }
 
             // DA1: Primary Device Attributes.
-            'c' => {
+            'c' if first == 0 => {
                 // CSI c or CSI 0 c -- respond with VT220 identity.
-                if first == 0 {
-                    self.write_response(b"\x1b[?62;22c");
-                }
+                self.write_response(b"\x1b[?62;22c");
             }
 
             _ => {} // Ignore unknown CSI sequences.
